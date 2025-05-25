@@ -1,8 +1,6 @@
-import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { jwtDecode } from 'jwt-decode';
-import api from '../utils/api';
 
 const AuthContext = createContext();
 
@@ -14,110 +12,6 @@ export const AuthProvider = ({ children }) => {
   const isAuthenticated = !!user;
   const isAdmin = user && user.roleType === 'admin';
 
-  // Function to check if token is expired
-  const isTokenExpired = useCallback((token) => {
-    if (!token) return true;
-    
-    try {
-      const decoded = jwtDecode(token);
-      const currentTime = Date.now() / 1000;
-      return decoded.exp < currentTime;
-    } catch (error) {
-      console.error('Error decoding token:', error);
-      return true;
-    }
-  }, []);
-
-  // Function to refresh token
-  const refreshToken = useCallback(async () => {
-    try {
-      const response = await api.get('/api/auth/refresh-token');
-      
-      if (response.data.success && response.data.data.token) {
-        // Determine which storage to use
-        const storageToUse = localStorage.getItem('userInfo') 
-          ? localStorage 
-          : sessionStorage;
-        
-        // Get current user data
-        const userInfo = JSON.parse(storageToUse.getItem('userInfo')) || {};
-        
-        // Update token and user data
-        const updatedUserInfo = {
-          ...userInfo,
-          ...response.data.data.user,
-          token: response.data.data.token
-        };
-        
-        // Update storage and state
-        storageToUse.setItem('userInfo', JSON.stringify(updatedUserInfo));
-        setUser(updatedUserInfo);
-        
-        // Update axios header
-        axios.defaults.headers.common['Authorization'] = `Bearer ${updatedUserInfo.token}`;
-        
-        return updatedUserInfo;
-      }
-    } catch (error) {
-      console.error('Token refresh error:', error);
-      // If refresh fails, logout
-      logout(false);
-      return null;
-    }
-  }, []);
-
-  // Set up axios interceptor for token refresh
-  useEffect(() => {
-    const interceptor = api.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        if (error.response && error.response.status === 401 && user?.token) {
-          // Check if token is expired
-          if (isTokenExpired(user.token)) {
-            // Try to refresh the token
-            const refreshed = await refreshToken();
-            if (refreshed) {
-              // Retry the original request with new token
-              const originalRequest = error.config;
-              originalRequest.headers.Authorization = `Bearer ${refreshed.token}`;
-              return api(originalRequest);
-            }
-          }
-        }
-        return Promise.reject(error);
-      }
-    );
-    
-    // Clean up interceptor on unmount
-    return () => {
-      api.interceptors.response.eject(interceptor);
-    };
-  }, [user, isTokenExpired, refreshToken]);
-  
-  // Set up periodic token refresh
-  useEffect(() => {
-    let refreshInterval;
-    
-    if (user?.token) {
-      // Refresh token every 15 minutes
-      refreshInterval = setInterval(async () => {
-        // Only refresh if token exists and is about to expire
-        const decoded = jwtDecode(user.token);
-        const timeUntilExpiry = decoded.exp - Date.now() / 1000;
-        
-        // If token expires in less than 5 minutes, refresh it
-        if (timeUntilExpiry < 300) {
-          console.log('Token expiring soon, refreshing...');
-          await refreshToken();
-        }
-      }, 15 * 60 * 1000); // Check every 15 minutes
-    }
-    
-    return () => {
-      if (refreshInterval) clearInterval(refreshInterval);
-    };
-  }, [user, refreshToken]);
-
   useEffect(() => {
     // Check for user in localStorage or sessionStorage
     const userFromStorage = 
@@ -126,25 +20,13 @@ export const AuthProvider = ({ children }) => {
     
     if (userFromStorage) {
       console.log('User from storage:', userFromStorage); // Debug
-      
-      // Check if token is expired
-      if (isTokenExpired(userFromStorage.token)) {
-        console.log('Stored token is expired, attempting to refresh...');
-        refreshToken().then(() => {
-          setLoading(false);
-        }).catch(() => {
-          setLoading(false);
-        });
-      } else {
-        setUser(userFromStorage);
-        // Set axios default header for future requests
-        axios.defaults.headers.common['Authorization'] = `Bearer ${userFromStorage.token}`;
-        setLoading(false);
-      }
-    } else {
-      setLoading(false);
+      setUser(userFromStorage);
+      // Set axios default header for future requests
+      axios.defaults.headers.common['Authorization'] = `Bearer ${userFromStorage.token}`;
     }
-  }, [isTokenExpired, refreshToken]);
+    
+    setLoading(false);
+  }, []);
 
   // Login handler
   const login = (userData, rememberMe = false, showNotification = false) => {
@@ -245,7 +127,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Logout handler
-  const logout = (showNotification = true) => {
+  const logout = () => {
     // Lưu tên người dùng trước khi đăng xuất để hiển thị trong thông báo
     const userName = user?.fullName || 'bạn';
     
@@ -260,9 +142,7 @@ export const AuthProvider = ({ children }) => {
     delete axios.defaults.headers.common['Authorization'];
     
     // Hiển thị thông báo đăng xuất thành công
-    if (showNotification) {
-      toast.success(`Đăng xuất thành công! Tạm biệt, ${userName}`);
-    }
+    toast.success(`Đăng xuất thành công! Tạm biệt, ${userName}`);
   };
 
   // Get auth header
@@ -279,7 +159,6 @@ export const AuthProvider = ({ children }) => {
       login, 
       logout, 
       updateUserData, 
-      refreshToken,
       getAuthHeader 
     }}>
       {children}

@@ -160,9 +160,10 @@ exports.getDoctors = async (req, res) => {
     
     // Execute query with pagination and populate
     const doctors = await Doctor.find(finalQuery)
-      .populate('user', 'fullName email phoneNumber avatarUrl isLocked lockReason')
+      .populate('user', 'fullName email phoneNumber avatarUrl isLocked lockReason address dateOfBirth gender')
       .populate('specialtyId', 'name description icon')
       .populate('hospitalId', 'name address')
+      .populate('services', 'name price')
       .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit));
@@ -808,6 +809,7 @@ exports.updateDoctor = async (req, res) => {
     if (languages) updateData.languages = languages;
     if (consultationFee !== undefined) updateData.consultationFee = consultationFee;
     if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
+    if (services && Array.isArray(services)) updateData.services = services;
     
     // Cập nhật thông tin User nếu có các trường liên quan
     if (fullName || phoneNumber || dateOfBirth || gender || address) {

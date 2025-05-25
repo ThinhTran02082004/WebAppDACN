@@ -117,7 +117,7 @@ const Home = () => {
         
         if (statsResponse.data) {
           setStats({
-            reviewsCount: statsResponse.data.data.totalDocs || 0,
+            reviewsCount: statsResponse.data.data.total || 0,
             doctorsCount: doctorsStatsResponse.data.data.totalDoctors || 0,
             branchesCount: branchesResponse.data.count || branchesData.length || 0,
             appointmentsCount: appointmentsStatsResponse.data.data.totalAppointments || 0
@@ -790,7 +790,7 @@ const Home = () => {
                         {React.createElement(getIconComponent(specialties[1].icon), { className: "text-green-600 text-xl" })}
                 </div>
                       <h3 className="text-xl font-bold text-gray-900 mb-2">{specialties[1].name}</h3>
-                      <p className="text-gray-600 mb-4">{specialties[1].description || `Điều trị các bệnh lý ${specialties[1].name.toLowerCase()} với đội ngũ y bác sĩ giàu kinh nghiệm`}</p>
+                      <p className="text-gray-600 mb-4 line-clamp-2">{specialties[1].description || `Điều trị các bệnh lý ${specialties[1].name.toLowerCase()} với đội ngũ y bác sĩ giàu kinh nghiệm`}</p>
                       <Link to={`/specialties/${specialties[1]._id}`} className="text-primary hover:text-primary-dark inline-flex items-center font-medium">
                   Tìm hiểu thêm <FaAngleRight className="ml-1" />
                 </Link>
@@ -806,7 +806,7 @@ const Home = () => {
                         {React.createElement(getIconComponent(specialties[2].icon), { className: "text-red-600 text-xl" })}
                 </div>
                       <h3 className="text-xl font-bold text-gray-900 mb-2">{specialties[2].name}</h3>
-                      <p className="text-gray-600 mb-4">{specialties[2].description || `Dịch vụ ${specialties[2].name.toLowerCase()} chất lượng cao với trang thiết bị hiện đại`}</p>
+                      <p className="text-gray-600 mb-4 line-clamp-2">{specialties[2].description || `Dịch vụ ${specialties[2].name.toLowerCase()} chất lượng cao với trang thiết bị hiện đại`}</p>
                       <Link to={`/specialties/${specialties[2]._id}`} className="text-primary hover:text-primary-dark inline-flex items-center font-medium">
                   Tìm hiểu thêm <FaAngleRight className="ml-1" />
                 </Link>
@@ -822,7 +822,7 @@ const Home = () => {
                         {React.createElement(getIconComponent(specialties[3].icon), { className: "text-purple-600 text-xl" })}
                 </div>
                       <h3 className="text-xl font-bold text-gray-900 mb-2">{specialties[3].name}</h3>
-                      <p className="text-gray-600 mb-4">{specialties[3].description || `Chăm sóc toàn diện các bệnh lý ${specialties[3].name.toLowerCase()}`}</p>
+                      <p className="text-gray-600 mb-4 line-clamp-2">{specialties[3].description || `Chăm sóc toàn diện các bệnh lý ${specialties[3].name.toLowerCase()}`}</p>
                       <Link to={`/specialties/${specialties[3]._id}`} className="text-primary hover:text-primary-dark inline-flex items-center font-medium">
                   Tìm hiểu thêm <FaAngleRight className="ml-1" />
                 </Link>
@@ -838,7 +838,7 @@ const Home = () => {
                         {React.createElement(getIconComponent(specialties[4].icon), { className: "text-yellow-600 text-xl" })}
                 </div>
                       <h3 className="text-xl font-bold text-gray-900 mb-2">{specialties[4].name}</h3>
-                      <p className="text-gray-600 mb-4">{specialties[4].description || `Dịch vụ ${specialties[4].name.toLowerCase()} chất lượng cao với công nghệ tiên tiến`}</p>
+                      <p className="text-gray-600 mb-4 line-clamp-2">{specialties[4].description || `Dịch vụ ${specialties[4].name.toLowerCase()} chất lượng cao với công nghệ tiên tiến`}</p>
                       <Link to={`/specialties/${specialties[4]._id}`} className="text-primary hover:text-primary-dark inline-flex items-center font-medium">
                   Tìm hiểu thêm <FaAngleRight className="ml-1" />
                 </Link>

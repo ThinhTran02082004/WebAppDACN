@@ -54,9 +54,6 @@ router.get('/:id/avatar', protect, userController.getUserAvatar);
 // GET /api/auth/refresh-token - Refresh authentication token (without requiring token validation)
 router.get('/refresh-token', refreshToken);
 
-// POST /api/auth/refresh-token - Refresh authentication token
-router.post('/refresh-token', protect, refreshToken);
-
 // ===== Password Reset Routes ===== (PUBLIC ROUTES)
 // POST /api/auth/forgot-password - Request password reset
 router.post('/forgot-password', forgotPassword);

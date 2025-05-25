@@ -482,13 +482,12 @@ const ServiceDetail = () => {
                     marginBottom: '0.75rem',
                     fontWeight: '600'
                   }}>{service.specialtyId.name}</h3>
-                  <p className="specialty-description" style={{
-                    fontSize: '1rem',
-                    color: '#4b5563',
-                    lineHeight: '1.6',
-                    marginBottom: '1.25rem'
-                  }}>
-                    {service.specialtyId.description || 'Không có mô tả chi tiết cho chuyên khoa này.'}
+                  <p className="text-gray-600 text-sm leading-relaxed mb-5">
+                    {service.specialtyId.description 
+                      ? (service.specialtyId.description.length > 50 
+                         ? `${service.specialtyId.description.substring(0, 50)}...` 
+                         : service.specialtyId.description)
+                      : 'Không có mô tả chi tiết cho chuyên khoa này.'}
                   </p>
                   <Link to={`/specialties/${service.specialtyId._id}`} className="btn btn-outline btn-effect" style={{
                     display: 'inline-flex',
@@ -641,16 +640,12 @@ const ServiceDetail = () => {
                       )}
                     </div>
                     
-                    <p className="doctor-description" style={{
-                      fontSize: '0.95rem',
-                      color: '#4b5563',
-                      lineHeight: '1.6',
-                      marginBottom: '1.5rem',
-                      flexGrow: '1'
-                    }}>
-                      {doctor.description && doctor.description.length > 120
-                        ? `${doctor.description.substring(0, 120)}...`
-                        : doctor.description || `Bác sĩ có nhiều năm kinh nghiệm trong lĩnh vực ${service.specialtyId ? service.specialtyId.name : 'y tế'}.`}
+                    <p className="text-gray-600 text-sm leading-relaxed mb-5">
+                      {doctor.description 
+                        ? (doctor.description.length > 50 
+                           ? `${doctor.description.substring(0, 50)}...` 
+                           : doctor.description)
+                        : `Bác sĩ có nhiều năm kinh nghiệm trong lĩnh vực ${service.specialtyId ? service.specialtyId.name : 'y tế'}.`}
                     </p>
                     
                     <div className="view-profile-btn" style={{ marginTop: 'auto' }}>

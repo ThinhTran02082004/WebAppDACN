@@ -140,7 +140,7 @@ const Specialties = () => {
       }
     } catch (error) {
       console.error('Error fetching specialties:', error);
-      toast.error('Không thể tải dữ liệu chuyên khoa');
+      toast.error(error.response?.data?.message || 'Không thể tải dữ liệu chuyên khoa');
       setSpecialties([]);
     } finally {
       setLoading(false);
@@ -231,10 +231,12 @@ const Specialties = () => {
         toast.success('Đã xóa chuyên khoa thành công');
         fetchData();
         closeModal();
+      } else {
+        toast.error(res.data.message || 'Không thể xóa chuyên khoa');
       }
     } catch (error) {
       console.error('Error deleting specialty:', error);
-      toast.error('Không thể xóa chuyên khoa');
+      toast.error(error.response?.data?.message || 'Không thể xóa chuyên khoa');
     } finally {
       setLoadingAction(false);
     }
@@ -319,7 +321,7 @@ const Specialties = () => {
       }
     } catch (error) {
       console.error('Error uploading image:', error);
-      toast.error('Không thể tải ảnh lên');
+      toast.error(error.response?.data?.message || 'Không thể tải ảnh lên');
     } finally {
       setUploadLoading(false);
     }
@@ -364,10 +366,12 @@ const Specialties = () => {
         toast.success('Đã xóa hình ảnh thành công');
         fetchData();
         closeModal();
+      } else {
+        toast.error(res.data.message || 'Không thể xóa hình ảnh');
       }
     } catch (error) {
       console.error('Error deleting image:', error);
-      toast.error('Không thể xóa hình ảnh');
+      toast.error(error.response?.data?.message || 'Không thể xóa hình ảnh');
     } finally {
       setLoadingAction(false);
     }
