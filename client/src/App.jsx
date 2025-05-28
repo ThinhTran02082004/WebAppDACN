@@ -78,6 +78,8 @@ import Facilities from './pages/user/Facilities';
 import FacilitySurgery from './pages/user/FacilitySurgery';
 import News from './pages/user/News';
 import NewsDetail from './pages/user/NewsDetail';
+import DoctorReviewsPage from './pages/reviews/DoctorReviews.jsx';
+import HospitalReviews from './pages/reviews/HospitalReviews.jsx';
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
@@ -142,8 +144,10 @@ function AppContent() {
                 <Route path="/facebook-callback" element={<SocialCallback />} />
                 <Route path="/doctors" element={<Doctors />} />
                 <Route path="/doctors/:doctorId" element={<DoctorDetail />} />
+                <Route path="/reviews/doctor/:doctorId" element={<DoctorReviewsPage />} />
                 <Route path="/branches" element={<Branches />} />
                 <Route path="/branches/:id" element={<BranchDetail />} />
+                <Route path="/reviews/hospital/:id" element={<HospitalReviews />} />
                 <Route path="/specialties" element={<Specialties />} />
                 <Route path="/specialties/:specialtyId" element={<SpecialtyDetail />} />
                 <Route path="/services" element={<Services />} />

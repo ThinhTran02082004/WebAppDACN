@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import { HospitalCard } from '../../components/user';
-import { FaHospital, FaSearch, FaMapMarkerAlt, FaPhone, FaCalendarAlt, FaFilter, FaChevronDown, FaTimes, FaBuilding, FaStar } from 'react-icons/fa';
+import { FaHospital, FaSearch, FaMapMarkerAlt, FaPhone, FaCalendarAlt, FaFilter, FaChevronDown, FaTimes, FaBuilding, FaStar, FaAngleLeft, FaAngleRight } from 'react-icons/fa';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
 
@@ -24,6 +24,11 @@ const Branches = () => {
   const [locations, setLocations] = useState([]);
   const [services, setServices] = useState([]);
   const [activeFilters, setActiveFilters] = useState(0);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(6);
+  const [totalPages, setTotalPages] = useState(1);
   
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
@@ -202,6 +207,49 @@ const Branches = () => {
     }
     
     navigate(`/appointment?branch=${branchId}`);
+  };
+
+  // Pagination logic
+  useEffect(() => {
+    // For debugging
+    console.log("Filtered branches:", filteredBranches.length);
+    console.log("Items per page:", itemsPerPage);
+    console.log("Current page:", currentPage);
+    
+    // Calculate total pages based on filtered branches
+    const total = Math.ceil(filteredBranches.length / itemsPerPage);
+    console.log("Total pages calculated:", total);
+    setTotalPages(total);
+    
+    // Reset to page 1 when filters change
+    if (currentPage > total && total > 0) {
+      setCurrentPage(1);
+    }
+  }, [filteredBranches, itemsPerPage, currentPage, searchQuery, selectedLocation, selectedService, selectedStatus, selectedRating]);
+
+  // Get current branches
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentBranches = filteredBranches.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Change page
+  const paginate = (pageNumber) => {
+    console.log("Paginating to page:", pageNumber);
+    setCurrentPage(pageNumber);
+    // Scroll to top of results
+    window.scrollTo({ top: 500, behavior: 'smooth' });
+  };
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+      window.scrollTo({ top: 500, behavior: 'smooth' });
+    }
+  };
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+      window.scrollTo({ top: 500, behavior: 'smooth' });
+    }
   };
 
   if (loading) {
@@ -479,13 +527,74 @@ const Branches = () => {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredBranches.map((branch, index) => (
-                <div key={branch._id} data-aos="fade-up" data-aos-delay={index % 3 * 100}>
-                  <HospitalCard hospital={branch} />
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {currentBranches.map((branch, index) => (
+                  <div key={branch._id} data-aos="fade-up" data-aos-delay={index % 3 * 100}>
+                    <HospitalCard hospital={branch} />
+                  </div>
+                ))}
+              </div>
+              
+              {/* Pagination Controls */}
+              {(totalPages > 1 || filteredBranches.length > 0) && (
+                <div className="flex justify-center mt-12 items-center" data-aos="fade-up">
+                  <button 
+                    onClick={prevPage} 
+                    disabled={currentPage === 1}
+                    className={`flex items-center justify-center w-10 h-10 rounded-lg mr-2 ${currentPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-primary hover:bg-primary/10'}`}
+                  >
+                    <FaAngleLeft />
+                  </button>
+                  
+                  <div className="flex space-x-1">
+                    {[...Array(totalPages || 1).keys()].map(number => {
+                      // Show current page, first, last, and pages around current
+                      if (
+                        number + 1 === 1 || 
+                        number + 1 === totalPages || 
+                        (number + 1 >= currentPage - 1 && number + 1 <= currentPage + 1)
+                      ) {
+                        return (
+                          <button
+                            key={number}
+                            onClick={() => paginate(number + 1)}
+                            className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                              currentPage === number + 1
+                                ? 'bg-primary text-white'
+                                : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                          >
+                            {number + 1}
+                          </button>
+                        );
+                      } else if (
+                        number + 1 === currentPage - 2 || 
+                        number + 1 === currentPage + 2
+                      ) {
+                        return (
+                          <span 
+                            key={number} 
+                            className="w-10 h-10 flex items-center justify-center text-gray-400"
+                          >
+                            ...
+                          </span>
+                        );
+                      }
+                      return null;
+                    })}
+                  </div>
+                  
+                  <button 
+                    onClick={nextPage} 
+                    disabled={currentPage === totalPages}
+                    className={`flex items-center justify-center w-10 h-10 rounded-lg ml-2 ${currentPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'text-primary hover:bg-primary/10'}`}
+                  >
+                    <FaAngleRight />
+                  </button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </section>

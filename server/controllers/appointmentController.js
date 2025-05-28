@@ -1256,6 +1256,51 @@ exports.rescheduleAppointment = async (req, res) => {
         message: `Không thể đổi lịch hẹn có trạng thái '${appointment.status}'`
       });
     }
+
+    // RÀNG BUỘC MỚI 1: Kiểm tra số lần đổi lịch tối đa (2 lần)
+    if (appointment.rescheduleCount >= 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Lịch hẹn này đã được đổi 2 lần, không thể đổi thêm'
+      });
+    }
+
+    // RÀNG BUỘC MỚI 2: Không thể đổi lịch trong vòng 4 giờ trước cuộc hẹn
+    const currentTime = new Date();
+    const appointmentTime = new Date(appointment.appointmentDate);
+    const [hours, minutes] = appointment.timeSlot.startTime.split(':').map(Number);
+    appointmentTime.setHours(hours, minutes, 0, 0);
+
+    const timeDiffInHours = (appointmentTime - currentTime) / (1000 * 60 * 60);
+    if (timeDiffInHours < 4) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không thể đổi lịch trong vòng 4 giờ trước thời gian hẹn'
+      });
+    }
+    
+    // RÀNG BUỘC MỚI 3: Không thể đổi lịch về thời gian đã qua
+    const newAppointmentDateTime = new Date(appointmentDate);
+    const [newHours, newMinutes] = timeSlot.startTime.split(':').map(Number);
+    newAppointmentDateTime.setHours(newHours, newMinutes, 0, 0);
+
+    if (newAppointmentDateTime < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không thể đổi lịch về thời gian đã qua'
+      });
+    }
+
+    // RÀNG BUỘC MỚI 4: Không thể đổi lịch xa quá 30 ngày
+    const maxFutureDate = new Date();
+    maxFutureDate.setDate(maxFutureDate.getDate() + 30);
+    
+    if (newAppointmentDateTime > maxFutureDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không thể đổi lịch xa quá 30 ngày kể từ hôm nay'
+      });
+    }
     
     // Kiểm tra lịch mới có tồn tại không
     const newSchedule = await Schedule.findById(scheduleId);
@@ -1311,11 +1356,50 @@ exports.rescheduleAppointment = async (req, res) => {
                        oldTimeSlot.endTime === timeSlot.endTime &&
                        oldScheduleId.toString() === scheduleId.toString();
     
+    // RÀNG BUỘC MỚI 6: Nếu đổi trong cùng ngày, phải chọn khung giờ khác
+    const oldDateString = oldAppointmentDate.toISOString().split('T')[0];
+    const newDateString = new Date(appointmentDate).toISOString().split('T')[0];
+    
+    if (oldDateString === newDateString && isSameSlot) {
+      return res.status(400).json({
+        success: false,
+        message: 'Khi đổi lịch trong cùng một ngày, bạn phải chọn khung giờ khác với lịch hẹn cũ'
+      });
+    }
+
     if (!isSameSlot && selectedTimeSlot.isBooked) {
       return res.status(400).json({
         success: false,
         message: 'Khung giờ mới đã đầy'
       });
+    }
+
+    // RÀNG BUỘC MỚI 5: Kiểm tra số lượng cuộc hẹn tối đa của bệnh nhân trong ngày mới
+    const appointmentDateStart = new Date(appointmentDate);
+    appointmentDateStart.setHours(0, 0, 0, 0);
+    
+    const appointmentDateEnd = new Date(appointmentDate);
+    appointmentDateEnd.setHours(23, 59, 59, 999);
+    
+    // Kiểm tra nếu ngày mới khác ngày cũ
+    if (oldDateString !== newDateString) {
+      // Đếm số lượng lịch hẹn của bệnh nhân trong ngày mới (không tính lịch hẹn hiện tại)
+      const patientAppointmentsInNewDate = await Appointment.countDocuments({
+        patientId: appointment.patientId._id,
+        appointmentDate: {
+          $gte: appointmentDateStart,
+          $lte: appointmentDateEnd
+        },
+        _id: { $ne: appointment._id }, // Không tính lịch hẹn hiện tại
+        status: { $nin: ['cancelled', 'rejected'] }
+      });
+      
+      if (patientAppointmentsInNewDate >= 3) {
+        return res.status(400).json({
+          success: false,
+          message: 'Bạn đã có 3 cuộc hẹn trong ngày đã chọn. Vui lòng chọn ngày khác.'
+        });
+      }
     }
     
     // Tìm phòng phù hợp cho lịch hẹn mới
@@ -1348,19 +1432,12 @@ exports.rescheduleAppointment = async (req, res) => {
     }
     
     // Check if the new date is different from the old date
-    const oldDateString = oldAppointmentDate.toISOString().split('T')[0];
-    const newDateString = new Date(appointmentDate).toISOString().split('T')[0];
     let queueNumber = appointment.queueNumber;
     
     // If rescheduling to a different day, generate a new queue number
     if (oldDateString !== newDateString) {
       console.log('Rescheduling to a different day, generating new queue number');
       // Convert appointment date to start of day to ensure counting all appointments within the same day
-      const appointmentDateStart = new Date(appointmentDate);
-      appointmentDateStart.setHours(0, 0, 0, 0);
-      
-      const appointmentDateEnd = new Date(appointmentDate);
-      appointmentDateEnd.setHours(23, 59, 59, 999);
       
       // Find the highest queue number for this doctor on the new day
       const latestAppointment = await Appointment.findOne({
@@ -1381,10 +1458,15 @@ exports.rescheduleAppointment = async (req, res) => {
     
     // Lưu thông tin vào bảng lịch sử thay đổi lịch hẹn
     appointment.rescheduleHistory.push({
-      previousDate: oldAppointmentDate,
-      previousTimeSlot: oldTimeSlot,
-      rescheduledBy: req.user.id,
-      rescheduledAt: new Date()
+      oldScheduleId: oldScheduleId,
+      oldTimeSlot: oldTimeSlot,
+      oldAppointmentDate: oldAppointmentDate,
+      newScheduleId: scheduleId,
+      newTimeSlot: timeSlot,
+      newAppointmentDate: new Date(appointmentDate),
+      rescheduleBy: req.user.id,
+      rescheduleAt: new Date(),
+      notes: req.body.notes || 'Đổi lịch hẹn'
     });
     
     // Cập nhật thông tin lịch hẹn
@@ -1399,6 +1481,10 @@ exports.rescheduleAppointment = async (req, res) => {
     
     // Cập nhật trạng thái thành 'rescheduled'
     appointment.status = 'rescheduled';
+    
+    // Tăng số lần đổi lịch
+    appointment.rescheduleCount = (appointment.rescheduleCount || 0) + 1;
+    appointment.isRescheduled = true;
     
     // Nếu đổi lịch, trạng thái thanh toán vẫn giữ nguyên (không cần thanh toán lại)
     

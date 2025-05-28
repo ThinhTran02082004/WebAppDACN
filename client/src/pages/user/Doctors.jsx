@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import { DoctorCard } from '../../components/user';
-import { FaSearch, FaUserMd, FaHospital, FaStethoscope, FaStar, FaFilter, FaCalendarCheck, FaChevronDown, FaTimes } from 'react-icons/fa';
+import { FaSearch, FaUserMd, FaHospital, FaStethoscope, FaStar, FaFilter, FaCalendarCheck, FaChevronDown, FaTimes, FaAngleLeft, FaAngleRight } from 'react-icons/fa';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
 
@@ -24,6 +24,11 @@ const Doctors = () => {
   const [departments, setDepartments] = useState([]);
   const [branches, setBranches] = useState([]);
   const [activeFilters, setActiveFilters] = useState(0);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(6);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Add state for debug panel
   const [showDebug, setShowDebug] = useState(false);
@@ -277,6 +282,49 @@ const Doctors = () => {
     if (selectedAvailability && selectedAvailability !== 'all') count++;
     setActiveFilters(count);
   }, [selectedDepartment, selectedBranch, selectedRating, selectedExperience, selectedAvailability]);
+
+  // Pagination logic
+  useEffect(() => {
+    // For debugging
+    console.log("Filtered doctors:", filteredDoctors.length);
+    console.log("Items per page:", itemsPerPage);
+    console.log("Current page:", currentPage);
+    
+    // Calculate total pages based on filtered doctors
+    const total = Math.ceil(filteredDoctors.length / itemsPerPage);
+    console.log("Total pages calculated:", total);
+    setTotalPages(total);
+    
+    // Reset to page 1 when filters change
+    if (currentPage > total && total > 0) {
+      setCurrentPage(1);
+    }
+  }, [filteredDoctors, itemsPerPage, searchQuery, selectedDepartment, selectedBranch, selectedRating, selectedExperience, selectedAvailability]);
+
+  // Get current doctors
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentDoctors = filteredDoctors.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Change page
+  const paginate = (pageNumber) => {
+    console.log("Paginating to page:", pageNumber);
+    setCurrentPage(pageNumber);
+    // Scroll to top of results
+    window.scrollTo({ top: 500, behavior: 'smooth' });
+  };
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+      window.scrollTo({ top: 500, behavior: 'smooth' });
+    }
+  };
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+      window.scrollTo({ top: 500, behavior: 'smooth' });
+    }
+  };
 
   // Handle filter changes
   const handleDepartmentChange = (e) => {
@@ -660,13 +708,74 @@ const Doctors = () => {
 
         {/* Doctors Grid */}
         {Array.isArray(filteredDoctors) && filteredDoctors.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-            {filteredDoctors.map((doctor, index) => (
-              <div key={doctor._id} data-aos="fade-up" data-aos-delay={index % 3 * 100}>
-                <DoctorCard doctor={doctor} />
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+              {currentDoctors.map((doctor, index) => (
+                <div key={doctor._id} data-aos="fade-up" data-aos-delay={index % 3 * 100}>
+                  <DoctorCard doctor={doctor} />
+                </div>
+              ))}
+            </div>
+            
+            {/* Pagination Controls */}
+            {(totalPages > 1 || filteredDoctors.length > 0) && (
+              <div className="flex justify-center mb-12 items-center" data-aos="fade-up">
+                <button 
+                  onClick={prevPage} 
+                  disabled={currentPage === 1}
+                  className={`flex items-center justify-center w-10 h-10 rounded-lg mr-2 ${currentPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-primary hover:bg-primary/10'}`}
+                >
+                  <FaAngleLeft />
+                </button>
+                
+                <div className="flex space-x-1">
+                  {[...Array(totalPages || 1).keys()].map(number => {
+                    // Show current page, first, last, and pages around current
+                    if (
+                      number + 1 === 1 || 
+                      number + 1 === totalPages || 
+                      (number + 1 >= currentPage - 1 && number + 1 <= currentPage + 1)
+                    ) {
+                      return (
+                        <button
+                          key={number}
+                          onClick={() => paginate(number + 1)}
+                          className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                            currentPage === number + 1
+                              ? 'bg-primary text-white'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {number + 1}
+                        </button>
+                      );
+                    } else if (
+                      number + 1 === currentPage - 2 || 
+                      number + 1 === currentPage + 2
+                    ) {
+                      return (
+                        <span 
+                          key={number} 
+                          className="w-10 h-10 flex items-center justify-center text-gray-400"
+                        >
+                          ...
+                        </span>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+                
+                <button 
+                  onClick={nextPage} 
+                  disabled={currentPage === totalPages}
+                  className={`flex items-center justify-center w-10 h-10 rounded-lg ml-2 ${currentPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'text-primary hover:bg-primary/10'}`}
+                >
+                  <FaAngleRight />
+                </button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         ) : (
           <div className="bg-white rounded-lg shadow-sm p-8 text-center mb-12">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">

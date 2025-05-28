@@ -54,7 +54,34 @@ const Appointments = () => {
         // The response format from the server has appointments in res.data.data
         if (res.data.data && Array.isArray(res.data.data)) {
           console.log(`Found ${res.data.data.length} appointments in res.data.data array`);
-          setAppointments(res.data.data);
+          
+          // Sắp xếp lịch hẹn theo ngày gần nhất với ngày hiện tại
+          const appointmentsData = [...res.data.data]; // Tạo bản sao để tránh ảnh hưởng đến dữ liệu gốc
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Reset giờ để so sánh chỉ theo ngày
+          
+          appointmentsData.sort((a, b) => {
+            const dateA = new Date(a.appointmentDate);
+            const dateB = new Date(b.appointmentDate);
+            
+            dateA.setHours(0, 0, 0, 0); // Reset giờ để so sánh chỉ theo ngày
+            dateB.setHours(0, 0, 0, 0);
+            
+            // Tính khoảng cách theo ngày
+            const distanceA = Math.abs(dateA - today);
+            const distanceB = Math.abs(dateB - today);
+            
+            // Ưu tiên các ngày trong tương lai gần nhất
+            // Nếu cả hai ngày đều trong tương lai hoặc đều trong quá khứ, lấy gần nhất
+            if ((dateA >= today && dateB >= today) || (dateA < today && dateB < today)) {
+              return distanceA - distanceB;
+            }
+            
+            // Nếu một trong tương lai và một trong quá khứ, ưu tiên ngày trong tương lai
+            return dateA >= today ? -1 : 1;
+          });
+          
+          setAppointments(appointmentsData);
           setPagination({
             ...pagination,
             totalPages: Math.ceil(res.data.total / pagination.pageSize) || 1,

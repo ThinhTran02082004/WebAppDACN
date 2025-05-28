@@ -139,7 +139,7 @@ const MedicalRecordDetail = () => {
           <div className="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">
             <div className="text-center text-gray-500">
               <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 012-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <h2 className="text-2xl font-semibold mt-4">Không tìm thấy hồ sơ bệnh án</h2>
               <button 
@@ -264,9 +264,9 @@ const MedicalRecordDetail = () => {
                   Thông tin chẩn đoán
                 </h2>
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="mb-2"><span className="font-medium">Chẩn đoán:</span> {medicalRecord.diagnosis || 'a'}</p>
-                  <p className="mb-2"><span className="font-medium">Phương pháp điều trị:</span> {medicalRecord.treatment || 'a'}</p>
-                  <p><span className="font-medium">Ghi chú:</span> {medicalRecord.notes || 'a'}</p>
+                  <p className="mb-2"><span className="font-medium">Chẩn đoán:</span> {medicalRecord.diagnosis || 'Không có thông tin'}</p>
+                  <p className="mb-2"><span className="font-medium">Phương pháp điều trị:</span> {medicalRecord.treatment || 'Không có thông tin'}</p>
+                  <p><span className="font-medium">Ghi chú:</span> {medicalRecord.notes || 'Không có thông tin'}</p>
                 </div>
               </div>
 
@@ -293,20 +293,16 @@ const MedicalRecordDetail = () => {
                       {medicalRecord.prescription && medicalRecord.prescription.length > 0 ? (
                         medicalRecord.prescription.map((med, index) => (
                           <tr key={index} className="border-b border-gray-200">
-                            <td className="px-4 py-3">{med.medicationName}</td>
-                            <td className="px-4 py-3">{med.dosage}</td>
-                            <td className="px-4 py-3">{med.instructions}</td>
-                            <td className="px-4 py-3">{med.timing || 'Mỗi tối'}</td>
-                            <td className="px-4 py-3">{med.notes || 'a'}</td>
+                            <td className="px-4 py-3">{med.medicine || med.medicationName || 'Không có thông tin'}</td>
+                            <td className="px-4 py-3">{med.dosage || 'Không có thông tin'}</td>
+                            <td className="px-4 py-3">{med.usage || med.instructions || 'Không có thông tin'}</td>
+                            <td className="px-4 py-3">{med.frequency || med.timing || med.duration || 'Không có thông tin'}</td>
+                            <td className="px-4 py-3">{med.notes || 'Không có thông tin'}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td className="px-4 py-3">kẹo kera 3</td>
-                          <td className="px-4 py-3">1/2</td>
-                          <td className="px-4 py-3">mỗi tối</td>
-                          <td className="px-4 py-3">17h tối 6h sáng</td>
-                          <td className="px-4 py-3">a</td>
+                          <td colSpan="5" className="px-4 py-3 text-center text-gray-500">Không có thông tin đơn thuốc</td>
                         </tr>
                       )}
                     </tbody>

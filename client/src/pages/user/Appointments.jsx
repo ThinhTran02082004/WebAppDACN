@@ -192,8 +192,29 @@ const Appointments = () => {
         
         // Đảm bảo rằng appointmentsData là một mảng trước khi gọi sort
         if (Array.isArray(appointmentsData)) {
+          // Sửa đổi hàm sort để sắp xếp theo khoảng cách ngày với ngày hiện tại
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Reset giờ để so sánh chỉ theo ngày
+          
           const sortedAppointments = appointmentsData.sort((a, b) => {
-            return new Date(b.appointmentDate) - new Date(a.appointmentDate);
+            const dateA = new Date(a.appointmentDate);
+            const dateB = new Date(b.appointmentDate);
+            
+            dateA.setHours(0, 0, 0, 0); // Reset giờ để so sánh chỉ theo ngày
+            dateB.setHours(0, 0, 0, 0);
+            
+            // Tính khoảng cách theo ngày
+            const distanceA = Math.abs(dateA - today);
+            const distanceB = Math.abs(dateB - today);
+            
+            // Ưu tiên các ngày trong tương lai gần nhất
+            // Nếu cả hai ngày đều trong tương lai hoặc đều trong quá khứ, lấy gần nhất
+            if ((dateA >= today && dateB >= today) || (dateA < today && dateB < today)) {
+              return distanceA - distanceB;
+            }
+            
+            // Nếu một trong tương lai và một trong quá khứ, ưu tiên ngày trong tương lai
+            return dateA >= today ? -1 : 1;
           });
           
           setAppointments(sortedAppointments);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
-import { FaStethoscope, FaUserMd, FaCalendarAlt, FaInfoCircle, FaArrowRight, FaSearch, FaFilter, FaChevronDown, FaTimes, FaSortAmountDown, FaHeartbeat, FaLungs, FaBrain, FaAmbulance, FaBaby, FaTooth, FaEye, FaFileMedicalAlt, FaNotesMedical, FaXRay, FaBone, FaAllergies, FaWheelchair, FaPills, FaProcedures, FaHandHoldingMedical, FaVial, FaHospital, FaDna } from 'react-icons/fa';
+import { FaStethoscope, FaUserMd, FaCalendarAlt, FaInfoCircle, FaArrowRight, FaSearch, FaFilter, FaChevronDown, FaTimes, FaSortAmountDown, FaHeartbeat, FaLungs, FaBrain, FaAmbulance, FaBaby, FaTooth, FaEye, FaFileMedicalAlt, FaNotesMedical, FaXRay, FaBone, FaAllergies, FaWheelchair, FaPills, FaProcedures, FaHandHoldingMedical, FaVial, FaHospital, FaDna, FaAngleLeft, FaAngleRight } from 'react-icons/fa';
 import { GiMedicines, GiDna1, GiMedicalPack, GiHealthNormal, GiHumanEar, GiHeartOrgan, GiChemicalDrop } from 'react-icons/gi';
 import { MdLocalHospital, MdMedicalServices, MdBloodtype, MdOutlineVaccines } from 'react-icons/md';
 import { IoNutritionOutline } from 'react-icons/io5';
@@ -65,6 +65,11 @@ const Specialties = () => {
   const [selectedSort, setSelectedSort] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState(0);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(6);
+  const [totalPages, setTotalPages] = useState(1);
   
   const navigate = useNavigate();
 
@@ -224,6 +229,28 @@ const Specialties = () => {
     setActiveFilters(count);
   }, [selectedDoctorCount, selectedServiceCount, selectedSort]);
 
+  // Pagination logic
+  useEffect(() => {
+    // Calculate total pages based on filtered specialties
+    const total = Math.ceil(filteredSpecialties.length / itemsPerPage);
+    setTotalPages(total);
+    
+    // Reset to page 1 when filters change
+    if (currentPage > total) {
+      setCurrentPage(1);
+    }
+  }, [filteredSpecialties, itemsPerPage, currentPage]);
+
+  // Get current specialties
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentSpecialties = filteredSpecialties.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Change page
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+  const nextPage = () => setCurrentPage(prevPage => prevPage < totalPages ? prevPage + 1 : prevPage);
+  const prevPage = () => setCurrentPage(prevPage => prevPage > 1 ? prevPage - 1 : prevPage);
+
   // Handler functions
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
@@ -365,13 +392,74 @@ const Specialties = () => {
         </div>
 
         {filteredSpecialties.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
-            {filteredSpecialties.map((specialty, index) => (
-              <div key={specialty._id} data-aos="fade-up" data-aos-delay={index % 3 * 100}>
-                <SpecialtyCard specialty={specialty} />
-              </div>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
+              {currentSpecialties.map((specialty, index) => (
+                <div key={specialty._id} data-aos="fade-up" data-aos-delay={index % 3 * 100}>
+                  <SpecialtyCard specialty={specialty} />
+                </div>
               ))}
             </div>
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex justify-center mb-16 items-center" data-aos="fade-up">
+                <button 
+                  onClick={prevPage} 
+                  disabled={currentPage === 1}
+                  className={`flex items-center justify-center w-10 h-10 rounded-lg mr-2 ${currentPage === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-primary hover:bg-primary/10'}`}
+                >
+                  <FaAngleLeft />
+                </button>
+                
+                <div className="flex space-x-1">
+                  {[...Array(totalPages).keys()].map(number => {
+                    // Show current page, first, last, and pages around current
+                    if (
+                      number + 1 === 1 || 
+                      number + 1 === totalPages || 
+                      (number + 1 >= currentPage - 1 && number + 1 <= currentPage + 1)
+                    ) {
+                      return (
+                        <button
+                          key={number}
+                          onClick={() => paginate(number + 1)}
+                          className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                            currentPage === number + 1
+                              ? 'bg-primary text-white'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {number + 1}
+                        </button>
+                      );
+                    } else if (
+                      number + 1 === currentPage - 2 || 
+                      number + 1 === currentPage + 2
+                    ) {
+                      return (
+                        <span 
+                          key={number} 
+                          className="w-10 h-10 flex items-center justify-center text-gray-400"
+                        >
+                          ...
+                        </span>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+                
+                <button 
+                  onClick={nextPage} 
+                  disabled={currentPage === totalPages}
+                  className={`flex items-center justify-center w-10 h-10 rounded-lg ml-2 ${currentPage === totalPages ? 'text-gray-400 cursor-not-allowed' : 'text-primary hover:bg-primary/10'}`}
+                >
+                  <FaAngleRight />
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center mb-16">
             <h3 className="text-2xl text-gray-700 mb-4">Không tìm thấy chuyên khoa</h3>

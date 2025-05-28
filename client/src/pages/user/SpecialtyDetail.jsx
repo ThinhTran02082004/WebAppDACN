@@ -6,6 +6,7 @@ import { FaStethoscope, FaUserMd, FaHospital, FaCalendarAlt, FaClock, FaMoneyBil
 import { GiMedicines, GiDna1, GiMedicalPack, GiHealthNormal, GiHumanEar, GiHeartOrgan, GiChemicalDrop } from 'react-icons/gi';
 import { MdLocalHospital, MdMedicalServices, MdBloodtype, MdOutlineVaccines } from 'react-icons/md';
 import { IoNutritionOutline } from 'react-icons/io5';
+import { DoctorCard } from '../../components/user';
 
 const getSpecialtyColor = (name) => {
   // Use consistent blue color for all specialties
@@ -338,63 +339,7 @@ const SpecialtyDetail = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {doctors.map(doctor => (
-                <div key={doctor._id} className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden transform hover:-translate-y-1">
-                  <div className="relative pt-[100%] bg-gray-100">
-                    <img 
-                      src={doctor.user?.avatarUrl || '/avatars/default-avatar.png'} 
-                      alt={doctor.user?.fullName || 'Bác sĩ'} 
-                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = '/avatars/default-avatar.png';
-                      }}
-                    />
-                  </div>
-                  <div className="p-6">
-                    <h3 className="text-xl font-semibold text-gray-800 mb-1">{doctor.user?.fullName || 'Bác sĩ'}</h3>
-                    <div className="text-primary text-sm font-medium mb-2">{specialty.name}</div>
-                    <div className="text-yellow-500 text-sm mb-3 flex items-center">
-                      {(() => {
-                        // Xử lý tất cả các định dạng đánh giá có thể
-                        let rating = null;
-                        
-                        // Định dạng 1: ratings.average (ƯU TIÊN)
-                        if (doctor.ratings && typeof doctor.ratings.average === 'number') {
-                          rating = doctor.ratings.average;
-                        } 
-                        // Định dạng 2: averageRating trực tiếp
-                        else if (typeof doctor.averageRating === 'number') {
-                          rating = doctor.averageRating;
-                        }
-                        
-                        // Nếu có đánh giá, hiển thị với 1 chữ số thập phân
-                        return rating !== null ? (
-                          <>
-                            <FaStar className="text-yellow-500 mr-1" />
-                            <span>{rating.toFixed(1)}</span>
-                          </>
-                        ) : '';
-                      })()}
-                      {doctor.experience ? (
-                        <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-xs">
-                          {doctor.experience} năm kinh nghiệm
-                        </span>
-                      ) : (
-                        <span className="ml-2 px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-xs">
-                          10 năm kinh nghiệm
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-gray-600 text-sm mb-6 line-clamp-3">
-                      {doctor.description && doctor.description.length > 120
-                        ? `${doctor.description.substring(0, 120)}...`
-                        : doctor.description || `Bác sĩ có nhiều năm kinh nghiệm trong lĩnh vực ${specialty.name}.`}
-                    </p>
-                    <Link to={`/doctors/${doctor._id}`} className="block w-full text-center bg-primary text-white hover:bg-primary-dark px-4 py-2 rounded transition-colors">
-                      Xem Hồ Sơ & Đặt Lịch
-                    </Link>
-                  </div>
-                </div>
+                <DoctorCard key={doctor._id} doctor={doctor} specialty={specialty} />
               ))}
             </div>
           )}

@@ -967,3 +967,6 @@
 [2025-05-21T15:49:01.669Z] [ERROR] GET /api/coupons/validate?code=SONDZ&serviceId=680b201e78b7aadb0a7af5dc&specialtyId=680b201e78b7aadb0a7af5d2&totalAmount=650000 Error: Mã giảm giá không hợp lệ hoặc không tồn tại
     at D:\icon\New folder (2)\DACS-hospitalweb\server\controllers\couponController.js:534:17
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[2025-05-28T06:19:19.440Z] [ERROR] GET /api/coupons/validate?code=MONDAYSPECIAL&serviceId=680b201e78b7aadb0a7af5dc&specialtyId=680b201e78b7aadb0a7af5d2&totalAmount=750000 Error: Mã giảm giá đã hết hạn hoặc đã đạt giới hạn sử dụng
+    at D:\icon\New folder (2)\DACS-hospitalweb\server\controllers\couponController.js:539:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

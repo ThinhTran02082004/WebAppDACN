@@ -68,16 +68,18 @@ const DoctorCard = ({ doctor }) => {
       );
     }
 
-  return (
+    return (
+      <div className="w-full h-48 bg-white flex items-center justify-center">
         <img 
-        src={avatarUrl} 
-        alt={safeGet(doctor, 'user.fullName', 'Doctor')} 
-        className="w-full h-48 object-contain bg-white" 
-        onError={(e) => {
-          e.target.onerror = null;
-          e.target.src = '/avatars/default-avatar.png';
-        }}
+          src={avatarUrl} 
+          alt={safeGet(doctor, 'user.fullName', 'Doctor')} 
+          className="h-full object-contain" 
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src = '/avatars/default-avatar.png';
+          }}
         />
+      </div>
     );
   };
             
