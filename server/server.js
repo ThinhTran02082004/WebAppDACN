@@ -93,7 +93,7 @@ const createAdminAccount = async () => {
       fullName: 'Administrator',
       email: 'admin@congson.com',
       phoneNumber: '0123456789',
-      passwordHash: 'Password123', // Sẽ được hash trong model
+      passwordHash: 'qwe123', // Sẽ được hash trong model
       dateOfBirth: new Date('1990-01-01'),
       gender: 'other',
       address: 'Hospital Address',
@@ -103,7 +103,7 @@ const createAdminAccount = async () => {
 
     console.log('Created admin account successfully:');
     console.log('- Email: admin@congson.com');
-    console.log('- Password: Password123');
+    console.log('- Password: qwe123');
     console.log('- ID:', admin._id);
   } catch (error) {
     console.error('Error creating admin account:', error);

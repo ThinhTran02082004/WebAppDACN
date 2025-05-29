@@ -391,6 +391,18 @@ const Home = () => {
     return iconMap[iconName?.toLowerCase()] || FaStethoscope;
   };
 
+  // Thêm function này vào Home.jsx
+  const getNewsCategory = (category) => {
+    switch (category) {
+      case 'medical': return "Y tế - Sức khỏe";
+      case 'hospital': return "Bệnh viện";
+      case 'doctor': return "Bác sĩ";
+      case 'service': return "Dịch vụ y tế";
+      case 'general': return "Tin tức chung";
+      default: return "Sức khỏe tổng quát";
+    }
+  };
+
   return (
     <div className="min-h-screen">
       {/* Hero Banner */}
@@ -1314,7 +1326,7 @@ const Home = () => {
                       }}
                 />
                     <div className="absolute top-3 left-3 bg-blue-600 text-white text-xs py-1 px-2 rounded">
-                      {item.category || 'Sức khỏe tổng quát'}
+                      {getNewsCategory(item.category)}
               </div>
               </div>
               <div className="p-6">

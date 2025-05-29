@@ -152,7 +152,6 @@ function AppContent() {
                 <Route path="/specialties/:specialtyId" element={<SpecialtyDetail />} />
                 <Route path="/services" element={<Services />} />
                 <Route path="/services/:serviceId" element={<ServiceDetail />} />
-                <Route path="/appointment" element={<Appointment />} />
                 <Route path="/contact" element={<Contact />} />
                 
                 {/* Payment Status Routes */}
@@ -172,6 +171,7 @@ function AppContent() {
                 <Route element={<UserRoute />}>
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/appointments" element={<Appointments />} />
+                  <Route path="/appointment" element={<Appointment />} />
                   <Route path="/appointments/:id" element={<AppointmentDetail />} />
                   <Route path="/appointments/:id/reschedule" element={<RescheduleAppointment />} />
                   <Route path="/appointments/:id/review" element={<ReviewChoice />} />

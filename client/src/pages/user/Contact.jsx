@@ -136,8 +136,8 @@ const Contact = () => {
                   </div>
                   <div className="ml-4">
                     <h3 className="text-lg font-semibold text-gray-800">Điện Thoại</h3>
-                    <p className="text-gray-600 mt-1">(+84) 28 1234 5678</p>
-                    <p className="text-gray-600">Hotline: 1900 1234</p>
+                    <p className="text-gray-600 mt-1">(+84) 0000000000000</p>
+                    <p className="text-gray-600">Hotline: 00000000000000</p>
                   </div>
                 </div>
                 
