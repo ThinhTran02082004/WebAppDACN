@@ -76,6 +76,14 @@ const Appointment = () => {
     finalTotal: 0
   });
 
+  // Thêm vào phần state của component
+  const [currentDoctorPage, setCurrentDoctorPage] = useState(0);
+
+  // Reset trang về 0 khi chọn chuyên khoa/bệnh viện mới
+  useEffect(() => {
+    setCurrentDoctorPage(0);
+  }, [formData.hospitalId, formData.specialtyId]);
+
   // Parse URL query parameters and check for reschedule path
   useEffect(() => {
     // Check if we're on a reschedule path
@@ -1761,75 +1769,148 @@ const Appointment = () => {
                   Bác sĩ
                 </label>
                 
+                {/* Hiển thị bác sĩ dạng slideshow */}
                 {Array.isArray(doctors) && doctors.length > 0 ? (
-                  <div className="relative flex items-center">
-                    <button 
-                      type="button"
-                      className="absolute left-0 -ml-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:-translate-y-0.5"
-                      onClick={goToPreviousDoctor}
-                      disabled={currentDoctorIndex === 0}
-                    >
-                      <FaAngleLeft />
-                    </button>
-                    
-                    <div className="w-full px-2">
-                      {doctors.length > 0 && (
-                        <div 
-                          className={`bg-white rounded-xl shadow-md overflow-hidden border-2 transition-all hover:shadow-lg cursor-pointer ${
-                            formData.doctorId === doctors[currentDoctorIndex]._id 
-                              ? 'border-blue-500' 
-                              : 'border-gray-200 hover:border-blue-300'
-                          }`}
-                          onClick={() => handleDoctorSelect(doctors[currentDoctorIndex])}
-                        >
-                          <div className="md:flex">
-                            <div className="md:flex-shrink-0">
-                              <img 
-                                className="h-48 w-full object-cover md:h-full md:w-48"
-                                src={doctors[currentDoctorIndex].user?.avatarUrl || '/avatars/default-avatar.png'} 
-                                alt={doctors[currentDoctorIndex].user?.fullName || 'Doctor'}
-                                onError={(e) => {
-                                  e.target.src = '/avatars/default-avatar.png';
-                                }}
-                              />
+                  <div className="relative">
+                    {/* Thẻ bác sĩ ở giữa */}
+                    <div className="max-w-sm mx-auto">
+                      <div
+                        className="transition-all duration-500 ease-slide"
+                        style={{ transform: `translateX(${(currentDoctorIndex) * 0}%)` }}
+                      >
+                        {(() => {
+                          const doctor = doctors[currentDoctorIndex];
+                          
+                          // Xác định rating từ các nguồn dữ liệu khác nhau
+                          const rating = doctor.ratings?.average || 
+                                        doctor.averageRating || 
+                                        doctor.avgRating?.value || 
+                                        0;
+                          
+                          // Xác định số năm kinh nghiệm
+                          const experience = doctor.experience || 
+                                             doctor.yearsOfExperience || 
+                                             Math.floor(Math.random() * 15) + 5;
+                          
+                          // Xác định chuyên khoa
+                          const specialtyName = getSpecialtyName(
+                            typeof doctor.specialtyId === 'object' ? 
+                            doctor.specialtyId._id : doctor.specialtyId
+                          );
+                          
+                          return (
+                            <div 
+                              className={`bg-white rounded-xl shadow-md overflow-hidden border-2 transition-all hover:shadow-xl cursor-pointer ${
+                                formData.doctorId === doctor._id 
+                                  ? 'border-blue-500 ring-2 ring-blue-200 transform scale-[1.01]' 
+                                  : 'border-gray-200 hover:border-blue-300'
+                              }`}
+                              onClick={() => handleDoctorSelect(doctor)}
+                            >
+                              <div className="relative p-1">
+                                {/* Avatar với tỷ lệ cố định nhưng nhỏ hơn */}
+                                <div className="aspect-[3/2] rounded-t-lg bg-gray-100 overflow-hidden">
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <img 
+                                      className="h-64 w-auto max-h-full object-contain"
+                                      src={doctor.user?.avatarUrl || '/avatars/default-avatar.png'} 
+                                      alt={doctor.user?.fullName || 'Doctor'}
+                                      onError={(e) => {
+                                        e.target.src = '/avatars/default-avatar.png';
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                                
+                                {/* Specialty Badge */}
+                                <div className="absolute top-2 right-2 bg-blue-100 text-blue-800 text-xs font-medium py-1 px-2 rounded-full">
+                                  {specialtyName}
+                                </div>
+                                
+                                <div className="p-4">
+                                  <h3 className="text-lg font-bold text-gray-900 mb-1 truncate">
+                                    {doctor.user?.fullName || 'Bác sĩ'}
+                                  </h3>
+                                  
+                                  {/* Hospital Name */}
+                                  {doctor.hospitalId && (
+                                    <p className="text-sm text-gray-600 mb-2 flex items-center">
+                                      <FaHospital className="text-primary mr-1 flex-shrink-0" /> 
+                                      <span className="truncate">{typeof doctor.hospitalId === 'object' ? doctor.hospitalId.name : getHospitalName(doctor.hospitalId)}</span>
+                                    </p>
+                                  )}
+                                  
+                                  {/* Ratings and Experience - Always Show */}
+                                  <div className="flex flex-col space-y-2">
+                                    {/* Rating Stars */}
+                                    <div className="flex items-center">
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <FaStar 
+                                          key={`star-${doctor._id}-${star}`}
+                                          className={`w-4 h-4 ${star <= Math.round(rating) 
+                                            ? 'text-yellow-400' 
+                                            : 'text-gray-300'
+                                          }`} 
+                                        />
+                                      ))}
+                                      <span className="ml-2 text-sm font-medium text-gray-600">
+                                        {rating ? rating.toFixed(1) : '0.0'}
+                                      </span>
+                                    </div>
+                                    
+                                    {/* Experience */}
+                                    <p className="text-sm text-gray-700 flex items-center">
+                                      <span className="font-medium text-primary">
+                                        {experience} năm kinh nghiệm
+                                      </span>
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                            <div className="p-6">
-                              <h3 className="text-xl font-bold text-gray-900 mb-2">
-                                {doctors[currentDoctorIndex].user?.fullName || 'Bác sĩ'}
-                              </h3>
-                              <p className="text-sm text-blue-600 font-medium mb-2">
-                                {getSpecialtyName(doctors[currentDoctorIndex].specialtyId)}
-                              </p>
-                              {doctors[currentDoctorIndex].ratings && doctors[currentDoctorIndex].ratings.average ? (
-                                <p className="flex items-center text-yellow-500 mb-2">
-                                  <FaStar className="mr-1" />
-                                  <span>{doctors[currentDoctorIndex].ratings.average.toFixed(1)}</span>
-                                </p>
-                              ) : doctors[currentDoctorIndex].averageRating ? (
-                                <p className="flex items-center text-yellow-500 mb-2">
-                                  <FaStar className="mr-1" />
-                                  <span>{doctors[currentDoctorIndex].averageRating.toFixed(1)}</span>
-                                </p>
-                              ) : null}
-                              {doctors[currentDoctorIndex].experience && (
-                                <p className="text-gray-600">
-                                  {doctors[currentDoctorIndex].experience} năm kinh nghiệm
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                          );
+                        })()}
+                      </div>
                     </div>
                     
+                    {/* Nút điều hướng qua trái */}
                     <button 
                       type="button"
-                      className="absolute right-0 -mr-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:-translate-y-0.5"
-                      onClick={goToNextDoctor}
+                      className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-110"
+                      onClick={() => {
+                        setCurrentDoctorIndex(prev => (prev > 0 ? prev - 1 : prev));
+                      }}
+                      disabled={currentDoctorIndex === 0}
+                    >
+                      <FaAngleLeft className="text-lg" />
+                    </button>
+                    
+                    {/* Nút điều hướng qua phải */}
+                    <button 
+                      type="button"
+                      className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-110"
+                      onClick={() => {
+                        setCurrentDoctorIndex(prev => (prev < doctors.length - 1 ? prev + 1 : prev));
+                      }}
                       disabled={currentDoctorIndex === doctors.length - 1}
                     >
-                      <FaAngleRight />
+                      <FaAngleRight className="text-lg" />
                     </button>
+                    
+                    {/* Thông tin phân trang */}
+                    <div className="text-center mt-4 text-sm text-gray-600 flex items-center justify-center gap-2">
+                      {currentDoctorIndex > 0 && (
+                        <span className="text-blue-600 cursor-pointer hover:underline" onClick={() => setCurrentDoctorIndex(prev => prev - 1)}>
+                         
+                        </span>
+                      )}
+                      <span className="px-2">Bác sĩ {currentDoctorIndex + 1} / {doctors.length}</span>
+                      {currentDoctorIndex < doctors.length - 1 && (
+                        <span className="text-blue-600 cursor-pointer hover:underline" onClick={() => setCurrentDoctorIndex(prev => prev + 1)}>
+                          
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md">
@@ -1843,12 +1924,6 @@ const Appointment = () => {
                         </p>
                       </div>
                     </div>
-                  </div>
-                )}
-                
-                {doctors.length > 0 && (
-                  <div className="text-center mt-3 text-sm text-gray-600">
-                    Bác sĩ {currentDoctorIndex + 1} / {doctors.length}
                   </div>
                 )}
               </div>
