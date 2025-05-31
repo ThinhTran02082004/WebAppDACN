@@ -158,7 +158,11 @@ const Appointment = () => {
     setLoading(true);
     try {
       // Fetch hospitals
-      const hospitalsResponse = await api.get('/hospitals');
+      const hospitalsResponse = await api.get('/hospitals', {
+        params: {
+          isActive: true // Chỉ lấy các bệnh viện đang hoạt động
+        }
+      });
       
       // Xử lý dữ liệu hospitals
       let hospitalsData = [];
@@ -169,6 +173,10 @@ const Appointment = () => {
           hospitalsData = hospitalsResponse.data.data.hospitals;
         }
       }
+      
+      // Lọc bệnh viện chỉ lấy những cơ sở đang hoạt động
+      hospitalsData = hospitalsData.filter(hospital => hospital.isActive === true);
+      
       setHospitals(hospitalsData);
 
       // If there's a preselected hospital, fetch its specialties
