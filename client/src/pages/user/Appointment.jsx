@@ -318,6 +318,9 @@ const Appointment = () => {
         }
       }
       
+      // Filter out inactive schedules - only show schedules where isActive is true
+      scheduleData = scheduleData.filter(schedule => schedule.isActive !== false);
+      
       // Fix any potential issues with the data structure
       if (scheduleData && scheduleData.length > 0) {
         // Normalize the schedule data to ensure all properties exist
@@ -396,6 +399,9 @@ const Appointment = () => {
     
     // Find all schedules for the selected date using the standardized UTC date
     const schedulesForDate = schedules.filter(schedule => {
+      // Only include active schedules
+      if (schedule.isActive === false) return false;
+      
       // Convert schedule date to standardized UTC format for comparison
       const scheduleDate = new Date(schedule.date);
       const scheduleUtcDate = new Date(Date.UTC(
@@ -585,8 +591,8 @@ const Appointment = () => {
     // Additional logic for specific fields
     if (name === 'hospitalId') {
       // Reset fields that depend on hospital selection
-    setFormData(prev => ({
-      ...prev,
+      setFormData(prev => ({
+        ...prev,
         specialtyId: '',
         doctorId: '',
         serviceId: '',
@@ -605,8 +611,8 @@ const Appointment = () => {
       }
     } else if (name === 'specialtyId') {
       // Reset fields that depend on specialty selection
-    setFormData(prev => ({
-      ...prev,
+      setFormData(prev => ({
+        ...prev,
         doctorId: '',
         serviceId: '',
         appointmentDate: '',
@@ -994,6 +1000,8 @@ const Appointment = () => {
   };
 
   const goToPreviousStep = () => {
+    // When going back, we maintain the current data to allow for review 
+    // and adjustment but ensure data consistency
     setCurrentStep(prev => prev - 1);
   };
 

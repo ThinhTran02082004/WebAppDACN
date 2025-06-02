@@ -23,6 +23,7 @@ const Schedule = () => {
   const [newSchedule, setNewSchedule] = useState({
     hospitalId: '',
     date: '',
+    roomId: '',
     timeSlots: [{
       startTime: '',
       endTime: '',
@@ -36,9 +37,51 @@ const Schedule = () => {
 
   // Add this array near the top of the component, after your state definitions
   const timeSlotOptions = [
-    "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", 
+    "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
     "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", 
     "15:00", "15:30", "16:00", "16:30", "17:00"
+  ];
+  
+  // Thêm các cặp khung giờ phổ biến
+  const commonTimeSlotGroups = [
+    { name: "Buổi sáng (8h-12h)", slots: [
+      { startTime: "08:00", endTime: "08:30" },
+      { startTime: "08:30", endTime: "09:00" },
+      { startTime: "09:00", endTime: "09:30" },
+      { startTime: "09:30", endTime: "10:00" },
+      { startTime: "10:00", endTime: "10:30" },
+      { startTime: "10:30", endTime: "11:00" },
+      { startTime: "11:00", endTime: "11:30" },
+      { startTime: "11:30", endTime: "12:00" }
+    ]},
+    { name: "Buổi chiều (13h-17h)", slots: [
+      { startTime: "13:00", endTime: "13:30" },
+      { startTime: "13:30", endTime: "14:00" },
+      { startTime: "14:00", endTime: "14:30" },
+      { startTime: "14:30", endTime: "15:00" },
+      { startTime: "15:00", endTime: "15:30" },
+      { startTime: "15:30", endTime: "16:00" },
+      { startTime: "16:00", endTime: "16:30" },
+      { startTime: "16:30", endTime: "17:00" }
+    ]},
+    { name: "Cả ngày (8h-17h)", slots: [
+      { startTime: "08:00", endTime: "08:30" },
+      { startTime: "08:30", endTime: "09:00" },
+      { startTime: "09:00", endTime: "09:30" },
+      { startTime: "09:30", endTime: "10:00" },
+      { startTime: "10:00", endTime: "10:30" },
+      { startTime: "10:30", endTime: "11:00" },
+      { startTime: "11:00", endTime: "11:30" },
+      { startTime: "11:30", endTime: "12:00" },
+      { startTime: "13:00", endTime: "13:30" },
+      { startTime: "13:30", endTime: "14:00" },
+      { startTime: "14:00", endTime: "14:30" },
+      { startTime: "14:30", endTime: "15:00" },
+      { startTime: "15:00", endTime: "15:30" },
+      { startTime: "15:30", endTime: "16:00" },
+      { startTime: "16:00", endTime: "16:30" },
+      { startTime: "16:30", endTime: "17:00" }
+    ]}
   ];
 
   // Fetch doctor information, hospitals, and schedules
@@ -395,13 +438,26 @@ const Schedule = () => {
     });
   };
 
+  // Add a new function to handle global room change
+  const handleRoomChange = (roomId) => {
+    setNewSchedule({
+      ...newSchedule,
+      roomId: roomId,
+      // Update all time slots to use this room
+      timeSlots: newSchedule.timeSlots.map(slot => ({
+        ...slot,
+        roomId: roomId
+      }))
+    });
+  };
+
   // Add a new time slot to the form
   const addTimeSlot = () => {
     setNewSchedule({
       ...newSchedule,
       timeSlots: [
         ...newSchedule.timeSlots,
-        { startTime: '', endTime: '', roomId: newSchedule.timeSlots[0].roomId || '' }
+        { startTime: '', endTime: '', roomId: newSchedule.roomId || '' }
       ]
     });
   };
@@ -429,12 +485,17 @@ const Schedule = () => {
       return;
     }
     
+    if (!newSchedule.roomId) {
+      toast.error("Vui lòng chọn phòng khám");
+      return;
+    }
+    
     const invalidTimeSlots = newSchedule.timeSlots.some(slot => 
-      !slot.startTime || !slot.endTime || !slot.roomId
+      !slot.startTime || !slot.endTime
     );
     
     if (invalidTimeSlots) {
-      toast.error("Vui lòng điền đầy đủ thông tin thời gian và phòng khám");
+      toast.error("Vui lòng điền đầy đủ thông tin thời gian");
       return;
     }
     
@@ -446,7 +507,7 @@ const Schedule = () => {
         timeSlots: newSchedule.timeSlots.map(slot => ({
           startTime: slot.startTime,
           endTime: slot.endTime,
-          roomId: slot.roomId
+          roomId: newSchedule.roomId
         }))
       };
       
@@ -459,6 +520,7 @@ const Schedule = () => {
         setNewSchedule({
           hospitalId: hospitalId,
           date: '',
+          roomId: '',
           timeSlots: [{
             startTime: '',
             endTime: '',
@@ -484,11 +546,11 @@ const Schedule = () => {
 
     // Validate form
     const invalidTimeSlots = editingSchedule.timeSlots?.some(slot => 
-      !slot.startTime || !slot.endTime || !slot.roomId
+      !slot.startTime || !slot.endTime
     );
     
     if (invalidTimeSlots) {
-      toast.error("Vui lòng điền đầy đủ thông tin thời gian và phòng khám");
+      toast.error("Vui lòng điền đầy đủ thông tin thời gian");
       return;
     }
 
@@ -498,10 +560,13 @@ const Schedule = () => {
       const existingSchedule = schedules.find(s => s._id === editingSchedule._id);
       const bookedTimeSlots = existingSchedule?.timeSlots?.filter(slot => slot.isBooked) || [];
       
-      // Only modify non-booked time slots
+      // Only modify non-booked time slots, use the global roomId for new slots
       const updatedTimeSlots = [
         ...bookedTimeSlots,
-        ...editingSchedule.timeSlots.filter(slot => !slot.isBooked)
+        ...editingSchedule.timeSlots.filter(slot => !slot.isBooked).map(slot => ({
+          ...slot,
+          roomId: editingSchedule.roomId || slot.roomId
+        }))
       ];
       
       const response = await api.put(`/schedules/${editingSchedule._id}/doctor`, {
@@ -562,6 +627,18 @@ const Schedule = () => {
       editableSchedule.date = utcScheduleDate;
     }
     
+    // Extract room ID from the first time slot or use the first available room
+    let roomId = '';
+    if (editableSchedule.timeSlots && editableSchedule.timeSlots.length > 0 && editableSchedule.timeSlots[0].roomId) {
+      roomId = typeof editableSchedule.timeSlots[0].roomId === 'object' ? 
+        editableSchedule.timeSlots[0].roomId._id : editableSchedule.timeSlots[0].roomId;
+    } else if (rooms.length > 0) {
+      roomId = rooms[0]._id;
+    }
+    
+    // Store the room ID at the top level
+    editableSchedule.roomId = roomId;
+    
     // Prepare the timeSlots data for editing
     if (editableSchedule.timeSlots) {
       // Only include non-booked slots for editing
@@ -571,19 +648,15 @@ const Schedule = () => {
           ...slot,
           startTime: formatTime(slot.startTime),
           endTime: formatTime(slot.endTime),
-          // Ensure roomId is properly handled whether it's an object or string
-          roomId: slot.roomId ? (typeof slot.roomId === 'object' ? slot.roomId._id : slot.roomId) : ''
+          roomId: roomId
         }));
         
         // If all slots are booked, create a new one
         if (editableTimeSlots.length === 0) {
-          // Default to first room in the list if available
-          const defaultRoomId = rooms.length > 0 ? rooms[0]._id : '';
-          
           editableTimeSlots.push({ 
             startTime: '', 
             endTime: '', 
-            roomId: defaultRoomId,
+            roomId: roomId,
             isBooked: false
           });
         }
@@ -623,7 +696,7 @@ const Schedule = () => {
         { 
           startTime: '', 
           endTime: '', 
-          roomId: editingSchedule.timeSlots[0]?.roomId || '',
+          roomId: editingSchedule.roomId || '',
           isBooked: false
         }
       ]
@@ -662,6 +735,32 @@ const Schedule = () => {
       schedules: daySchedules
     };
   });
+
+  // Function to add predefined time slots
+  const addPredefinedTimeSlots = (slots, isEditing = false) => {
+    if (isEditing && editingSchedule) {
+      // For editing mode
+      setEditingSchedule({
+        ...editingSchedule,
+        timeSlots: slots.map(slot => ({
+          ...slot,
+          roomId: editingSchedule.roomId || '',
+          isBooked: false
+        }))
+      });
+      toast.success(`Đã thêm ${slots.length} khung giờ`);
+    } else {
+      // For adding new schedule mode
+      setNewSchedule({
+        ...newSchedule,
+        timeSlots: slots.map(slot => ({
+          ...slot,
+          roomId: newSchedule.roomId || ''
+        }))
+      });
+      toast.success(`Đã thêm ${slots.length} khung giờ`);
+    }
+  };
 
   if (loading && schedules.length === 0) {
     return (
@@ -706,6 +805,7 @@ const Schedule = () => {
                 setNewSchedule({
                   hospitalId: hospitalId,
                   date: selectedDate || new Date().toISOString().split('T')[0],
+                  roomId: '',
                   timeSlots: [{
                     startTime: '',
                     endTime: '',
@@ -853,6 +953,7 @@ const Schedule = () => {
                     setNewSchedule({
                       hospitalId: hospitalId,
                       date: selectedDate,
+                      roomId: '',
                       timeSlots: [{
                         startTime: '',
                         endTime: '',
@@ -1020,94 +1121,157 @@ const Schedule = () => {
             </div>
             
             <div className="p-6 space-y-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Ngày làm việc</label>
-                <input 
-                  type="date" 
-                  value={newSchedule.date} 
-                  onChange={(e) => setNewSchedule({...newSchedule, date: e.target.value})}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-              </div>
-              
-              {newSchedule.timeSlots.map((slot, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                  <h4 className="font-medium text-gray-800 mb-3 flex items-center">
-                    <FaClock className="text-primary mr-2" /> Khung giờ {index + 1}
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Giờ bắt đầu</label>
-                      <select 
-                        value={slot.startTime} 
-                        onChange={(e) => handleTimeSlotChange(index, 'startTime', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      >
-                        <option value="">Chọn giờ</option>
-                        {timeSlotOptions.map(time => (
-                          <option key={time} value={time}>
-                            {time}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Giờ kết thúc</label>
-                      <select 
-                        value={slot.endTime} 
-                        onChange={(e) => handleTimeSlotChange(index, 'endTime', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                      >
-                        <option value="">Chọn giờ</option>
-                        {timeSlotOptions
-                          .filter(time => !slot.startTime || time > slot.startTime)
-                          .map(time => (
-                            <option key={time} value={time}>
-                              {time}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">Phòng khám</label>
-                    <select 
-                      value={slot.roomId} 
-                      onChange={(e) => handleTimeSlotChange(index, 'roomId', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    >
-                      <option value="">Chọn phòng</option>
-                      {rooms && rooms.length > 0 ? (
-                        rooms.map(room => (
-                          <option key={room._id} value={room._id}>
-                            {room.name} (P.{room.number}, T.{room.floor})
-                          </option>
-                        ))
-                      ) : (
-                        <option value="" disabled>Không có phòng khám</option>
-                      )}
-                    </select>
-                  </div>
-                  
-                  {newSchedule.timeSlots.length > 1 && (
-                    <button 
-                      type="button" 
-                      className="mt-3 px-3 py-1.5 text-sm bg-red-50 text-red-500 rounded-md hover:bg-red-100 transition-colors flex items-center"
-                      onClick={() => removeTimeSlot(index)}
-                    >
-                      <FaTrashAlt className="mr-1.5" /> Xóa khung giờ
-                    </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Ngày làm việc <span className="text-red-500">*</span></label>
+                  <input 
+                    type="date" 
+                    value={newSchedule.date} 
+                    onChange={(e) => setNewSchedule({...newSchedule, date: e.target.value})}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Phòng khám <span className="text-red-500">*</span></label>
+                  <select 
+                    value={newSchedule.roomId}
+                    onChange={(e) => handleRoomChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  >
+                    <option value="">Chọn phòng</option>
+                    {rooms && rooms.length > 0 ? (
+                      rooms.map(room => (
+                        <option key={room._id} value={room._id}>
+                          Phòng {room.number} - {room.name} (Tầng {room.floor})
+                        </option>
+                      ))
+                    ) : (
+                      <option value="" disabled>Không có phòng khám</option>
+                    )}
+                  </select>
+                  {!newSchedule.roomId && (
+                    <p className="text-xs text-gray-500">Vui lòng chọn phòng khám trước khi thêm khung giờ</p>
                   )}
                 </div>
-              ))}
+              </div>
+              
+              {/* Thêm các khung giờ có sẵn */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700">Khung giờ có sẵn</label>
+                <div className="flex flex-wrap gap-2">
+                  {commonTimeSlotGroups.map((group, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => addPredefinedTimeSlots(group.slots)}
+                      className={`px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all ${
+                        newSchedule.roomId ? 'bg-primary text-white hover:bg-primary-dark' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      }`}
+                      disabled={!newSchedule.roomId}
+                    >
+                      <FaCalendarCheck className="inline-block mr-1 mb-1" />
+                      {group.name} ({group.slots.length} khung giờ)
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500">
+                  Chọn một khung giờ có sẵn hoặc thêm từng khung giờ riêng lẻ bên dưới
+                </p>
+              </div>
+              
+              <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-medium text-green-800">Danh sách khung giờ ({newSchedule.timeSlots.length})</h4>
+                  <div className="text-sm">
+                    <span className="text-gray-500">Phòng: </span>
+                    <span className="font-medium">
+                      {newSchedule.roomId ? 
+                        rooms.find(r => r._id === newSchedule.roomId)?.number ? 
+                        `Phòng ${rooms.find(r => r._id === newSchedule.roomId)?.number} - ${rooms.find(r => r._id === newSchedule.roomId)?.name}` : 
+                        'Đã chọn' : 
+                        'Chưa chọn'
+                      }
+                    </span>
+                  </div>
+                </div>
+                
+                {newSchedule.timeSlots.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {newSchedule.timeSlots.map((slot, index) => (
+                      <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-200 relative">
+                        <button
+                          type="button"
+                          onClick={() => removeTimeSlot(index)}
+                          className="absolute top-1 right-1 p-1 text-red-500 hover:text-red-700 focus:outline-none"
+                          title="Xóa khung giờ này"
+                          disabled={newSchedule.timeSlots.length <= 1}
+                        >
+                          <FaTimes className="h-4 w-4" />
+                        </button>
+                        
+                        <div className="text-xs font-medium text-gray-500 mb-1">Khung giờ #{index+1}</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label htmlFor={`startTime-${index}`} className="block text-xs font-medium text-gray-700 mb-1">
+                              Bắt đầu <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              id={`startTime-${index}`}
+                              value={slot.startTime}
+                              onChange={(e) => handleTimeSlotChange(index, 'startTime', e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                              disabled={!newSchedule.roomId}
+                            >
+                              <option value="">Chọn giờ</option>
+                              {timeSlotOptions.map(time => (
+                                <option key={`start-${time}-${index}`} value={time}>
+                                  {time}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label htmlFor={`endTime-${index}`} className="block text-xs font-medium text-gray-700 mb-1">
+                              Kết thúc <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              id={`endTime-${index}`}
+                              value={slot.endTime}
+                              onChange={(e) => handleTimeSlotChange(index, 'endTime', e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                              disabled={!newSchedule.roomId}
+                            >
+                              <option value="">Chọn giờ</option>
+                              {timeSlotOptions
+                                .filter(time => !slot.startTime || time > slot.startTime)
+                                .map(time => (
+                                  <option key={`end-${time}-${index}`} value={time}>
+                                    {time}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">Chưa có khung giờ nào được thêm</p>
+                )}
+              </div>
               
               <button 
                 type="button"
-                className="w-full mt-2 py-2 px-4 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors flex items-center justify-center"
+                className={`w-full mt-2 py-2 px-4 rounded-md flex items-center justify-center ${
+                  newSchedule.roomId ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                } transition-colors`}
                 onClick={addTimeSlot}
+                disabled={!newSchedule.roomId}
               >
-                <FaPlus className="mr-2" /> Thêm khung giờ
+                <FaPlus className="mr-2" /> Thêm khung giờ đơn lẻ
               </button>
             </div>
             
@@ -1122,7 +1286,7 @@ const Schedule = () => {
               <button 
                 className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark transition-colors shadow hover:shadow-md flex items-center"
                 onClick={handleAddSchedule}
-                disabled={processingAction}
+                disabled={processingAction || !newSchedule.roomId}
               >
                 <FaSave className="mr-2" /> {processingAction ? 'Đang lưu...' : 'Lưu'}
               </button>
@@ -1143,15 +1307,30 @@ const Schedule = () => {
             </div>
             
             <div className="p-6 space-y-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Ngày làm việc</label>
-                <input 
-                  type="date" 
-                  value={formatDateString(new Date(editingSchedule.date))}
-                  disabled
-                  className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-gray-500 cursor-not-allowed"
-                />
-                <p className="text-xs text-gray-500 mt-1">Không thể thay đổi ngày làm việc</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Ngày làm việc</label>
+                  <input 
+                    type="date" 
+                    value={formatDateString(new Date(editingSchedule.date))}
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-gray-500 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-gray-500">Không thể thay đổi ngày làm việc</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Phòng khám</label>
+                  <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-gray-700">
+                    {editingSchedule.roomId ? 
+                      rooms.find(r => r._id === editingSchedule.roomId)?.number ? 
+                      `Phòng ${rooms.find(r => r._id === editingSchedule.roomId)?.number} - ${rooms.find(r => r._id === editingSchedule.roomId)?.name}` : 
+                      'Phòng đã chọn' : 
+                      'Không có phòng'
+                    }
+                  </div>
+                  <p className="text-xs text-gray-500">Không thể thay đổi phòng khám</p>
+                </div>
               </div>
               
               <div className="space-y-2">
@@ -1175,87 +1354,130 @@ const Schedule = () => {
                 </div>
               </div>
               
-              {editingSchedule.timeSlots && editingSchedule.timeSlots.map((slot, index) => (
-                <div key={index} className={`border rounded-lg p-4 ${slot.isBooked ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
-                  <h4 className="font-medium text-gray-800 mb-3 flex items-center">
-                    <FaClock className="mr-2 text-primary" /> Khung giờ {index + 1} {slot.isBooked && (
-                      <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">Đã đặt</span>
-                    )}
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Giờ bắt đầu</label>
-                      <select 
-                        value={slot.startTime} 
-                        onChange={(e) => handleEditTimeSlotChange(index, 'startTime', e.target.value)}
-                        disabled={slot.isBooked}
-                        className={`w-full px-3 py-2 border rounded-md ${slot.isBooked 
-                          ? 'border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed' 
-                          : 'border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent'}`}
+              {/* Thêm các khung giờ có sẵn */}
+              {editingSchedule.timeSlots && editingSchedule.timeSlots.some(slot => !slot.isBooked) && (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">Thêm khung giờ có sẵn</label>
+                  <div className="flex flex-wrap gap-2">
+                    {commonTimeSlotGroups.map((group, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => addPredefinedTimeSlots(group.slots, true)}
+                        className="px-3 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
                       >
-                        <option value="">Chọn giờ</option>
-                        {timeSlotOptions.map(time => (
-                          <option key={time} value={time}>
-                            {time}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Giờ kết thúc</label>
-                      <select 
-                        value={slot.endTime} 
-                        onChange={(e) => handleEditTimeSlotChange(index, 'endTime', e.target.value)}
-                        disabled={slot.isBooked}
-                        className={`w-full px-3 py-2 border rounded-md ${slot.isBooked 
-                          ? 'border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed' 
-                          : 'border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent'}`}
-                      >
-                        <option value="">Chọn giờ</option>
-                        {timeSlotOptions
-                          .filter(time => !slot.startTime || time > slot.startTime)
-                          .map(time => (
-                            <option key={time} value={time}>
-                              {time}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
+                        <FaCalendarCheck className="inline-block mr-1 mb-1" />
+                        {group.name} ({group.slots.length} khung giờ)
+                      </button>
+                    ))}
                   </div>
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">Phòng khám</label>
-                    <select 
-                      value={slot.roomId} 
-                      onChange={(e) => handleEditTimeSlotChange(index, 'roomId', e.target.value)}
-                      disabled={slot.isBooked}
-                      className={`w-full px-3 py-2 border rounded-md ${slot.isBooked 
-                        ? 'border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed' 
-                        : 'border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent'}`}
-                    >
-                      <option value="">Chọn phòng</option>
-                      {rooms && rooms.length > 0 ? (
-                        rooms.map(room => (
-                          <option key={room._id} value={room._id}>
-                            {room.name} (P.{room.number}, T.{room.floor})
-                          </option>
-                        ))
-                      ) : (
-                        <option value="" disabled>Không có phòng khám</option>
-                      )}
-                    </select>
-                  </div>
-                  
-                  {!slot.isBooked && editingSchedule.timeSlots.filter(s => !s.isBooked).length > 1 && (
-                    <button 
-                      type="button" 
-                      className="mt-3 px-3 py-1.5 text-sm bg-red-50 text-red-500 rounded-md hover:bg-red-100 transition-colors flex items-center"
-                      onClick={() => removeEditTimeSlot(index)}
-                    >
-                      <FaTrashAlt className="mr-1.5" /> Xóa khung giờ
-                    </button>
-                  )}
+                  <p className="text-xs text-gray-500">
+                    Chú ý: Thêm khung giờ có sẵn sẽ thay thế các khung giờ hiện tại chưa được đặt
+                  </p>
                 </div>
-              ))}
+              )}
+
+              <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-medium text-green-800">Danh sách khung giờ ({editingSchedule.timeSlots?.length || 0})</h4>
+                  <div className="text-sm">
+                    <span className="text-gray-500">Phòng: </span>
+                    <span className="font-medium">
+                      {editingSchedule.roomId ? 
+                        rooms.find(r => r._id === editingSchedule.roomId)?.number ? 
+                        `Phòng ${rooms.find(r => r._id === editingSchedule.roomId)?.number}` : 
+                        'Đã chọn' : 
+                        'Không có'
+                      }
+                    </span>
+                  </div>
+                </div>
+                
+                {editingSchedule.timeSlots && editingSchedule.timeSlots.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {editingSchedule.timeSlots.map((slot, index) => (
+                      <div 
+                        key={index} 
+                        className={`p-3 rounded-lg relative ${
+                          slot.isBooked ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border border-gray-200'
+                        }`}
+                      >
+                        {!slot.isBooked && editingSchedule.timeSlots.filter(s => !s.isBooked).length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeEditTimeSlot(index)}
+                            className="absolute top-1 right-1 p-1 text-red-500 hover:text-red-700 focus:outline-none"
+                            title="Xóa khung giờ này"
+                          >
+                            <FaTimes className="h-4 w-4" />
+                          </button>
+                        )}
+                        
+                        <div className="flex items-center mb-1">
+                          <span className="text-xs font-medium text-gray-500">Khung giờ #{index+1}</span>
+                          {slot.isBooked && (
+                            <span className="ml-2 text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full text-[10px]">
+                              Đã đặt
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label htmlFor={`edit-startTime-${index}`} className="block text-xs font-medium text-gray-700 mb-1">
+                              Bắt đầu <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              id={`edit-startTime-${index}`}
+                              value={slot.startTime}
+                              onChange={(e) => handleEditTimeSlotChange(index, 'startTime', e.target.value)}
+                              disabled={slot.isBooked}
+                              className={`w-full px-2 py-1 text-sm border rounded-lg ${
+                                slot.isBooked ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : 
+                                'border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary'
+                              }`}
+                            >
+                              <option value="">Chọn giờ</option>
+                              {timeSlotOptions.map(time => (
+                                <option key={`edit-start-${time}-${index}`} value={time}>
+                                  {time}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label htmlFor={`edit-endTime-${index}`} className="block text-xs font-medium text-gray-700 mb-1">
+                              Kết thúc <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              id={`edit-endTime-${index}`}
+                              value={slot.endTime}
+                              onChange={(e) => handleEditTimeSlotChange(index, 'endTime', e.target.value)}
+                              disabled={slot.isBooked}
+                              className={`w-full px-2 py-1 text-sm border rounded-lg ${
+                                slot.isBooked ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : 
+                                'border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary'
+                              }`}
+                            >
+                              <option value="">Chọn giờ</option>
+                              {timeSlotOptions
+                                .filter(time => !slot.startTime || time > slot.startTime)
+                                .map(time => (
+                                  <option key={`edit-end-${time}-${index}`} value={time}>
+                                    {time}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">Chưa có khung giờ nào được thêm</p>
+                )}
+              </div>
               
               <button 
                 type="button" 
