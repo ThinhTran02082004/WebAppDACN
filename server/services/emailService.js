@@ -239,10 +239,16 @@ const sendAppointmentConfirmationEmail = async (email, patientName, appointmentI
       appointmentDate = 'N/A',
       startTime = 'N/A',
       endTime = 'N/A',
-      roomName = 'N/A',
+      roomName = 'Chưa phân phòng',
+      queueNumber = 0,
       specialtyName = '',
       serviceName = ''
     } = appointmentInfo || {};
+    
+    console.log('Email preparation - Room info:', {
+      providedRoomName: appointmentInfo?.roomName || 'Not provided',
+      finalRoomName: roomName
+    });
     
     // Tạo các thông tin bổ sung nếu có
     const specialtyInfo = specialtyName ? `<tr>
@@ -254,6 +260,24 @@ const sendAppointmentConfirmationEmail = async (email, patientName, appointmentI
         <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold;">Dịch vụ:</td>
         <td style="padding: 10px; border-bottom: 1px solid #e0e0e0;">${serviceName}</td>
       </tr>` : '';
+    
+    // Hiển thị thông tin số thứ tự khám - luôn hiển thị ngay cả khi queueNumber = 0
+    const queueInfo = `<tr>
+        <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold;">Số thứ tự khám:</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-size: 16px; font-weight: bold; color: #0066cc;">
+          ${queueNumber > 0 ? queueNumber : 'Sẽ được cấp khi check-in'}
+        </td>
+      </tr>`;
+    
+    // Hiển thị thông tin phòng khám với định dạng rõ ràng hơn
+    const roomInfo = `<tr>
+        <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold;">Phòng khám:</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold; color: ${roomName.includes('Chưa') ? '#FF9800' : '#0066cc'};">
+          ${roomName || 'Chưa phân phòng - Sẽ được cập nhật sau'}
+        </td>
+      </tr>`;
+      
+    console.log(`Room info in email template: ${roomName}`);
     
     const mailOptions = {
       from: `"Hệ thống Bệnh viện" <${process.env.EMAIL_USER || 'hospital@example.com'}>`,
@@ -292,6 +316,8 @@ const sendAppointmentConfirmationEmail = async (email, patientName, appointmentI
               <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold;">Giờ khám:</td>
               <td style="padding: 10px; border-bottom: 1px solid #e0e0e0;">${startTime} - ${endTime}</td>
             </tr>
+            ${roomInfo}
+            ${queueInfo}
           </table>
           
           <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
@@ -438,6 +464,7 @@ const sendAppointmentRescheduleEmail = async (email, patientName, appointmentInf
       startTime,
       endTime,
       roomName,
+      queueNumber = 0,
       specialtyName,
       serviceName
     } = appointmentInfo;
@@ -446,7 +473,8 @@ const sendAppointmentRescheduleEmail = async (email, patientName, appointmentInf
       appointmentDate: oldDate,
       startTime: oldStartTime,
       endTime: oldEndTime,
-      roomName: oldRoomName
+      roomName: oldRoomName,
+      queueNumber: oldQueueNumber = 0
     } = oldAppointmentInfo;
     
     // Tạo các thông tin bổ sung nếu có
@@ -459,6 +487,24 @@ const sendAppointmentRescheduleEmail = async (email, patientName, appointmentInf
         <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold;">Dịch vụ:</td>
         <td style="padding: 10px; border-bottom: 1px solid #e0e0e0;">${serviceName}</td>
       </tr>` : '';
+    
+    // Hiển thị thông tin số thứ tự khám
+    const queueInfo = `<tr>
+        <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold;">Số thứ tự khám:</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-size: 16px; font-weight: bold; color: #0066cc;">
+          ${queueNumber > 0 ? queueNumber : 'Sẽ được cấp khi check-in'}
+        </td>
+      </tr>`;
+    
+    // Hiển thị thông tin phòng khám
+    const roomInfo = `<tr>
+        <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold;">Phòng khám:</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold; color: ${roomName.includes('Chưa') ? '#FF9800' : '#0066cc'};">
+          ${roomName || 'Chưa phân phòng - Sẽ được cập nhật sau'}
+        </td>
+      </tr>`;
+      
+    console.log(`Room info in email template: ${roomName}`);
     
     const mailOptions = {
       from: `"Hệ thống Bệnh viện" <${process.env.EMAIL_USER}>`,
@@ -497,17 +543,31 @@ const sendAppointmentRescheduleEmail = async (email, patientName, appointmentInf
               <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold; color: #0066cc;">Giờ khám mới:</td>
               <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #0066cc; font-weight: bold;">${startTime} - ${endTime}</td>
             </tr>
-            <tr>
-              <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-weight: bold; color: #0066cc;">Phòng khám mới:</td>
-              <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; color: #0066cc; font-weight: bold;">${roomName}</td>
-            </tr>
+            ${roomInfo}
+            ${queueInfo}
           </table>
           
-          <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <p style="margin: 0; color: #333;"><strong>Thông tin lịch hẹn cũ đã bị hủy:</strong></p>
-            <p style="margin: 10px 0 0 0; color: #777;">- Ngày khám: ${oldDate}</p>
-            <p style="margin: 5px 0 0 0; color: #777;">- Giờ khám: ${oldStartTime} - ${oldEndTime}</p>
-            <p style="margin: 5px 0 0 0; color: #777;">- Phòng khám: ${oldRoomName}</p>
+          <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ff9800;">
+            <p style="margin: 0; color: #333; font-weight: bold;">Thông tin lịch hẹn cũ đã được đổi:</p>
+            <table style="width: 100%; margin-top: 10px;">
+              <tr>
+                <td style="padding: 5px 10px; color: #666; width: 120px;">Ngày khám:</td>
+                <td style="padding: 5px 0; color: #333;">${oldDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 10px; color: #666;">Giờ khám:</td>
+                <td style="padding: 5px 0; color: #333;">${oldStartTime} - ${oldEndTime}</td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 10px; color: #666;">Phòng khám:</td>
+                <td style="padding: 5px 0; color: #333;">${oldRoomName || 'Chưa phân phòng'}</td>
+              </tr>
+              ${oldQueueNumber > 0 ? `
+              <tr>
+                <td style="padding: 5px 10px; color: #666;">Số thứ tự cũ:</td>
+                <td style="padding: 5px 0; color: #333;">${oldQueueNumber}</td>
+              </tr>` : ''}
+            </table>
           </div>
           
           <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">

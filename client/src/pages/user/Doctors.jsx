@@ -815,50 +815,6 @@ const Doctors = () => {
           </div>
         </div>
       </div>
-
-      {/* Debug Button - Fixed position at the bottom right */}
-      <button
-        onClick={toggleDebug}
-        className="fixed bottom-4 right-4 bg-gray-800 text-white p-2 rounded-full shadow-lg z-50 opacity-70 hover:opacity-100"
-        title="Debug Info"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-        </svg>
-      </button>
-
-      {/* Debug Panel */}
-      {showDebug && (
-        <div className="fixed bottom-16 right-4 bg-white p-4 rounded-md shadow-lg z-50 text-xs max-w-sm max-h-96 overflow-auto">
-          <h3 className="font-bold mb-2">Debug Info</h3>
-          <div className="space-y-2">
-            <div>
-              <p><strong>Error state:</strong> {error ? 'Yes' : 'No'}</p>
-              <p><strong>Loading state:</strong> {loading ? 'Yes' : 'No'}</p>
-              <p><strong>Active filters:</strong> {activeFilters}</p>
-            </div>
-            <div>
-              <p><strong>Departments:</strong> {departments.length}</p>
-              <p><strong>Branches:</strong> {branches.length}</p>
-              <p><strong>All Doctors:</strong> {allDoctors.length}</p>
-              <p><strong>Filtered Doctors:</strong> {filteredDoctors.length}</p>
-            </div>
-            <div>
-              <p><strong>Selected Department:</strong> {selectedDepartment || 'None'}</p>
-              <p><strong>Selected Branch:</strong> {selectedBranch || 'None'}</p>
-              <p><strong>Selected Rating:</strong> {selectedRating || 'None'}</p>
-              <p><strong>Selected Experience:</strong> {selectedExperience || 'None'}</p>
-              <p><strong>Selected Availability:</strong> {selectedAvailability || 'None'}</p>
-            </div>
-            <button 
-              onClick={toggleDebug}
-              className="mt-2 bg-gray-200 px-2 py-1 rounded text-gray-700 hover:bg-gray-300 w-full"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

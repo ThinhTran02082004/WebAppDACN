@@ -691,7 +691,7 @@ const Appointments = () => {
                   console.log('Server payment confirmation response:', paymentResponse.data);
                   
                   if (paymentResponse.data.success) {
-                    //toast.success('Thanh toán thành công!');
+                    toast.success('Thanh toán thành công!'); // paypal 
                     
                     // After successful payment, reload the page
                     setTimeout(() => {

@@ -554,25 +554,47 @@ const Schedule = () => {
       return;
     }
 
+    if (!editingSchedule.roomId) {
+      toast.error("Thông tin phòng không hợp lệ");
+      return;
+    }
+
     setProcessingAction(true);
     try {
-      // Filter out booked time slots that shouldn't be modified
+      // Get the existing schedule to properly handle booked slots
       const existingSchedule = schedules.find(s => s._id === editingSchedule._id);
-      const bookedTimeSlots = existingSchedule?.timeSlots?.filter(slot => slot.isBooked) || [];
+      if (!existingSchedule) {
+        throw new Error('Không tìm thấy lịch trực');
+      }
+
+      // Separate booked and non-booked slots
+      const bookedTimeSlots = editingSchedule.timeSlots.filter(slot => slot.isBooked);
+      const nonBookedTimeSlots = editingSchedule.timeSlots.filter(slot => !slot.isBooked);
       
-      // Only modify non-booked time slots, use the global roomId for new slots
-      const updatedTimeSlots = [
-        ...bookedTimeSlots,
-        ...editingSchedule.timeSlots.filter(slot => !slot.isBooked).map(slot => ({
+      // Make sure all slots have roomId explicitly set
+      const processedTimeSlots = [
+        ...bookedTimeSlots.map(slot => ({
           ...slot,
-          roomId: editingSchedule.roomId || slot.roomId
+          roomId: slot.roomId || editingSchedule.roomId, // Use slot's roomId or schedule's roomId
+        })),
+        ...nonBookedTimeSlots.map(slot => ({
+          ...slot,
+          roomId: editingSchedule.roomId, // Always use schedule's roomId for non-booked slots
         }))
       ];
       
-      const response = await api.put(`/schedules/${editingSchedule._id}/doctor`, {
-        timeSlots: updatedTimeSlots,
-        isActive: editingSchedule.isActive
-      });
+      // Prepare the data for the API call
+      const updateData = {
+        timeSlots: processedTimeSlots,
+        isActive: editingSchedule.isActive,
+        roomId: editingSchedule.roomId,
+        hospitalId: hospitalId // Include hospital ID as well
+      };
+      
+      console.log('Updating schedule with data:', JSON.stringify(updateData, null, 2));
+      
+      // Make the API call
+      const response = await api.put(`/schedules/${editingSchedule._id}/doctor`, updateData);
       
       if (response.data.success) {
         toast.success('Cập nhật lịch trực thành công');
@@ -581,9 +603,11 @@ const Schedule = () => {
         fetchSchedules();
       } else {
         toast.error(response.data.message || "Không thể cập nhật lịch trực");
+        console.error('API error response:', response.data);
       }
     } catch (err) {
-      console.error('Error updating schedule:', err.response?.data || err.message);
+      console.error('Error updating schedule:', err);
+      console.error('Error details:', err.response?.data || err.message);
       toast.error(err.response?.data?.message || 'Đã xảy ra lỗi khi cập nhật lịch trực');
     } finally {
       setProcessingAction(false);
@@ -613,7 +637,7 @@ const Schedule = () => {
   // Open edit modal
   const openEditModal = (schedule) => {
     // Deep copy the schedule for editing to avoid modifying the original data
-    const editableSchedule = { ...schedule };
+    const editableSchedule = JSON.parse(JSON.stringify(schedule));
     
     // Format the date properly using UTC
     if (editableSchedule.date) {
@@ -627,41 +651,76 @@ const Schedule = () => {
       editableSchedule.date = utcScheduleDate;
     }
     
-    // Extract room ID from the first time slot or use the first available room
-    let roomId = '';
-    if (editableSchedule.timeSlots && editableSchedule.timeSlots.length > 0 && editableSchedule.timeSlots[0].roomId) {
-      roomId = typeof editableSchedule.timeSlots[0].roomId === 'object' ? 
-        editableSchedule.timeSlots[0].roomId._id : editableSchedule.timeSlots[0].roomId;
-    } else if (rooms.length > 0) {
+    // Find the room from timeSlots - use the first time slot that has a valid roomId
+    let roomId = null;
+    
+    if (editableSchedule.timeSlots && editableSchedule.timeSlots.length > 0) {
+      // Try to find the first time slot with a valid roomId
+      for (const slot of editableSchedule.timeSlots) {
+        if (slot.roomId) {
+          // Normalize roomId - it might be an object or a string
+          roomId = typeof slot.roomId === 'object' ? slot.roomId._id : slot.roomId;
+          break;
+        }
+      }
+    }
+    
+    // If no roomId found in time slots, use the schedule's roomId if available
+    if (!roomId && editableSchedule.roomId) {
+      roomId = typeof editableSchedule.roomId === 'object' ? 
+        editableSchedule.roomId._id : editableSchedule.roomId;
+    }
+    
+    // If still no roomId, use the first available room (fallback)
+    if (!roomId && rooms.length > 0) {
       roomId = rooms[0]._id;
     }
     
-    // Store the room ID at the top level
+    // Store the roomId at the schedule level
     editableSchedule.roomId = roomId;
+    
+    console.log('Extracted roomId for editing:', roomId);
     
     // Prepare the timeSlots data for editing
     if (editableSchedule.timeSlots) {
-      // Only include non-booked slots for editing
+      // Process booked slots (keep their original roomId)
+      const bookedSlots = editableSchedule.timeSlots
+        .filter(slot => slot.isBooked)
+        .map(slot => ({
+          ...slot,
+          startTime: formatTime(slot.startTime),
+          endTime: formatTime(slot.endTime),
+          // Ensure each booked slot has its original roomId
+          roomId: (typeof slot.roomId === 'object' ? slot.roomId._id : slot.roomId) || roomId,
+          isBooked: true
+        }));
+      
+      // Process non-booked slots
       const editableTimeSlots = editableSchedule.timeSlots
         .filter(slot => !slot.isBooked)
         .map(slot => ({
           ...slot,
           startTime: formatTime(slot.startTime),
           endTime: formatTime(slot.endTime),
-          roomId: roomId
+          // Set roomId from the schedule
+          roomId: roomId,
+          isBooked: false
         }));
         
-        // If all slots are booked, create a new one
-        if (editableTimeSlots.length === 0) {
-          editableTimeSlots.push({ 
-            startTime: '', 
-            endTime: '', 
-            roomId: roomId,
-            isBooked: false
-          });
-        }
+      // Combine both sets of slots
+      const allTimeSlots = [...bookedSlots, ...editableTimeSlots];
         
-        editableSchedule.timeSlots = editableTimeSlots;
+      // If no editable slots, add a new empty one
+      if (editableTimeSlots.length === 0) {
+        allTimeSlots.push({ 
+          startTime: '', 
+          endTime: '', 
+          roomId: roomId,
+          isBooked: false
+        });
+      }
+        
+      editableSchedule.timeSlots = allTimeSlots;
     }
     
     console.log('Opening edit modal with schedule:', editableSchedule);
@@ -1122,20 +1181,20 @@ const Schedule = () => {
             
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
+              <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">Ngày làm việc <span className="text-red-500">*</span></label>
-                  <input 
-                    type="date" 
-                    value={newSchedule.date} 
-                    onChange={(e) => setNewSchedule({...newSchedule, date: e.target.value})}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-                
-                <div className="space-y-2">
+                <input 
+                  type="date" 
+                  value={newSchedule.date} 
+                  onChange={(e) => setNewSchedule({...newSchedule, date: e.target.value})}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
+              </div>
+              
+                    <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">Phòng khám <span className="text-red-500">*</span></label>
-                  <select 
+                      <select 
                     value={newSchedule.roomId}
                     onChange={(e) => handleRoomChange(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -1219,52 +1278,52 @@ const Schedule = () => {
                             </label>
                             <select
                               id={`startTime-${index}`}
-                              value={slot.startTime}
-                              onChange={(e) => handleTimeSlotChange(index, 'startTime', e.target.value)}
+                        value={slot.startTime} 
+                        onChange={(e) => handleTimeSlotChange(index, 'startTime', e.target.value)}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
                               disabled={!newSchedule.roomId}
-                            >
-                              <option value="">Chọn giờ</option>
-                              {timeSlotOptions.map(time => (
+                      >
+                        <option value="">Chọn giờ</option>
+                        {timeSlotOptions.map(time => (
                                 <option key={`start-${time}-${index}`} value={time}>
-                                  {time}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                            {time}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                           
                           <div>
                             <label htmlFor={`endTime-${index}`} className="block text-xs font-medium text-gray-700 mb-1">
                               Kết thúc <span className="text-red-500">*</span>
                             </label>
-                            <select
+                      <select 
                               id={`endTime-${index}`}
-                              value={slot.endTime}
-                              onChange={(e) => handleTimeSlotChange(index, 'endTime', e.target.value)}
+                        value={slot.endTime} 
+                        onChange={(e) => handleTimeSlotChange(index, 'endTime', e.target.value)}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
                               disabled={!newSchedule.roomId}
-                            >
-                              <option value="">Chọn giờ</option>
-                              {timeSlotOptions
-                                .filter(time => !slot.startTime || time > slot.startTime)
-                                .map(time => (
+                      >
+                        <option value="">Chọn giờ</option>
+                        {timeSlotOptions
+                          .filter(time => !slot.startTime || time > slot.startTime)
+                          .map(time => (
                                   <option key={`end-${time}-${index}`} value={time}>
-                                    {time}
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-                        </div>
+                              {time}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500 italic">Chưa có khung giờ nào được thêm</p>
                 )}
-              </div>
-              
-              <button 
-                type="button"
+                  </div>
+                  
+                    <button 
+                      type="button" 
                 className={`w-full mt-2 py-2 px-4 rounded-md flex items-center justify-center ${
                   newSchedule.roomId ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-gray-100 text-gray-500 cursor-not-allowed'
                 } transition-colors`}
@@ -1308,28 +1367,54 @@ const Schedule = () => {
             
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Ngày làm việc</label>
-                  <input 
-                    type="date" 
-                    value={formatDateString(new Date(editingSchedule.date))}
-                    disabled
-                    className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-gray-500 cursor-not-allowed"
-                  />
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Ngày làm việc</label>
+                <input 
+                  type="date" 
+                  value={formatDateString(new Date(editingSchedule.date))}
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-gray-500 cursor-not-allowed"
+                />
                   <p className="text-xs text-gray-500">Không thể thay đổi ngày làm việc</p>
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Phòng khám</label>
-                  <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-gray-700">
-                    {editingSchedule.roomId ? 
-                      rooms.find(r => r._id === editingSchedule.roomId)?.number ? 
-                      `Phòng ${rooms.find(r => r._id === editingSchedule.roomId)?.number} - ${rooms.find(r => r._id === editingSchedule.roomId)?.name}` : 
-                      'Phòng đã chọn' : 
-                      'Không có phòng'
-                    }
-                  </div>
-                  <p className="text-xs text-gray-500">Không thể thay đổi phòng khám</p>
+                  <label className="block text-sm font-medium text-gray-700">Phòng khám <span className="text-red-500">*</span></label>
+                  <select 
+                    value={editingSchedule.roomId || ''}
+                    onChange={(e) => {
+                      // Update roomId at the schedule level
+                      setEditingSchedule({
+                        ...editingSchedule, 
+                        roomId: e.target.value,
+                        // Update roomId for all non-booked time slots
+                        timeSlots: editingSchedule.timeSlots.map(slot => 
+                          slot.isBooked ? slot : { ...slot, roomId: e.target.value }
+                        )
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  >
+                    <option value="">Chọn phòng</option>
+                    {rooms && rooms.length > 0 ? (
+                      rooms.map(room => (
+                        <option key={room._id} value={room._id}>
+                          Phòng {room.number} - {room.name} (Tầng {room.floor})
+                        </option>
+                      ))
+                    ) : (
+                      <option value="" disabled>Không có phòng khám</option>
+                    )}
+                  </select>
+                  {!editingSchedule.roomId && (
+                    <p className="text-xs text-red-500">Vui lòng chọn phòng khám trước khi lưu</p>
+                  )}
+                  {editingSchedule.timeSlots?.some(slot => slot.isBooked) && (
+                    <p className="text-xs text-amber-500">
+                      <FaInfoCircle className="inline mr-1" />
+                      Lưu ý: Thay đổi phòng sẽ áp dụng cho tất cả các khung giờ chưa đặt.
+                    </p>
+                  )}
                 </div>
               </div>
               
@@ -1427,57 +1512,57 @@ const Schedule = () => {
                             <label htmlFor={`edit-startTime-${index}`} className="block text-xs font-medium text-gray-700 mb-1">
                               Bắt đầu <span className="text-red-500">*</span>
                             </label>
-                            <select
+                      <select 
                               id={`edit-startTime-${index}`}
-                              value={slot.startTime}
-                              onChange={(e) => handleEditTimeSlotChange(index, 'startTime', e.target.value)}
-                              disabled={slot.isBooked}
+                        value={slot.startTime} 
+                        onChange={(e) => handleEditTimeSlotChange(index, 'startTime', e.target.value)}
+                        disabled={slot.isBooked}
                               className={`w-full px-2 py-1 text-sm border rounded-lg ${
                                 slot.isBooked ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : 
                                 'border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary'
                               }`}
-                            >
-                              <option value="">Chọn giờ</option>
-                              {timeSlotOptions.map(time => (
+                      >
+                        <option value="">Chọn giờ</option>
+                        {timeSlotOptions.map(time => (
                                 <option key={`edit-start-${time}-${index}`} value={time}>
-                                  {time}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                            {time}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                           
                           <div>
                             <label htmlFor={`edit-endTime-${index}`} className="block text-xs font-medium text-gray-700 mb-1">
                               Kết thúc <span className="text-red-500">*</span>
                             </label>
-                            <select
+                      <select 
                               id={`edit-endTime-${index}`}
-                              value={slot.endTime}
-                              onChange={(e) => handleEditTimeSlotChange(index, 'endTime', e.target.value)}
-                              disabled={slot.isBooked}
+                        value={slot.endTime} 
+                        onChange={(e) => handleEditTimeSlotChange(index, 'endTime', e.target.value)}
+                        disabled={slot.isBooked}
                               className={`w-full px-2 py-1 text-sm border rounded-lg ${
                                 slot.isBooked ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : 
                                 'border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary'
                               }`}
-                            >
-                              <option value="">Chọn giờ</option>
-                              {timeSlotOptions
-                                .filter(time => !slot.startTime || time > slot.startTime)
-                                .map(time => (
+                      >
+                        <option value="">Chọn giờ</option>
+                        {timeSlotOptions
+                          .filter(time => !slot.startTime || time > slot.startTime)
+                          .map(time => (
                                   <option key={`edit-end-${time}-${index}`} value={time}>
-                                    {time}
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-                        </div>
+                              {time}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500 italic">Chưa có khung giờ nào được thêm</p>
                 )}
-              </div>
+                  </div>
               
               <button 
                 type="button" 

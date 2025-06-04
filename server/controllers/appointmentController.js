@@ -871,6 +871,24 @@ exports.createAppointment = async (req, res) => {
         }
       }
       
+      // Lấy thông tin phòng đầy đủ nếu có
+      let roomInfo = 'Chưa phân phòng';
+      if (appointment.roomId) {
+        try {
+          const room = await Room.findById(appointment.roomId);
+          if (room) {
+            roomInfo = `${room.name} (Phòng ${room.number})`;
+            console.log(`[INFO] Found room for confirmation email: ${roomInfo}`);
+          } else {
+            console.warn(`[WARN] Room not found with ID: ${appointment.roomId}`);
+          }
+        } catch (err) {
+          console.error('[ERROR] Error fetching room information:', err);
+        }
+      } else {
+        console.warn(`[WARN] No room assigned for appointment ${id} - using default text`);
+      }
+      
       // Create appointment info object for email
       const appointmentInfo = {
         bookingCode: appointment.bookingCode,
@@ -879,7 +897,8 @@ exports.createAppointment = async (req, res) => {
         appointmentDate: new Date(appointmentDate).toLocaleDateString('vi-VN'),
         startTime: timeSlot.startTime,
         endTime: timeSlot.endTime,
-        roomName: room ? `${room.name} (Phòng ${room.number})` : 'Sẽ thông báo sau',
+        roomName: roomInfo,
+        queueNumber: appointment.queueNumber || 0,
         specialtyName: specialtyName,
         serviceName: serviceName,
         totalAmount: totalAmount ? totalAmount.toLocaleString('vi-VN') + 'đ' : 'Chưa tính',
@@ -889,34 +908,68 @@ exports.createAppointment = async (req, res) => {
         notes: notes || ''
       };
       
-      console.log('Appointment info for email:', appointmentInfo);
+      console.log('Appointment info for email (detailed):', JSON.stringify({
+        bookingCode: appointmentInfo.bookingCode,
+        doctorName: appointmentInfo.doctorName,
+        roomInfo: {
+          providedRoom: room ? `${room.name} (${room.number})` : 'No room',
+          finalRoomName: appointmentInfo.roomName
+        },
+        queueNumber: appointmentInfo.queueNumber
+      }));
       
-      // Send email to patient
-      await sendAppointmentConfirmationEmail(
+      // Log chi tiết thông tin lịch hẹn trước khi gửi email
+      console.log(`[INFO] Appointment confirmation details:`, JSON.stringify({
+        bookingCode: appointmentInfo.bookingCode,
+        roomInfo: {
+          appointmentRoomId: appointment.roomId ? appointment.roomId.toString() : 'None',
+          finalRoomName: appointmentInfo.roomName
+        },
+        queueNumber: appointmentInfo.queueNumber
+      }));
+      
+      console.log(`[INFO] Sending confirmation email to ${patient.email}`);
+      const emailResult = await sendAppointmentConfirmationEmail(
         patient.email,
         patient.fullName,
         appointmentInfo
       );
-      console.log('Appointment confirmation email sent successfully to patient');
       
-      // Send email to doctor
-      if (doctorInfo && doctorInfo.user && doctorInfo.user.email) {
-        // Create patient info object for doctor notification
-        const patientInfo = {
-          name: patient.fullName,
-          email: patient.email,
-          phone: patient.phone
-        };
-        
-        await sendDoctorAppointmentNotificationEmail(
-          doctorInfo.user.email,
-          doctorInfo.user.fullName,
-          appointmentInfo,
-          patientInfo
-        );
-        console.log('Appointment notification email sent successfully to doctor:', doctorInfo.user.email);
+      if (emailResult) {
+        console.log(`[INFO] Confirmation email sent successfully to patient ${patient._id}`);
       } else {
-        console.log('Doctor email not available, skipping notification');
+        console.warn(`[WARN] Confirmation email may not have been sent correctly to ${patient.email}`);
+      }
+      
+      // Gửi email thông báo cho bác sĩ
+      try {
+        if (doctorInfo && doctorInfo.user && doctorInfo.user.email) {
+          // Tạo thông tin bệnh nhân để thông báo cho bác sĩ
+          const patientInfo = {
+            name: patient.fullName,
+            email: patient.email,
+            phone: patient.phone || patient.phoneNumber || 'Không có thông tin'
+          };
+          
+          console.log(`[INFO] Sending notification email to doctor: ${doctorInfo.user.email}`);
+          const doctorEmailResult = await sendDoctorAppointmentNotificationEmail(
+            doctorInfo.user.email,
+            doctorInfo.user.fullName,
+            appointmentInfo,
+            patientInfo
+          );
+          
+          if (doctorEmailResult && doctorEmailResult.success) {
+            console.log(`[INFO] Doctor notification email sent successfully: ${doctorEmailResult.messageId}`);
+          } else {
+            console.warn(`[WARN] Doctor notification email may not have been sent correctly: ${doctorEmailResult?.error || 'Unknown error'}`);
+          }
+        } else {
+          console.warn(`[WARN] Doctor email not available, skipping notification email for doctor ID: ${doctorId}`);
+        }
+      } catch (doctorEmailError) {
+        console.error(`[ERROR] Error sending doctor notification email:`, doctorEmailError);
+        // Không ảnh hưởng đến luồng chính nếu gửi email cho bác sĩ thất bại
       }
     } catch (emailError) {
       console.error('Error sending appointment email:', emailError);
@@ -1624,6 +1677,17 @@ exports.rescheduleAppointment = async (req, res) => {
         // Lấy thông tin bệnh viện
         const hospital = await Hospital.findById(appointment.hospitalId);
         
+        // Lấy thông tin phòng cũ nếu có
+        let oldRoom = null;
+        if (oldRoomId) {
+          try {
+            oldRoom = await Room.findById(oldRoomId);
+            console.log('Đã tìm thấy thông tin phòng cũ:', oldRoom ? `${oldRoom.name} (${oldRoom.number})` : 'Không tìm thấy');
+          } catch (roomErr) {
+            console.error('Lỗi khi tìm thông tin phòng cũ:', roomErr);
+          }
+        }
+        
         // Chuẩn bị dữ liệu cho email
         const emailData = {
           bookingCode: appointment.bookingCode || appointment._id.toString().substring(0, 8).toUpperCase(),
@@ -1633,6 +1697,7 @@ exports.rescheduleAppointment = async (req, res) => {
           startTime: timeSlot.startTime,
           endTime: timeSlot.endTime,
           roomName: room ? `${room.name} (Phòng ${room.number})` : 'Sẽ thông báo sau',
+          queueNumber: appointment.queueNumber,
           specialtyName: appointment.specialtyId ? appointment.specialtyId.name : '',
           serviceName: appointment.serviceId ? appointment.serviceId.name : ''
         };
@@ -1642,7 +1707,9 @@ exports.rescheduleAppointment = async (req, res) => {
           appointmentDate: new Date(oldAppointmentDate).toLocaleDateString('vi-VN'),
           startTime: oldTimeSlot.startTime,
           endTime: oldTimeSlot.endTime,
-          roomName: oldRoomId ? 'Phòng cũ' : 'Không có phòng',
+          roomName: oldRoom ? `${oldRoom.name} (Phòng ${oldRoom.number})` : 'Không có phòng',
+          queueNumber: appointment.rescheduleHistory && appointment.rescheduleHistory.length > 0 ? 
+                      appointment.rescheduleHistory[appointment.rescheduleHistory.length - 1].queueNumber : 0
         };
         
         // Gửi email thông báo đổi lịch cho bệnh nhân
@@ -2918,6 +2985,24 @@ exports.confirmAppointment = async (req, res) => {
           }
         }
 
+        // Lấy thông tin phòng đầy đủ nếu có
+        let roomInfo = 'Chưa phân phòng';
+        if (appointment.roomId) {
+          try {
+            const room = await Room.findById(appointment.roomId);
+            if (room) {
+              roomInfo = `${room.name} (Phòng ${room.number})`;
+              console.log(`[INFO] Found room for confirmation email: ${roomInfo}`);
+            } else {
+              console.warn(`[WARN] Room not found with ID: ${appointment.roomId}`);
+            }
+          } catch (err) {
+            console.error('[ERROR] Error fetching room information:', err);
+          }
+        } else {
+          console.warn(`[WARN] No room assigned for appointment ${id} - using default text`);
+        }
+
         const appointmentInfo = {
           bookingCode: appointment.bookingCode || appointment.appointmentCode || id.substring(0, 8).toUpperCase(),
           doctorName: doctor.title + ' ' + doctorUser.fullName,
@@ -2925,7 +3010,8 @@ exports.confirmAppointment = async (req, res) => {
           appointmentDate: new Date(appointment.appointmentDate).toLocaleDateString('vi-VN'),
           startTime: startTime,
           endTime: endTime,
-          roomName: appointment.roomName || (appointment.roomId ? 'Phòng ' + appointment.roomId.toString() : 'Chưa xác định'),
+          roomName: roomInfo,
+          queueNumber: appointment.queueNumber || 0,
           specialtyName: specialtyName,
           serviceName: serviceName
         };
@@ -2941,6 +3027,37 @@ exports.confirmAppointment = async (req, res) => {
           console.log(`[INFO] Confirmation email sent successfully to patient ${patient._id}`);
         } else {
           console.warn(`[WARN] Confirmation email may not have been sent correctly to ${patient.email}`);
+        }
+        
+        // Gửi email thông báo cho bác sĩ
+        try {
+          if (doctorInfo && doctorInfo.user && doctorInfo.user.email) {
+            // Tạo thông tin bệnh nhân để thông báo cho bác sĩ
+            const patientInfo = {
+              name: patient.fullName,
+              email: patient.email,
+              phone: patient.phone || patient.phoneNumber || 'Không có thông tin'
+            };
+            
+            console.log(`[INFO] Sending notification email to doctor: ${doctorInfo.user.email}`);
+            const doctorEmailResult = await sendDoctorAppointmentNotificationEmail(
+              doctorInfo.user.email,
+              doctorInfo.user.fullName,
+              appointmentInfo,
+              patientInfo
+            );
+            
+            if (doctorEmailResult && doctorEmailResult.success) {
+              console.log(`[INFO] Doctor notification email sent successfully: ${doctorEmailResult.messageId}`);
+            } else {
+              console.warn(`[WARN] Doctor notification email may not have been sent correctly: ${doctorEmailResult?.error || 'Unknown error'}`);
+            }
+          } else {
+            console.warn(`[WARN] Doctor email not available, skipping notification email for doctor ID: ${doctorId}`);
+          }
+        } catch (doctorEmailError) {
+          console.error(`[ERROR] Error sending doctor notification email:`, doctorEmailError);
+          // Không ảnh hưởng đến luồng chính nếu gửi email cho bác sĩ thất bại
         }
       }
     } catch (emailError) {

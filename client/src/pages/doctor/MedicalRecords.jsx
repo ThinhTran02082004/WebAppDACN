@@ -1148,7 +1148,7 @@ const MedicalRecords = () => {
                         <div className="font-medium text-gray-800">
                           {currentRecord.doctorId.specialtyId.name || 'N/A'}
                           {currentRecord.doctorId.specialtyId.description && (
-                            <div className="text-sm text-gray-500 mt-0.5">{currentRecord.doctorId.specialtyId.description}</div>
+                            <div className="text-sm text-gray-500 mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap">{currentRecord.doctorId.specialtyId.description}</div>
                           )}
                         </div>
                       </div>

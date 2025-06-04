@@ -976,3 +976,9 @@
 [2025-05-29T08:48:17.850Z] [ERROR] GET /api/coupons/validate?code=ELDERLY25V&serviceId=680b201e78b7aadb0a7af5dc&specialtyId=680b201e78b7aadb0a7af5d2&totalAmount=750000 Error: Mã giảm giá đã hết hạn hoặc đã đạt giới hạn sử dụng
     at D:\icon\New folder (2)\DACS-hospitalweb\server\controllers\couponController.js:539:17
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[2025-06-04T11:34:38.399Z] [ERROR] GET /api/coupons/validate?code=dau&serviceId=683329330cb264ab2d4339e0&specialtyId=680b201e78b7aadb0a7af5d2&totalAmount=2050000 Error: Mã giảm giá không hợp lệ hoặc không tồn tại
+    at D:\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:534:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[2025-06-04T11:34:42.149Z] [ERROR] GET /api/coupons/validate?code=sondz&serviceId=683329330cb264ab2d4339e0&specialtyId=680b201e78b7aadb0a7af5d2&totalAmount=2050000 Error: Mã giảm giá đã hết hạn hoặc đã đạt giới hạn sử dụng
+    at D:\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:539:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

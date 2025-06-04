@@ -7,7 +7,7 @@ import { Button } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { Spin, Modal } from 'antd';
 import { getAvatarUrl, handleAvatarError } from '../../utils/avatarUtils';
-import { FaCalendarAlt, FaFileAlt, FaNotesMedical, FaPills, FaPrint, FaUserMd, FaHospital, FaHeart } from 'react-icons/fa';
+import { FaCalendarAlt, FaFileAlt, FaNotesMedical, FaPills, FaUserMd, FaHospital, FaHeart } from 'react-icons/fa';
 
 const Profile = () => {
   const { user, login, logout } = useAuth();
@@ -57,11 +57,6 @@ const Profile = () => {
     confirmPassword: false
   });
 
-  // Add new state for medical records and prescriptions
-  const [medicalRecords, setMedicalRecords] = useState([]);
-  const [loadingMedicalRecords, setLoadingMedicalRecords] = useState(false);
-  const [medicalRecordsError, setMedicalRecordsError] = useState(null);
-
   // State for favorite doctors
   const [favoriteDoctors, setFavoriteDoctors] = useState([]);
   const [loadingFavorites, setLoadingFavorites] = useState(false);
@@ -69,6 +64,11 @@ const Profile = () => {
 
   const [avatarLoading, setAvatarLoading] = useState(false);
   const [isAvatarModalVisible, setIsAvatarModalVisible] = useState(false);
+
+  // Add new state for medical records and prescriptions
+  const [medicalRecords, setMedicalRecords] = useState([]);
+  const [loadingMedicalRecords, setLoadingMedicalRecords] = useState(false);
+  const [medicalRecordsError, setMedicalRecordsError] = useState(null);
 
   const togglePasswordVisibility = (field) => {
     setPasswordVisibility(prev => ({
@@ -417,233 +417,6 @@ const Profile = () => {
     return new Date(dateString).toLocaleDateString('vi-VN', options);
   };
 
-  // Fetch medical records when the user changes or when the medical records tab is activated
-  useEffect(() => {
-    if (user && activeTab === 'medical-records') {
-      fetchMedicalRecords();
-    }
-  }, [user, activeTab]);
-
-  // Function to fetch medical records from API
-  const fetchMedicalRecords = async () => {
-    if (!user) return;
-    
-    setLoadingMedicalRecords(true);
-    setMedicalRecordsError(null);
-    
-    try {
-      const response = await api.get(`/doctors/patients/${user._id}/medical-records`);
-      
-      if (response.data.success) {
-        setMedicalRecords(response.data.data || []);
-      } else {
-        setMedicalRecordsError('Không thể tải hồ sơ y tế. Vui lòng thử lại sau.');
-      }
-    } catch (error) {
-      console.error('Error fetching medical records:', error);
-      setMedicalRecordsError('Không thể tải hồ sơ y tế. Vui lòng thử lại sau.');
-    } finally {
-      setLoadingMedicalRecords(false);
-    }
-  };
-
-  // Update prescription and medical record rendering function
-  const renderMedicalRecordsSection = () => {
-    if (loadingMedicalRecords) {
-      return (
-        <div className="flex justify-center items-center py-8">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
-          <p className="ml-4 text-gray-600">Đang tải hồ sơ y tế...</p>
-        </div>
-      );
-    }
-
-    if (medicalRecordsError) {
-      return <div className="p-4 bg-red-50 text-red-600 rounded-lg">{medicalRecordsError}</div>;
-    }
-
-    if (!medicalRecords || medicalRecords.length === 0) {
-      return (
-        <div className="py-12 px-4 text-center">
-          <div className="inline-flex justify-center items-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-            <FaFileAlt className="text-gray-400 text-xl" />
-          </div>
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">Không có hồ sơ y tế</h3>
-          <p className="text-gray-600 mb-6">Bạn chưa có hồ sơ y tế nào trong hệ thống của chúng tôi.</p>
-          <Link to="/appointment" className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors hover:text-white">
-            Đặt lịch khám ngay
-          </Link>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-6">
-        {medicalRecords.map((record) => {
-          // Extract doctor information
-          const doctorName = record.doctorId && record.doctorId.user ? 
-            record.doctorId.user.fullName : 
-            (record.doctorName || 'Không có thông tin bác sĩ');
-          
-          // Extract doctor title/specialty
-          const doctorTitle = record.doctorId ? record.doctorId.title || '' : '';
-          
-          // Extract hospital information
-          const hospitalInfo = record.hospitalId ? 
-            (record.hospitalId.name || 'Không có thông tin bệnh viện') : 
-            (record.hospitalName || 'Không có thông tin bệnh viện');
-          
-          // Extract hospital address
-          const hospitalAddress = record.hospitalId ? record.hospitalId.address || '' : '';
-          
-          // Extract appointment time
-          let appointmentDate = '';
-          let appointmentTime = '';
-          if (record.appointmentId) {
-            if (record.appointmentId.appointmentDate) {
-              appointmentDate = formatDate(record.appointmentId.appointmentDate);
-            }
-            if (record.appointmentId.timeSlot) {
-              appointmentTime = `${record.appointmentId.timeSlot.startTime} - ${record.appointmentId.timeSlot.endTime}`;
-            }
-          }
-
-          return (
-            <div key={record._id} className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-100">
-              <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
-                <div className="flex items-center text-gray-600 text-sm">
-                  <FaCalendarAlt className="mr-2 text-primary" />
-                  <span>{formatDate(record.createdAt)} {appointmentDate && `(Ngày khám: ${appointmentDate})`}</span>
-                </div>
-                
-                <div className="bg-primary/10 text-primary text-sm font-medium px-3 py-1 rounded-full">
-                  Mã: {record._id.substring(record._id.length - 8).toUpperCase()}
-                </div>
-              </div>
-              
-              <div className="p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="flex items-center text-gray-800 font-medium mb-3">
-                      <FaUserMd className="mr-2 text-primary" /> Thông tin bác sĩ
-                    </h4>
-                    <div className="space-y-2 text-gray-700">
-                      <p><span className="font-medium">Bác sĩ:</span> {doctorName}</p>
-                      {doctorTitle && <p><span className="font-medium">Chức danh:</span> {doctorTitle}</p>}
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="flex items-center text-gray-800 font-medium mb-3">
-                      <FaHospital className="mr-2 text-primary" /> Thông tin bệnh viện
-                    </h4>
-                    <div className="space-y-2 text-gray-700">
-                      <p><span className="font-medium">Bệnh viện:</span> {hospitalInfo}</p>
-                      {hospitalAddress && <p><span className="font-medium">Địa chỉ:</span> {hospitalAddress}</p>}
-                      {appointmentTime && <p><span className="font-medium">Thời gian:</span> {appointmentTime}</p>}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                  <h4 className="flex items-center text-gray-800 font-medium mb-3">
-                    <FaNotesMedical className="mr-2 text-primary" /> Thông tin chẩn đoán
-                  </h4>
-                  <div className="space-y-2 text-gray-700">
-                    {record.diagnosis && <p><span className="font-medium">Chẩn đoán:</span> {record.diagnosis}</p>}
-                    {record.symptoms && <p><span className="font-medium">Triệu chứng:</span> {record.symptoms}</p>}
-                    {record.treatment && <p><span className="font-medium">Phương pháp điều trị:</span> {record.treatment}</p>}
-                    {record.notes && <p><span className="font-medium">Ghi chú:</span> {record.notes}</p>}
-                  </div>
-                </div>
-                
-                {/* Display prescription information */}
-                {record.prescription && record.prescription.length > 0 && (
-                  <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                    <h4 className="flex items-center text-gray-800 font-medium mb-3">
-                      <FaPills className="mr-2 text-primary" /> Đơn thuốc
-                    </h4>
-                    
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm text-left text-gray-700">
-                        <thead className="text-xs text-gray-600 uppercase bg-gray-100">
-                          <tr>
-                            <th className="px-4 py-2 rounded-l-lg">Thuốc</th>
-                            <th className="px-4 py-2">Liều lượng</th>
-                            <th className="px-4 py-2">Cách dùng</th>
-                            <th className="px-4 py-2">Thời gian</th>
-                            <th className="px-4 py-2 rounded-r-lg">Ghi chú</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {record.prescription.map((med, index) => (
-                            <tr key={`med-${record._id}-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                              <td className="px-4 py-2">{med.medicine}</td>
-                              <td className="px-4 py-2">{med.dosage || '-'}</td>
-                              <td className="px-4 py-2">{med.usage || '-'}</td>
-                              <td className="px-4 py-2">{med.duration || '-'}</td>
-                              <td className="px-4 py-2">{med.notes || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Display attachments if available */}
-                {record.attachments && record.attachments.length > 0 && (
-                  <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                    <h4 className="flex items-center text-gray-800 font-medium mb-3">
-                      <FaFileAlt className="mr-2 text-primary" /> Tệp đính kèm
-                    </h4>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {record.attachments.map((attachment, index) => (
-                        <a 
-                          key={`attachment-${record._id}-${index}`}
-                          href={attachment.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center p-3 bg-white rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors"
-                        >
-                          <FaFileAlt className="text-primary mr-2" />
-                          <div>
-                            <div className="text-gray-800 font-medium">{attachment.name || `Tệp đính kèm ${index + 1}`}</div>
-                            {attachment.type && <div className="text-xs text-gray-500">{attachment.type}</div>}
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Link to appointment details if available */}
-                {record.appointmentId && (
-                  <div className="flex justify-between mt-6">
-                    <Link 
-                      to={`/appointments/${record.appointmentId._id || record.appointmentId}`} 
-                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors flex items-center"
-                    >
-                      <FaCalendarAlt className="mr-2" /> Xem chi tiết lịch hẹn
-                    </Link>
-                    
-                    <button 
-                      className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg transition-colors flex items-center"
-                      onClick={() => window.print()}
-                    >
-                      <FaPrint className="mr-2" /> In hồ sơ
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
   // Function to fetch favorite doctors
   const fetchFavoriteDoctors = async () => {
     if (!user) return;
@@ -781,15 +554,6 @@ const Profile = () => {
                 >
                   <i className="fas fa-user mr-3"></i>
                   <span>Thông tin cá nhân</span>
-                </button>
-              </li>
-              <li>
-                <button 
-                  className={`flex items-center w-full p-3 rounded-lg text-left transition-colors ${activeTab === 'medical-records' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'}`}
-                  onClick={() => setActiveTab('medical-records')}
-                >
-                  <i className="fas fa-file-medical mr-3"></i>
-                  <span>Hồ sơ y tế & đơn thuốc</span>
                 </button>
               </li>
               <li>
@@ -971,15 +735,6 @@ const Profile = () => {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-
-            {activeTab === 'medical-records' && (
-              <div>
-                <div className="flex justify-between items-center mb-6 pb-3 border-b border-gray-100">
-                  <h2 className="text-2xl font-semibold text-gray-800">Hồ sơ y tế và đơn thuốc</h2>
-                </div>
-                {renderMedicalRecordsSection()}
               </div>
             )}
 
@@ -1181,10 +936,6 @@ const Profile = () => {
                       </button>
                     </form>
                   </div>
-
-                  
-
-
                 </div>
               </div>
             )}

@@ -317,7 +317,7 @@ const MedicalHistory = () => {
                           {record.serviceName || 'Khám bệnh'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {format(new Date(record.appointmentDate || record.createdAt), 'dd/MM/yyyy HH:mm')}
+                          {format(new Date(record.appointmentDate || (record.appointmentId && record.appointmentId.appointmentDate) || record.createdAt), 'dd/MM/yyyy')}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">

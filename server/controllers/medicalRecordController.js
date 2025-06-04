@@ -305,11 +305,15 @@ exports.getMedicalHistory = async (req, res) => {
       })
       .populate({
         path: 'appointmentId',
-        select: 'appointmentDate appointmentTime status specialtyName serviceId serviceName',
+        select: 'appointmentDate appointmentTime timeSlot status specialtyName serviceId serviceName roomId',
         populate: [
           {
             path: 'serviceId',
             select: 'name price description'
+          },
+          {
+            path: 'roomId',
+            select: 'name number'
           }
         ]
       })
@@ -341,8 +345,13 @@ exports.getMedicalHistory = async (req, res) => {
         }
       }
       
-      // Add service information
+      // Add service information and appointment date
       if (formattedRecord.appointmentId) {
+        // Ensure appointmentDate is available from the appointment record
+        if (formattedRecord.appointmentId.appointmentDate) {
+          formattedRecord.appointmentDate = formattedRecord.appointmentId.appointmentDate;
+        }
+        
         if (formattedRecord.appointmentId.serviceId) {
           formattedRecord.serviceName = formattedRecord.appointmentId.serviceId.name;
           formattedRecord.servicePrice = formattedRecord.appointmentId.serviceId.price;

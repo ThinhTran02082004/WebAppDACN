@@ -1430,7 +1430,8 @@ exports.createDoctorSchedule = async (req, res) => {
         isBooked: false,
         bookedCount: 0,
         maxBookings: slot.maxBookings || 3,
-        appointmentIds: []
+        appointmentIds: [],
+        roomId: roomId || slot.roomId
       });
     }
     
@@ -1453,7 +1454,7 @@ exports.createDoctorSchedule = async (req, res) => {
         });
       }
       
-      if (room.hospitalId.toString() !== hospitalId) {
+      if (room.hospitalId.toString() !== doctor.hospitalId.toString()) {
         return res.status(400).json({
           success: false,
           message: 'Phòng khám không thuộc bệnh viện này'
@@ -1497,7 +1498,7 @@ exports.updateDoctorSchedule = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
-    const { timeSlots, isActive } = req.body;
+    const { timeSlots, isActive, roomId } = req.body;
     
     // Validate id
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -1553,6 +1554,11 @@ exports.updateDoctorSchedule = async (req, res) => {
       schedule.isActive = isActive;
     }
     
+    // Cập nhật roomId nếu được cung cấp
+    if (roomId) {
+      schedule.roomId = roomId;
+    }
+    
     // Cập nhật các khung giờ nếu có
     if (timeSlots && Array.isArray(timeSlots)) {
       // Chỉ cho phép cập nhật các khung giờ chưa được đặt
@@ -1600,8 +1606,16 @@ exports.updateDoctorSchedule = async (req, res) => {
           isBooked: false,
           bookedCount: 0,
           maxBookings: slot.maxBookings || 3,
-          appointmentIds: []
+          appointmentIds: [],
+          roomId: roomId || schedule.roomId
         });
+      }
+      
+      // Cập nhật roomId cho các slot đã đặt nếu cần
+      if (roomId) {
+        for (const slot of bookedSlots) {
+          slot.roomId = roomId;
+        }
       }
       
       // Kết hợp khung giờ đã đặt và khung giờ mới

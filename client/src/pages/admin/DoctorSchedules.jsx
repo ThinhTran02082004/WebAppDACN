@@ -555,7 +555,7 @@ const DoctorSchedules = () => {
     };
     
     // Đảm bảo mỗi timeSlot có roomId
-    if (field !== 'roomId' && !updatedTimeSlots[index].roomId && formData.roomId) {
+    if (field !== 'roomId' && formData.roomId) {
       updatedTimeSlots[index].roomId = formData.roomId;
     }
     
@@ -619,12 +619,13 @@ const DoctorSchedules = () => {
       // Đảm bảo mỗi timeSlot đều có roomId
       const updatedTimeSlots = formData.timeSlots.map(slot => ({
         ...slot,
-        roomId: slot.roomId || formData.roomId
+        roomId: formData.roomId // Consistently use the global roomId for all time slots
       }));
       
       const dataToSend = {
         ...formData,
         timeSlots: updatedTimeSlots,
+        roomId: formData.roomId, // Include roomId at the top level
         isActive: formData.isActive !== undefined ? formData.isActive : true
       };
       
