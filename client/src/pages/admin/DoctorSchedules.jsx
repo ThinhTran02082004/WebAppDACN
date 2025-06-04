@@ -655,6 +655,7 @@ const DoctorSchedules = () => {
         
         // Xử lý lỗi trùng lịch (HTTP 409 Conflict)
         if (error.response.status === 409 && responseData.error === 'schedule_conflict') {
+          // Lưu thông tin xung đột để hiển thị
           setConflicts(responseData.conflicts || []);
           setConflictDetails(responseData.errorDetails || null);
           
@@ -672,6 +673,24 @@ const DoctorSchedules = () => {
           errorMessage = errorMessage.replace(/, $/, '');
           
           toast.error(errorMessage, { autoClose: 5000 });
+          
+          // Thêm mới - Hiển thị từng xung đột trong thông báo riêng biệt
+          if (responseData.conflicts && responseData.conflicts.length > 0) {
+            const sampleConflicts = responseData.conflicts.slice(0, 2); // Chỉ hiển thị 2 xung đột đầu tiên
+            
+            sampleConflicts.forEach((conflict, index) => {
+              setTimeout(() => {
+                toast.warning(conflict.message || "Xung đột không xác định", { autoClose: 4000 });
+              }, 300 * (index + 1));
+            });
+            
+            if (responseData.conflicts.length > 2) {
+              setTimeout(() => {
+                toast.info(`Còn ${responseData.conflicts.length - 2} xung đột khác. Vui lòng xem chi tiết trong form.`, 
+                  { autoClose: 4000 });
+              }, 900);
+            }
+          }
         } else if (responseData.message && responseData.message.includes('đã có lịch làm việc cho ngày này')) {
           // Xử lý lỗi trùng ngày
           toast.error('Bác sĩ đã có lịch làm việc cho ngày này. Vui lòng chọn ngày khác hoặc chỉnh sửa lịch hiện có.', { autoClose: 5000 });
@@ -690,20 +709,80 @@ const DoctorSchedules = () => {
 
   // Update the ConflictAlert component with Tailwind CSS
   const ConflictAlert = ({ conflicts }) => {
+    // Phân loại xung đột để hiển thị rõ ràng hơn
+    const doctorConflicts = conflicts.filter(c => c.type === 'doctor_conflict');
+    const roomConflicts = conflicts.filter(c => c.type === 'room_conflict');
+    const otherConflicts = conflicts.filter(c => !c.type || (c.type !== 'doctor_conflict' && c.type !== 'room_conflict'));
+    
     return (
       <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-md">
         <div className="flex items-start">
           <FaExclamationTriangle className="h-5 w-5 text-yellow-600 mr-3 mt-0.5" />
-          <div>
-            <h3 className="text-sm font-medium text-yellow-800 mb-1">Cảnh báo xung đột lịch làm việc</h3>
-            <p className="text-sm text-yellow-700 mb-2">Có {conflicts.length} xung đột lịch làm việc:</p>
-            <ul className="list-disc pl-5 text-sm text-yellow-700">
-              {conflicts.map((conflict, index) => (
-                <li key={index} className="mb-1">
-                  {conflict.message || 'Xung đột không xác định'}
-                </li>
-              ))}
-            </ul>
+          <div className="w-full">
+            <h3 className="text-sm font-medium text-yellow-800 mb-2">Cảnh báo xung đột lịch làm việc</h3>
+            <p className="text-sm text-yellow-700 mb-3">Phát hiện {conflicts.length} xung đột lịch làm việc:</p>
+            
+            {doctorConflicts.length > 0 && (
+              <div className="mb-3">
+                <h4 className="text-sm font-medium text-yellow-800 flex items-center mb-1">
+                  <FaUserMd className="mr-1.5" /> {doctorConflicts.length} xung đột về lịch bác sĩ
+                </h4>
+                <ul className="list-disc pl-5 text-sm text-yellow-700 space-y-1">
+                  {doctorConflicts.map((conflict, index) => (
+                    <li key={`doctor-${index}`} className="mb-1">
+                      {conflict.message || 'Xung đột không xác định'}
+                      {conflict.details && (
+                        <span className="block text-xs text-yellow-600 mt-0.5 ml-1">
+                          {conflict.details}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {roomConflicts.length > 0 && (
+              <div className="mb-3">
+                <h4 className="text-sm font-medium text-yellow-800 flex items-center mb-1">
+                  <FaDoorOpen className="mr-1.5" /> {roomConflicts.length} xung đột về phòng khám
+                </h4>
+                <ul className="list-disc pl-5 text-sm text-yellow-700 space-y-1">
+                  {roomConflicts.map((conflict, index) => (
+                    <li key={`room-${index}`} className="mb-1">
+                      {conflict.message || 'Xung đột không xác định'}
+                      {conflict.details && (
+                        <span className="block text-xs text-yellow-600 mt-0.5 ml-1">
+                          {conflict.details}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {otherConflicts.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-yellow-800 flex items-center mb-1">
+                  <FaExclamationCircle className="mr-1.5" /> {otherConflicts.length} xung đột khác
+                </h4>
+                <ul className="list-disc pl-5 text-sm text-yellow-700 space-y-1">
+                  {otherConflicts.map((conflict, index) => (
+                    <li key={`other-${index}`} className="mb-1">
+                      {conflict.message || 'Xung đột không xác định'}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            <div className="mt-3 pt-2 border-t border-yellow-200">
+              <p className="text-xs text-yellow-600 italic">
+                <FaInfoCircle className="inline mr-1" /> 
+                Vui lòng điều chỉnh thời gian hoặc phòng khám để tránh xung đột trước khi lưu.
+              </p>
+            </div>
           </div>
         </div>
       </div>

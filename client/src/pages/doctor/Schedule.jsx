@@ -6,8 +6,10 @@ import {
   FaEdit, FaSave, FaTimes, FaCalendarCheck,
   FaClock, FaDoorOpen, FaHospital, FaCheckCircle,
   FaExclamationCircle, FaAngleLeft, FaAngleRight,
-  FaCalendarDay, FaCalendarWeek
+  FaCalendarDay, FaCalendarWeek, FaExclamationTriangle, FaUserMd, FaInfoCircle,
+  FaArrowLeft
 } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 
 const Schedule = () => {
   const [schedules, setSchedules] = useState([]);
@@ -19,6 +21,8 @@ const Schedule = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [newSchedule, setNewSchedule] = useState({
     hospitalId: '',
@@ -83,6 +87,8 @@ const Schedule = () => {
       { startTime: "16:30", endTime: "17:00" }
     ]}
   ];
+
+  const navigate = useNavigate();
 
   // Fetch doctor information, hospitals, and schedules
   useEffect(() => {
@@ -479,39 +485,32 @@ const Schedule = () => {
 
   // Handle adding a new schedule
   const handleAddSchedule = async () => {
-    // Validate form inputs
-    if (!newSchedule.date) {
-      toast.error("Vui lòng chọn ngày làm việc");
-      return;
-    }
+    setFormErrors({});
+    setIsSubmitting(true);
     
-    if (!newSchedule.roomId) {
-      toast.error("Vui lòng chọn phòng khám");
-      return;
-    }
-    
-    const invalidTimeSlots = newSchedule.timeSlots.some(slot => 
-      !slot.startTime || !slot.endTime
-    );
-    
-    if (invalidTimeSlots) {
-      toast.error("Vui lòng điền đầy đủ thông tin thời gian");
-      return;
-    }
-    
-    setProcessingAction(true);
     try {
-      const scheduleData = {
-        hospitalId: hospitalId,
-        date: newSchedule.date,
-        timeSlots: newSchedule.timeSlots.map(slot => ({
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          roomId: newSchedule.roomId
-        }))
+      const validationErrors = validateScheduleForm();
+      if (Object.keys(validationErrors).length > 0) {
+        setFormErrors(validationErrors);
+        toast.error('Vui lòng điền đầy đủ thông tin và sửa các lỗi');
+        return;
+      }
+      
+      const formattedTimeSlots = newSchedule.timeSlots.map(slot => ({
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        roomId: newSchedule.roomId
+      }));
+      
+      const payload = {
+        date: formatDateString(new Date(newSchedule.date)),
+        timeSlots: formattedTimeSlots,
+        roomId: newSchedule.roomId,
+        hospitalId: hospitalId
       };
       
-      const response = await api.post('/schedules/doctor', scheduleData);
+      console.log('Saving schedule:', payload);
+      const response = await api.post('/schedules/doctor', payload);
       
       if (response.data.success) {
         toast.success('Thêm lịch trực thành công');
@@ -532,69 +531,90 @@ const Schedule = () => {
       } else {
         toast.error(response.data.message || "Không thể thêm lịch trực");
       }
-    } catch (err) {
-      console.error('Error adding schedule:', err.response?.data || err.message);
-      toast.error(err.response?.data?.message || 'Đã xảy ra lỗi khi thêm lịch trực');
+    } catch (error) {
+      console.error('Error adding schedule:', error);
+      
+      // Xử lý lỗi 409 Conflict từ API
+      if (error.response && error.response.status === 409 && error.response.data.error === 'schedule_conflict') {
+        const conflictData = error.response.data;
+        const conflicts = conflictData.conflicts || [];
+        
+        // Phân loại xung đột
+        const doctorConflicts = conflicts.filter(c => c.type === 'doctor_conflict');
+        const roomConflicts = conflicts.filter(c => c.type === 'room_conflict');
+        
+        // Tạo thông báo lỗi chi tiết
+        let errorMsg = 'Không thể tạo lịch làm việc do có xung đột: ';
+        
+        if (doctorConflicts.length > 0) {
+          errorMsg += `${doctorConflicts.length} xung đột lịch bác sĩ`;
+          if (roomConflicts.length > 0) errorMsg += ', ';
+        }
+        
+        if (roomConflicts.length > 0) {
+          errorMsg += `${roomConflicts.length} xung đột phòng khám`;
+        }
+        
+        toast.error(errorMsg, { autoClose: 5000 });
+        
+        // Hiển thị chi tiết các xung đột (giới hạn 3 xung đột)
+        const displayedConflicts = conflicts.slice(0, 3);
+        displayedConflicts.forEach((conflict, index) => {
+          setTimeout(() => {
+            toast.warning(conflict.message, { autoClose: 4000 });
+          }, 300 * (index + 1));
+        });
+        
+        // Thông báo nếu còn nhiều xung đột khác
+        if (conflicts.length > 3) {
+          setTimeout(() => {
+            toast.info(`Còn ${conflicts.length - 3} xung đột khác.`, { autoClose: 3000 });
+          }, 1200);
+        }
+        
+        // Hiển thị thông tin chi tiết về loại xung đột
+        setFormErrors({
+          conflicts: {
+            message: 'Có xung đột lịch làm việc',
+            details: conflictData.errorDetails
+          }
+        });
+      } else {
+        toast.error(error.response?.data?.message || 'Đã xảy ra lỗi khi thêm lịch trực');
+      }
     } finally {
-      setProcessingAction(false);
+      setIsSubmitting(false);
     }
   };
 
   // Handle updating an existing schedule
   const handleUpdateSchedule = async () => {
-    if (!editingSchedule || !editingSchedule._id) return;
-
-    // Validate form
-    const invalidTimeSlots = editingSchedule.timeSlots?.some(slot => 
-      !slot.startTime || !slot.endTime
-    );
+    setFormErrors({});
+    setIsSubmitting(true);
     
-    if (invalidTimeSlots) {
-      toast.error("Vui lòng điền đầy đủ thông tin thời gian");
-      return;
-    }
-
-    if (!editingSchedule.roomId) {
-      toast.error("Thông tin phòng không hợp lệ");
-      return;
-    }
-
-    setProcessingAction(true);
     try {
-      // Get the existing schedule to properly handle booked slots
-      const existingSchedule = schedules.find(s => s._id === editingSchedule._id);
-      if (!existingSchedule) {
-        throw new Error('Không tìm thấy lịch trực');
+      const validationErrors = validateScheduleForm();
+      if (Object.keys(validationErrors).length > 0) {
+        setFormErrors(validationErrors);
+        toast.error('Vui lòng điền đầy đủ thông tin và sửa các lỗi');
+        return;
       }
-
-      // Separate booked and non-booked slots
-      const bookedTimeSlots = editingSchedule.timeSlots.filter(slot => slot.isBooked);
-      const nonBookedTimeSlots = editingSchedule.timeSlots.filter(slot => !slot.isBooked);
       
-      // Make sure all slots have roomId explicitly set
-      const processedTimeSlots = [
-        ...bookedTimeSlots.map(slot => ({
-          ...slot,
-          roomId: slot.roomId || editingSchedule.roomId, // Use slot's roomId or schedule's roomId
-        })),
-        ...nonBookedTimeSlots.map(slot => ({
-          ...slot,
-          roomId: editingSchedule.roomId, // Always use schedule's roomId for non-booked slots
-        }))
-      ];
+      const formattedTimeSlots = editingSchedule.timeSlots.map(slot => ({
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        roomId: editingSchedule.roomId
+      }));
       
-      // Prepare the data for the API call
-      const updateData = {
-        timeSlots: processedTimeSlots,
-        isActive: editingSchedule.isActive,
+      const payload = {
+        date: formatDateString(new Date(editingSchedule.date)),
+        timeSlots: formattedTimeSlots,
         roomId: editingSchedule.roomId,
-        hospitalId: hospitalId // Include hospital ID as well
+        isActive: editingSchedule.isActive
       };
       
-      console.log('Updating schedule with data:', JSON.stringify(updateData, null, 2));
-      
-      // Make the API call
-      const response = await api.put(`/schedules/${editingSchedule._id}/doctor`, updateData);
+      console.log('Updating schedule:', payload);
+      const response = await api.put(`/schedules/${editingSchedule._id}/doctor`, payload);
       
       if (response.data.success) {
         toast.success('Cập nhật lịch trực thành công');
@@ -603,14 +623,60 @@ const Schedule = () => {
         fetchSchedules();
       } else {
         toast.error(response.data.message || "Không thể cập nhật lịch trực");
-        console.error('API error response:', response.data);
       }
-    } catch (err) {
-      console.error('Error updating schedule:', err);
-      console.error('Error details:', err.response?.data || err.message);
-      toast.error(err.response?.data?.message || 'Đã xảy ra lỗi khi cập nhật lịch trực');
+    } catch (error) {
+      console.error('Error updating schedule:', error);
+      
+      // Xử lý lỗi 409 Conflict từ API
+      if (error.response && error.response.status === 409 && error.response.data.error === 'schedule_conflict') {
+        const conflictData = error.response.data;
+        const conflicts = conflictData.conflicts || [];
+        
+        // Phân loại xung đột
+        const doctorConflicts = conflicts.filter(c => c.type === 'doctor_conflict');
+        const roomConflicts = conflicts.filter(c => c.type === 'room_conflict');
+        
+        // Tạo thông báo lỗi chi tiết
+        let errorMsg = 'Không thể cập nhật lịch làm việc do có xung đột: ';
+        
+        if (doctorConflicts.length > 0) {
+          errorMsg += `${doctorConflicts.length} xung đột lịch bác sĩ`;
+          if (roomConflicts.length > 0) errorMsg += ', ';
+        }
+        
+        if (roomConflicts.length > 0) {
+          errorMsg += `${roomConflicts.length} xung đột phòng khám`;
+        }
+        
+        toast.error(errorMsg, { autoClose: 5000 });
+        
+        // Hiển thị chi tiết các xung đột (giới hạn 3 xung đột)
+        const displayedConflicts = conflicts.slice(0, 3);
+        displayedConflicts.forEach((conflict, index) => {
+          setTimeout(() => {
+            toast.warning(conflict.message, { autoClose: 4000 });
+          }, 300 * (index + 1));
+        });
+        
+        // Thông báo nếu còn nhiều xung đột khác
+        if (conflicts.length > 3) {
+          setTimeout(() => {
+            toast.info(`Còn ${conflicts.length - 3} xung đột khác.`, { autoClose: 3000 });
+          }, 1200);
+        }
+        
+        // Hiển thị thông tin chi tiết về loại xung đột
+        setFormErrors({
+          conflicts: {
+            message: 'Có xung đột lịch làm việc',
+            details: conflictData.errorDetails
+          }
+        });
+      } else {
+        toast.error(error.response?.data?.message || 'Đã xảy ra lỗi khi cập nhật lịch trực');
+      }
     } finally {
-      setProcessingAction(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -819,6 +885,98 @@ const Schedule = () => {
       });
       toast.success(`Đã thêm ${slots.length} khung giờ`);
     }
+  };
+
+  // Add a ConflictErrorMessage component to display in the form
+  const ConflictErrorMessage = ({ conflicts }) => {
+    if (!conflicts) return null;
+    
+    const details = conflicts.details;
+    
+    return (
+      <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-md">
+        <div className="flex items-start">
+          <FaExclamationTriangle className="h-5 w-5 text-yellow-600 mr-3 mt-0.5" />
+          <div className="w-full">
+            <h3 className="text-sm font-medium text-yellow-800 mb-2">{details?.title || 'Cảnh báo xung đột lịch làm việc'}</h3>
+            <p className="text-sm text-yellow-700 mb-3">{details?.description || 'Phát hiện xung đột lịch làm việc'}</p>
+            
+            {details?.doctorConflictsCount > 0 && (
+              <div className="mb-3">
+                <h4 className="text-sm font-medium text-yellow-800 flex items-center mb-1">
+                  <FaUserMd className="mr-1.5" /> {details.doctorConflictsCount} xung đột về lịch bác sĩ
+                </h4>
+              </div>
+            )}
+            
+            {details?.roomConflictsCount > 0 && (
+              <div className="mb-3">
+                <h4 className="text-sm font-medium text-yellow-800 flex items-center mb-1">
+                  <FaDoorOpen className="mr-1.5" /> {details.roomConflictsCount} xung đột về phòng khám
+                </h4>
+              </div>
+            )}
+            
+            <div className="mt-3 pt-2 border-t border-yellow-200">
+              <p className="text-xs text-yellow-600 italic">
+                <FaInfoCircle className="inline mr-1" /> 
+                Vui lòng điều chỉnh thời gian hoặc phòng khám để tránh xung đột trước khi lưu.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Validate the schedule form
+  const validateScheduleForm = () => {
+    const errors = {};
+    
+    // For adding new schedule
+    if (showAddModal || !editingSchedule) {
+      if (!newSchedule.date) {
+        errors.date = 'Vui lòng chọn ngày làm việc';
+      }
+      
+      if (!newSchedule.roomId) {
+        errors.roomId = 'Vui lòng chọn phòng khám';
+      }
+      
+      // Check timeSlots
+      if (!newSchedule.timeSlots || newSchedule.timeSlots.length === 0) {
+        errors.timeSlots = 'Vui lòng thêm ít nhất một khung giờ';
+      } else {
+        const invalidTimeSlots = newSchedule.timeSlots.some(slot => 
+          !slot.startTime || !slot.endTime
+        );
+        
+        if (invalidTimeSlots) {
+          errors.timeSlots = 'Vui lòng điền đầy đủ thông tin thời gian';
+        }
+      }
+    } 
+    // For editing existing schedule
+    else if (editingSchedule) {
+      if (!editingSchedule.roomId) {
+        errors.roomId = 'Vui lòng chọn phòng khám';
+      }
+      
+      // Only validate non-booked slots
+      const nonBookedSlots = editingSchedule.timeSlots.filter(slot => !slot.isBooked);
+      
+      if (nonBookedSlots.length > 0) {
+        const invalidTimeSlots = nonBookedSlots.some(slot => 
+          !slot.startTime || !slot.endTime
+        );
+        
+        if (invalidTimeSlots) {
+          errors.timeSlots = 'Vui lòng điền đầy đủ thông tin thời gian cho tất cả các khung giờ chưa được đặt';
+        }
+      }
+    }
+    
+    return errors;
   };
 
   if (loading && schedules.length === 0) {
@@ -1178,6 +1336,11 @@ const Schedule = () => {
                 <FaTimes className="text-xl" />
               </button>
             </div>
+            
+            {/* Display conflict errors if present */}
+            {formErrors.conflicts && (
+              <ConflictErrorMessage conflicts={formErrors.conflicts} />
+            )}
             
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
