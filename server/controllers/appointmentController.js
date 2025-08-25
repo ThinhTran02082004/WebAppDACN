@@ -3133,7 +3133,7 @@ exports.rejectAppointment = async (req, res) => {
     }
     
     // Kiểm tra trạng thái hiện tại của lịch hẹn
-    if (appointment.status !== 'pending') {
+    if (appointment.status !== 'pending' && appointment.status !== 'rescheduled') {
       return res.status(400).json({
         success: false,
         message: `Không thể từ chối lịch hẹn vì trạng thái hiện tại là ${appointment.status}`
