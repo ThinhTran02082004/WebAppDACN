@@ -11,6 +11,7 @@ const { connectDB, disconnectDB } = require('./config/database');
 const jwt = require('jsonwebtoken');
 const session = require('express-session');
 const { Logger } = require('./models/logger');
+const aiRoutes = require('./routes/ai');
 
 // Import routes
 const userRoutes = require('./routes/user');
@@ -170,6 +171,7 @@ app.use('/api/news', newsRoutes);
 app.use('/api/medications', medicationRoutes);
 app.use('/api/doctor-auth', doctorAuthRoutes);
 app.use('/api', medicalRecordRoutes);
+app.use('/api/ai', aiRoutes);
 
 
 
