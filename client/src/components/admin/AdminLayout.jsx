@@ -6,7 +6,7 @@ import {
   FaFileAlt, FaCalendarAlt, FaPercentage, FaCreditCard,
   FaStar, FaProcedures, FaDoorOpen, FaChartBar, FaSignOutAlt,
   FaClock, FaCog, FaSearch, FaBars, FaTimes,
-  FaUserShield, FaLock, FaExclamationTriangle, FaMedkit
+  FaUserShield, FaLock, FaExclamationTriangle, FaMedkit, FaVideo
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
@@ -32,6 +32,7 @@ const AdminLayout = ({ children }) => {
     '/admin/reviews',
     '/admin/medications',
     '/admin/news',
+    '/admin/video-rooms',
   ];
 
   const doctorRoutes = [
@@ -124,6 +125,7 @@ const AdminLayout = ({ children }) => {
     { path: '/admin/payments', label: 'Thanh toán', icon: <FaCreditCard /> },
     { path: '/admin/reviews', label: 'Đánh giá', icon: <FaStar /> },
     { path: '/admin/news', label: 'Tin tức', icon: <FaFileAlt /> },
+    { path: '/admin/video-rooms', label: 'Phòng Video', icon: <FaVideo /> },
   ] : [];
 
   // Group the navigation items for admin
@@ -132,7 +134,7 @@ const AdminLayout = ({ children }) => {
     users: navItems.length > 2 ? [navItems[1], navItems[2]] : [], // Users, Doctors
     scheduling: navItems.length > 9 ? [navItems[3], navItems[9]] : [], // Doctor schedules, Appointments
     facilities: navItems.length > 8 ? [navItems[4], navItems[5], navItems[6], navItems[7], navItems[8]] : [], // Hospitals, Specialties, Services, Rooms, Medications
-    business: navItems.length > 13 ? [navItems[10], navItems[11], navItems[12], navItems[13]] : [] // Coupons, Payments, Reviews, News
+    business: navItems.length > 14 ? [navItems[10], navItems[11], navItems[12], navItems[13], navItems[14]] : [] // Coupons, Payments, Reviews, News, Video Rooms
   };
 
   // Get the current page name for header

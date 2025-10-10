@@ -34,6 +34,7 @@ const doctorAuthRoutes = require('./routes/doctorAuth');
 const medicalRecordRoutes = require('./routes/medicalRecordRoutes');
 const medicationRoutes = require('./routes/medicationRoutes');
 const newsRoutes = require('./routes/newsRoutes');
+const videoRoomRoutes = require('./routes/videoRoomRoutes');
 
 // Load environment variables
 console.log('Loading environment variables from .env file');
@@ -170,6 +171,7 @@ app.use('/api/news', newsRoutes);
 app.use('/api/medications', medicationRoutes);
 app.use('/api/doctor-auth', doctorAuthRoutes);
 app.use('/api', medicalRecordRoutes);
+app.use('/api/video-rooms', videoRoomRoutes);
 
 
 

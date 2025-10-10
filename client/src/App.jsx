@@ -73,6 +73,7 @@ import AdminReviews from './pages/admin/Reviews';
 import AdminDoctorSchedules from './pages/admin/DoctorSchedules';
 import AdminMedications from './pages/admin/Medications';
 import AdminNews from './pages/admin/News';
+import VideoRoomManagement from './pages/admin/VideoRoomManagement';
 
 import Facilities from './pages/user/Facilities';
 import FacilitySurgery from './pages/user/FacilitySurgery';
@@ -110,6 +111,7 @@ function AppContent() {
           <Route path="doctor-schedules" element={<AdminDoctorSchedules />} />
           <Route path="medications" element={<AdminMedications />} />
           <Route path="news" element={<AdminNews />} />
+          <Route path="video-rooms" element={<VideoRoomManagement />} />
         </Route>
 
         {/* Doctor Routes - No Navbar/Footer */}

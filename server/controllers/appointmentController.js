@@ -1073,11 +1073,12 @@ exports.getAppointmentById = async (req, res) => {
     }
     
     // Kiểm tra quyền truy cập
-    if (
-      req.user.roleType !== 'admin' && 
-      appointment.patientId._id.toString() !== req.user.id &&
-      req.user.roleType === 'doctor' && appointment.doctorId.user._id.toString() !== req.user.id
-    ) {
+    const isAdmin = req.user.roleType === 'admin' || req.user.role === 'admin';
+    const isPatient = appointment.patientId && appointment.patientId._id.toString() === req.user.id;
+    const isDoctor = appointment.doctorId && appointment.doctorId.user && 
+                     appointment.doctorId.user._id.toString() === req.user.id;
+    
+    if (!isAdmin && !isPatient && !isDoctor) {
       return res.status(403).json({
         success: false,
         message: 'Không có quyền truy cập lịch hẹn này'
