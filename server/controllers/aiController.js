@@ -1,29 +1,28 @@
 const axios = require('axios');
 
-// ===== Tri thức tĩnh (ví dụ). Có thể tách ra file JSON/DB =====
+// ===== Static knowledge (example). Can be stored externally =====
 const KNOWLEDGE_BASE = [
   {
     id: 'hours',
-    title: 'Giờ làm việc',
-    url: '/faq/gio-lam-viec',
-    text: 'Phòng khám mở cửa 7:30–17:00 từ Thứ 2–Thứ 7. Chủ nhật nghỉ.'
+    title: 'Working hours',
+    url: '/faq/working-hours',
+    text: 'The clinic is open from 7:30 AM to 5:00 PM, Monday to Saturday. Closed on Sunday.'
   },
   {
     id: 'service-im',
-    title: 'Dịch vụ Nội tổng quát',
-    url: '/dich-vu/noi-tong-quat',
-    text: 'Khám nội tổng quát, tư vấn sức khỏe, gói tầm soát cơ bản.'
+    title: 'General Internal Medicine Service',
+    url: '/services/internal-medicine',
+    text: 'General health check-up, health consultation, and basic screening packages.'
   },
   {
     id: 'insurance',
-    title: 'Bảo hiểm y tế',
-    url: '/faq/bhyt',
-    text: 'Chấp nhận BHYT theo quy định. Vui lòng mang theo thẻ BHYT và giấy tờ tùy thân.'
+    title: 'Health Insurance',
+    url: '/faq/insurance',
+    text: 'We accept health insurance as per regulations. Please bring your insurance card and ID.'
   }
-  // TODO: thêm các mục: giá, địa chỉ cơ sở, chuyên khoa, bác sĩ...
 ];
 
-// ===== Retriever đơn giản: đếm từ khóa trùng =====
+// ===== Retriever =====
 function score(query, doc) {
   const toks = query.toLowerCase().split(/\s+/).filter(Boolean);
   const hay = (doc.title + ' ' + doc.text).toLowerCase();
@@ -38,7 +37,7 @@ function retrieveTopK(query, k = 4, minScore = 1) {
     .sort((a, b) => b.s - a.s)
     .slice(0, k)
     .map((x, i) => ({
-      idx: i + 1,         // để trích dẫn [src:N]
+      idx: i + 1,
       id: x.d.id,
       title: x.d.title,
       url: x.d.url,
@@ -51,51 +50,86 @@ function buildContextBlock(sources) {
 ${s.text}`).join('\n\n');
 }
 
-// ===== Chính sách & câu trả lời ngoài phạm vi =====
-const OUT_OF_SCOPE = 'Xin lỗi, câu hỏi này không thuộc phạm vi hỗ trợ của chúng tôi.';
+// ===== Constants =====
+const OUT_OF_SCOPE = 'vấn đề trên tôi không thể giúp bạn';
 const SYSTEM_POLICY = `
-Bạn là trợ lý đặt lịch cho phòng khám.
-CHỈ ĐƯỢC trả lời dựa trên CONTEXT do hệ thống cung cấp.
-- Nếu CONTEXT không đủ để trả lời, hãy trả CHÍNH XÁC câu: "${OUT_OF_SCOPE}"
-- KHÔNG chẩn đoán hay đưa lời khuyên y khoa. Trường hợp khẩn cấp, nhắc gọi cấp cứu.
-- Mọi câu trả lời hợp lệ PHẢI kèm trích dẫn nguồn dạng [src:N] (N là số thứ tự trong CONTEXT).
-- Không dùng kiến thức ngoài CONTEXT, không suy đoán.
+You are a friendly assistant at a medical clinic.
+
+You help users with questions about:
+- Healthcare, hospitals/clinics, doctors, and medical appointment consultation.
+
+Rules:
+- Answer ONLY based on the CONTEXT provided (from the clinic knowledge base or web).
+- If not enough information, you may search the web for recent and factual info related to hospitals, doctors, or healthcare topics.
+- If the question is outside these topics, reply EXACTLY: "${OUT_OF_SCOPE}".
+- Never diagnose or give treatment advice.
+- In emergencies, tell the user to call local emergency services.
+- Always include citations in the form [src:N].
 `;
+
+// ===== Helper for web search =====
+async function searchWeb(query, apiKey) {
+  try {
+    const { data } = await axios.get(
+      `https://www.googleapis.com/customsearch/v1`,
+      {
+        params: {
+          key: apiKey,
+          cx: process.env.SEARCH_ENGINE_ID, // your Google CSE ID
+          q: query
+        }
+      }
+    );
+    return (data.items || []).slice(0, 3).map((item, i) => ({
+      idx: i + 1,
+      id: 'web-' + i,
+      title: item.title,
+      url: item.link,
+      text: item.snippet
+    }));
+  } catch (err) {
+    console.error('Web search failed:', err.message);
+    return [];
+  }
+}
 
 // ===== Controller =====
 exports.geminiChat = async (req, res) => {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ success: false, message: 'GEMINI_API_KEY is not configured' });
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
+      return res.status(500).json({ success: false, message: 'GEMINI_API_KEY not configured' });
     }
 
     const { messages = [], system } = req.body || {};
-    const lastUser = Array.isArray(messages)
-      ? [...messages].reverse().find(m => m.role === 'user')
-      : null;
-    const userText = (lastUser && lastUser.content) || req.body?.prompt || '';
-    if (!userText || !userText.trim()) {
-      return res.status(400).json({ success: false, message: 'Missing prompt or messages' });
+    const lastUser = [...messages].reverse().find(m => m.role === 'user');
+    const userText = lastUser?.content || req.body?.prompt || '';
+    if (!userText.trim()) {
+      return res.status(400).json({ success: false, message: 'Missing prompt' });
     }
 
-    // 1) Truy xuất context
-    const sources = retrieveTopK(userText, 4, 1);   // tăng minScore lên 2 nếu muốn “gắt” hơn
+    // 1) Retrieve from local KB
+    let sources = retrieveTopK(userText, 4, 1);
+
+    // 2) If nothing relevant -> search web (only for healthcare topics)
+    if (sources.length === 0 && /clinic|doctor|hospital|health|medical|bác sĩ|phòng khám/i.test(userText)) {
+      const webResults = await searchWeb(userText, process.env.GOOGLE_API_KEY);
+      if (webResults.length > 0) {
+        sources = webResults;
+      }
+    }
+
     if (sources.length === 0) {
-      // Không có tài liệu liên quan -> từ chối ngay, không gọi model
       return res.json({ success: true, data: { text: OUT_OF_SCOPE, raw: null, citations: [] } });
     }
 
-    // 2) Dựng prompt khóa phạm vi
+    // 3) Build prompt
     const contextBlock = buildContextBlock(sources);
     const systemText = system || SYSTEM_POLICY;
-
     const base = 'https://generativelanguage.googleapis.com/v1beta';
-    // Khuyến nghị dùng model 2.5-flash (ổn định hơn 2.0)
     const model = 'models/gemini-2.5-flash:generateContent';
-    const url = `${base}/${model}?key=${apiKey}`;
+    const url = `${base}/${model}?key=${geminiKey}`;
 
-    // Chuyển lịch sử chat theo schema của Google (role optional; dùng parts)
     const historyParts = (Array.isArray(messages) ? messages : []).map(m => ({
       parts: [{ text: m.content }]
     }));
@@ -105,38 +139,29 @@ exports.geminiChat = async (req, res) => {
       ...historyParts,
       {
         parts: [{
-          text:
-`CONTEXT (chỉ dùng thông tin dưới đây):
+          text: `CONTEXT (use ONLY the info below):
 ${contextBlock}
 
-CÂU HỎI:
+USER QUESTION:
 ${userText}
 
-YÊU CẦU:
-- Trả lời ngắn gọn, rõ ràng.
-- Chèn trích dẫn theo [src:N] ngay sau câu/đoạn tương ứng.
-- Nếu không thể trả lời từ CONTEXT, trả CHÍNH XÁC câu: "${OUT_OF_SCOPE}".`
+INSTRUCTIONS:
+- Answer clearly and briefly.
+- Add citations like [src:N].
+- If still unrelated or unclear, reply EXACTLY: "${OUT_OF_SCOPE}".`
         }]
       }
     ];
 
-    const { data } = await axios.post(
-      url,
-      { contents },
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    const { data } = await axios.post(url, { contents }, {
+      headers: { 'Content-Type': 'application/json' }
+    });
 
-    const text = data?.candidates?.[0]?.content?.parts
-      ?.map(p => p.text)
-      ?.filter(Boolean)
-      ?.join('\n') || '';
-
-    // 3) Hậu kiểm: bắt buộc có citation hợp lệ hoặc là câu OUT_OF_SCOPE
+    const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text)?.join('\n') || '';
     const allowed = new Set(sources.map(s => String(s.idx)));
     const cites = Array.from(text.matchAll(/\[src:(\d+)\]/gi)).map(m => m[1]);
     const hasValidCitation = cites.some(c => allowed.has(String(c)));
     const isOut = text.trim() === OUT_OF_SCOPE;
-
     const finalText = (!hasValidCitation && !isOut) ? OUT_OF_SCOPE : text;
     const citeMap = sources.map(s => ({ idx: s.idx, title: s.title, url: s.url }));
 
