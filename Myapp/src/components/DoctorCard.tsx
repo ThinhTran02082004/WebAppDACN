@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   Image,
   StyleSheet,
+  ActivityIndicator,
   // Dimensions,
 } from 'react-native';
 import { Doctor } from '../services/api';
@@ -22,12 +23,24 @@ type Props = {
 
 export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertical = false }: Props) {
   console.log('Rendering DoctorCard with doctor:', doctor);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
+
   const handleConsultPress = () => {
     onConsultPress?.(doctor);
   };
 
   const handleCardPress = () => {
     onCardPress?.(doctor);
+  };
+
+  const handleImageLoad = () => {
+    setImageLoading(false);
+  };
+
+  const handleImageError = () => {
+    setImageLoading(false);
+    setImageError(true);
   };
 
   if (vertical) {
@@ -37,11 +50,26 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
         onPress={handleCardPress}
         activeOpacity={0.8}
       >
-        <Image
-          source={{ uri: doctor.user?.avatarUrl || 'https://placehold.co/160x120' }}
-          style={styles.avatarVertical}
-          defaultSource={{ uri: 'https://placehold.co/160x120' }}
-        />
+        <View style={styles.avatarContainerVertical}>
+          {imageLoading && (
+            <ActivityIndicator 
+              size="small" 
+              color="#0a84ff" 
+              style={styles.loadingIndicator}
+            />
+          )}
+          <Image
+            source={{ 
+              uri: imageError 
+                ? 'https://via.placeholder.com/160x120/0a84ff/ffffff?text=BS' 
+                : doctor.user?.avatarUrl || 'https://via.placeholder.com/160x120/0a84ff/ffffff?text=BS'
+            }}
+            style={styles.avatarVertical}
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+            resizeMode="cover"
+          />
+        </View>
 
         <View style={styles.verticalContent}>
           <Text style={styles.doctorNameVertical} numberOfLines={1}>
@@ -87,11 +115,26 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
     >
       <View style={styles.content}>
         <View style={styles.leftSection}>
-          <Image
-            source={{ uri: doctor.user?.avatarUrl || 'https://placehold.co/60x60' }}
-            style={styles.avatar}
-            defaultSource={{ uri: 'https://placehold.co/60x60' }}
-          />
+          <View style={styles.avatarContainer}>
+            {imageLoading && (
+              <ActivityIndicator 
+                size="small" 
+                color="#0a84ff" 
+                style={styles.loadingIndicator}
+              />
+            )}
+            <Image
+              source={{ 
+                uri: imageError 
+                  ? 'https://via.placeholder.com/60x60/0a84ff/ffffff?text=BS' 
+                  : doctor.user?.avatarUrl || 'https://via.placeholder.com/60x60/0a84ff/ffffff?text=BS'
+              }}
+              style={styles.avatar}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              resizeMode="cover"
+            />
+          </View>
         </View>
 
         <View style={styles.middleSection}>
@@ -138,7 +181,7 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     marginHorizontal: 16,
     marginBottom: 12,
@@ -159,11 +202,27 @@ const styles = StyleSheet.create({
   leftSection: {
     marginRight: 12,
   },
+  avatarContainer: {
+    position: 'relative',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#0a84ff',
+    backgroundColor: '#f0f0f0',
+  },
   avatar: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#f0f0f0',
+  },
+  loadingIndicator: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -10 }, { translateY: -10 }],
+    zIndex: 1,
   },
   middleSection: {
     flex: 1,
@@ -228,15 +287,22 @@ const styles = StyleSheet.create({
     width: 160,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     marginHorizontal: 0,
     marginBottom: 0,
     elevation: 3,
   },
-  avatarVertical: {
+  avatarContainerVertical: {
+    position: 'relative',
     width: '100%',
     height: 120,
     backgroundColor: '#f0f0f0',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  avatarVertical: {
+    width: '100%',
+    height: 120,
   },
   verticalContent: {
     padding: 12,

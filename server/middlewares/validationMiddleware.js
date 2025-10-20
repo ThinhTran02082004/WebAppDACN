@@ -132,7 +132,30 @@ exports.validateDateOfBirth = (req, res, next) => {
     });
   }
   
-  const dob = new Date(dateOfBirth);
+  let dob;
+  
+  // Kiểm tra format DD/MM/YYYY
+  if (dateOfBirth.includes('/')) {
+    const parts = dateOfBirth.split('/');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      const year = parseInt(parts[2], 10);
+      
+      // Tạo Date object với format YYYY-MM-DD
+      dob = new Date(year, month - 1, day);
+    } else {
+      return res.status(400).json({
+        success: false,
+        field: 'dateOfBirth',
+        message: 'Định dạng ngày sinh không hợp lệ. Vui lòng sử dụng DD/MM/YYYY'
+      });
+    }
+  } else {
+    // Thử parse trực tiếp
+    dob = new Date(dateOfBirth);
+  }
+  
   const now = new Date();
   
   if (isNaN(dob.getTime()) || dob > now) {
@@ -142,6 +165,19 @@ exports.validateDateOfBirth = (req, res, next) => {
       message: 'Ngày sinh không hợp lệ'
     });
   }
+  
+  // Kiểm tra tuổi hợp lệ (ít nhất 1 tuổi, tối đa 120 tuổi)
+  const age = now.getFullYear() - dob.getFullYear();
+  if (age < 1 || age > 120) {
+    return res.status(400).json({
+      success: false,
+      field: 'dateOfBirth',
+      message: 'Tuổi phải từ 1 đến 120 tuổi'
+    });
+  }
+  
+  // Cập nhật dateOfBirth với format chuẩn
+  req.body.dateOfBirth = dob;
   
   next();
 };

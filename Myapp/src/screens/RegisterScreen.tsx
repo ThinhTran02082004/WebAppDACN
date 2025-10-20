@@ -44,12 +44,52 @@ export default function RegisterScreen({ navigation }: Props) {
     agreeToTerms: false,
   });
 
+  // Hàm validate ngày sinh
+  const validateDateOfBirth = (dateStr: string): string => {
+    if (!dateStr || dateStr.length !== 10) return '';
+    
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) return '❌ Định dạng không hợp lệ';
+    
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const year = parseInt(parts[2], 10);
+    
+    // Kiểm tra ngày hợp lệ
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return '❌ Định dạng không hợp lệ';
+    if (day < 1 || day > 31) return '❌ Ngày không hợp lệ';
+    if (month < 1 || month > 12) return '❌ Tháng không hợp lệ';
+    if (year < 1900 || year > new Date().getFullYear()) return '❌ Năm không hợp lệ';
+    
+    // Kiểm tra ngày có tồn tại không
+    const date = new Date(year, month - 1, day);
+    if (date.getDate() !== day || date.getMonth() !== month - 1 || date.getFullYear() !== year) {
+      return '❌ Ngày không tồn tại';
+    }
+    
+    // Kiểm tra tuổi
+    const now = new Date();
+    const age = now.getFullYear() - year;
+    if (age < 1) return '❌ Tuổi phải từ 1 tuổi trở lên';
+    if (age > 120) return '❌ Tuổi không được vượt quá 120';
+    
+    return '✅ Ngày sinh hợp lệ';
+  };
+
   const handleNextStep = () => {
     if (step === 1) {
       if (!userData.fullName || !userData.dateOfBirth || !userData.gender) {
         Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin bắt buộc');
         return;
       }
+      
+      // Kiểm tra ngày sinh có hợp lệ không
+      const dateValidation = validateDateOfBirth(userData.dateOfBirth);
+      if (dateValidation && !dateValidation.includes('✅')) {
+        Alert.alert('Lỗi', 'Vui lòng nhập ngày sinh hợp lệ');
+        return;
+      }
+      
       setStep(2);
     }
   };
@@ -63,6 +103,9 @@ export default function RegisterScreen({ navigation }: Props) {
   const { signUp } = useAuth();
 
   const handleRegister = async () => {
+    console.log('Register button pressed');
+    console.log('User data:', userData);
+    
     if (!userData.email || !userData.phoneNumber || !userData.password || !userData.confirmPassword) {
       Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
       return;
@@ -78,8 +121,17 @@ export default function RegisterScreen({ navigation }: Props) {
       return;
     }
 
+    // Kiểm tra ngày sinh trước khi gửi
+    const dateValidation = validateDateOfBirth(userData.dateOfBirth);
+    if (dateValidation && !dateValidation.includes('')) {
+      Alert.alert('Lỗi', 'Vui lòng nhập ngày sinh hợp lệ');
+      return;
+    }
+
     try {
       setLoading(true);
+      console.log('Sending registration data...');
+      
       await signUp({
         fullName: userData.fullName,
         email: userData.email,
@@ -89,19 +141,21 @@ export default function RegisterScreen({ navigation }: Props) {
         gender: userData.gender,
         address: userData.address,
       });
+      
+      console.log('Registration successful');
       Alert.alert('Thành công', 'Đăng ký thành công!', [
         { text: 'OK', onPress: () => navigation.navigate('Login') }
       ]);
     } catch (error: any) {
+      console.error('Registration error:', error);
       Alert.alert('Lỗi', error.message || 'Đăng ký thất bại');
     } finally {
       setLoading(false);
     }
   };
 
-  const updateUserData = (field: keyof UserData, value: string | boolean) => {
+  const updateUserData = (field: keyof UserData, value: string | boolean) =>
     setUserData(prev => ({ ...prev, [field]: value }));
-  };
 
   const renderStep1 = () => (
     <View style={styles.form}>
@@ -123,8 +177,34 @@ export default function RegisterScreen({ navigation }: Props) {
           style={styles.input}
           placeholder="DD/MM/YYYY"
           value={userData.dateOfBirth}
-          onChangeText={(value) => updateUserData('dateOfBirth', value)}
+          onChangeText={(value) => {
+            // Tự động format ngày sinh
+            let formatted = value.replace(/[^0-9]/g, ''); // Chỉ giữ lại số
+            
+            // Tự động thêm dấu / sau 2 và 4 ký tự
+            if (formatted.length >= 3) {
+              formatted = formatted.substring(0, 2) + '/' + formatted.substring(2);
+            }
+            if (formatted.length >= 6) {
+              formatted = formatted.substring(0, 5) + '/' + formatted.substring(5, 9);
+            }
+            
+            // Giới hạn độ dài
+            if (formatted.length > 10) {
+              formatted = formatted.substring(0, 10);
+            }
+            
+            updateUserData('dateOfBirth', formatted);
+          }}
+          keyboardType="numeric"
+          maxLength={10}
         />
+        <Text style={styles.helperText}>Ví dụ: 15/03/1990</Text>
+        {userData.dateOfBirth && userData.dateOfBirth.length === 10 && (
+          <Text style={styles.validationText}>
+            {validateDateOfBirth(userData.dateOfBirth)}
+          </Text>
+        )}
       </View>
 
       <View style={styles.inputContainer}>
@@ -140,9 +220,7 @@ export default function RegisterScreen({ navigation }: Props) {
             <Text style={[
               styles.genderButtonText,
               userData.gender === 'male' && styles.genderButtonTextSelected
-            ]}>
-              Nam
-            </Text>
+            ]}>Nam</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
@@ -154,18 +232,28 @@ export default function RegisterScreen({ navigation }: Props) {
             <Text style={[
               styles.genderButtonText,
               userData.gender === 'female' && styles.genderButtonTextSelected
-            ]}>
-              Nữ
-            </Text>
+            ]}>Nữ</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.genderButton,
+              userData.gender === 'other' && styles.genderButtonSelected
+            ]}
+            onPress={() => updateUserData('gender', 'other')}
+          >
+            <Text style={[
+              styles.genderButtonText,
+              userData.gender === 'other' && styles.genderButtonTextSelected
+            ]}>Khác</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.inputContainer}>
-        <Text style={styles.label}>Địa chỉ (không bắt buộc)</Text>
+        <Text style={styles.label}>Địa chỉ</Text>
         <TextInput
           style={styles.input}
-          placeholder="Nhập địa chỉ"
+          placeholder="Nhập địa chỉ (tùy chọn)"
           value={userData.address}
           onChangeText={(value) => updateUserData('address', value)}
         />
@@ -179,7 +267,7 @@ export default function RegisterScreen({ navigation }: Props) {
 
   const renderStep2 = () => (
     <View style={styles.form}>
-      <Text style={styles.stepTitle}>Bước 2: Thông tin tài khoản</Text>
+      <Text style={styles.stepTitle}>Bước 2: Thông tin đăng nhập</Text>
       
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Email *</Text>
@@ -216,7 +304,7 @@ export default function RegisterScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.inputContainer}>
-        <Text style={styles.label}>Nhập lại mật khẩu *</Text>
+        <Text style={styles.label}>Xác nhận mật khẩu *</Text>
         <TextInput
           style={styles.input}
           placeholder="Nhập lại mật khẩu"
@@ -226,29 +314,43 @@ export default function RegisterScreen({ navigation }: Props) {
         />
       </View>
 
-      <TouchableOpacity
-        style={styles.termsContainer}
-        onPress={() => updateUserData('agreeToTerms', !userData.agreeToTerms)}
-      >
-        <View style={[styles.checkbox, userData.agreeToTerms && styles.checkboxChecked]}>
-          {userData.agreeToTerms && <Text style={styles.checkmark}>✓</Text>}
-        </View>
+      <View style={styles.termsContainer}>
+        <TouchableOpacity
+          style={styles.checkbox}
+          onPress={() => updateUserData('agreeToTerms', !userData.agreeToTerms)}
+        >
+          <Text style={styles.checkboxText}>
+            {userData.agreeToTerms ? '☑' : '☐'}
+          </Text>
+        </TouchableOpacity>
         <Text style={styles.termsText}>
-          Tôi đồng ý với <Text style={styles.termsLink}>điều khoản sử dụng</Text>
+          Tôi đồng ý với{' '}
+          <Text style={styles.termsLink}>điều khoản sử dụng</Text>
         </Text>
-      </TouchableOpacity>
+      </View>
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.backButton} onPress={handleBackStep}>
           <Text style={styles.backButtonText}>Quay lại</Text>
         </TouchableOpacity>
-        
         <TouchableOpacity
-          style={[styles.registerButton, loading && styles.registerButtonDisabled]}
-          onPress={handleRegister}
-          disabled={loading}
+          style={[
+            styles.registerButton, 
+            loading && styles.registerButtonDisabled,
+            !userData.agreeToTerms && styles.registerButtonDisabled
+          ]}
+          onPress={() => {
+            console.log('Register button onPress triggered');
+            console.log('Loading state:', loading);
+            console.log('Agree to terms:', userData.agreeToTerms);
+            handleRegister();
+          }}
+          disabled={loading || !userData.agreeToTerms}
         >
-          <Text style={styles.registerButtonText}>
+          <Text style={[
+            styles.registerButtonText,
+            (!userData.agreeToTerms || loading) && styles.registerButtonTextDisabled
+          ]}>
             {loading ? 'Đang đăng ký...' : 'Đăng ký'}
           </Text>
         </TouchableOpacity>
@@ -268,7 +370,7 @@ export default function RegisterScreen({ navigation }: Props) {
             style={styles.logo}
           />
           <Text style={styles.title}>Đăng ký tài khoản</Text>
-          <Text style={styles.subtitle}>Tạo tài khoản để sử dụng dịch vụ</Text>
+          <Text style={styles.subtitle}>Tạo tài khoản mới để sử dụng dịch vụ</Text>
         </View>
 
         <View style={styles.stepIndicator}>
@@ -302,7 +404,6 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 30,
-    marginTop: 20,
   },
   logo: {
     width: 80,
@@ -339,7 +440,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 2,
     backgroundColor: '#e0e0e0',
-    marginHorizontal: 8,
+    marginHorizontal: 10,
   },
   stepLineActive: {
     backgroundColor: '#0a84ff',
@@ -371,9 +472,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
+  helperText: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  validationText: {
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '500',
+  },
   genderContainer: {
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
   },
   genderButton: {
     flex: 1,
@@ -381,6 +493,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    marginHorizontal: 4,
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
@@ -389,11 +502,24 @@ const styles = StyleSheet.create({
     borderColor: '#0a84ff',
   },
   genderButtonText: {
-    fontSize: 16,
     color: '#333',
+    fontSize: 16,
+    fontWeight: '500',
   },
   genderButtonTextSelected: {
     color: '#fff',
+  },
+  nextButton: {
+    backgroundColor: '#0a84ff',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  nextButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   termsContainer: {
     flexDirection: 'row',
@@ -401,28 +527,21 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   checkbox: {
-    width: 20,
-    height: 20,
+    width: 24,
+    height: 24,
     borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    marginRight: 12,
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 8,
   },
-  checkboxChecked: {
-    backgroundColor: '#0a84ff',
-    borderColor: '#0a84ff',
-  },
-  checkmark: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+  checkboxText: {
+    fontSize: 16,
   },
   termsText: {
     flex: 1,
+    color: '#333',
     fontSize: 14,
-    color: '#666',
   },
   termsLink: {
     color: '#0a84ff',
@@ -430,18 +549,8 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     gap: 12,
-  },
-  nextButton: {
-    backgroundColor: '#0a84ff',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  nextButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   backButton: {
     flex: 1,
@@ -471,6 +580,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  registerButtonTextDisabled: {
+    color: '#999',
   },
   footer: {
     flexDirection: 'row',

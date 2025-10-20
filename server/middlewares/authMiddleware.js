@@ -29,14 +29,12 @@ exports.protect = async (req, res, next) => {
       // Xác thực token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       console.log('Decoded token:', decoded); // Log thông tin decoded token để gỡ lỗi
-      console.log('Auth token raw (first 50 chars):', token.substring(0, 50));
 
       // Xác định loại tài khoản dựa vào role trong token
       let user;
       
       // Luôn lấy thông tin từ User model trước
-      user = await User.findById(decoded.id).select('-passwordHash');
-      console.log('User lookup by id returned:', user ? { id: user._id, email: user.email } : null);
+        user = await User.findById(decoded.id).select('-passwordHash');
       
       if (!user) {
         return res.status(401).json({
@@ -48,6 +46,7 @@ exports.protect = async (req, res, next) => {
       // Gán thông tin role từ token vào req.user
       req.user = user;
       req.user.role = decoded.role;
+      req.user.id = user._id; // Thêm id field để tương thích với code cũ
       next();
     } catch (error) {
       return res.status(401).json({

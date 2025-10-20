@@ -89,12 +89,24 @@ android {
             abiFilters "arm64-v8a", "armeabi-v7a"
         }
     }
+    // Resolve keystore values from gradle.properties (with safe defaults for local dev)
+    def keystoreStoreFile = project.findProperty('MYAPP_UPLOAD_STORE_FILE') ?: 'upload-keystore.jks'
+    def keystoreStorePassword = project.findProperty('MYAPP_UPLOAD_STORE_PASSWORD') ?: ''
+    def keystoreKeyAlias = project.findProperty('MYAPP_UPLOAD_KEY_ALIAS') ?: 'upload'
+    def keystoreKeyPassword = project.findProperty('MYAPP_UPLOAD_KEY_PASSWORD') ?: ''
+
     signingConfigs {
         debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+            storeFile file(keystoreStoreFile)
+            storePassword keystoreStorePassword
+            keyAlias keystoreKeyAlias
+            keyPassword keystoreKeyPassword
+        }
+        release {
+            storeFile file(keystoreStoreFile)
+            storePassword keystoreStorePassword
+            keyAlias keystoreKeyAlias
+            keyPassword keystoreKeyPassword
         }
     }
     buildTypes {
@@ -102,9 +114,7 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

@@ -847,7 +847,7 @@ exports.socialLoginFailure = (req, res) => {
 // Google token verification
 exports.googleTokenVerification = async (req, res) => {
   try {
-    const { token, tokenType } = req.body;
+    const { token } = req.body;
     if (!token) {
       return res.status(400).json({
         success: false,
@@ -855,44 +855,19 @@ exports.googleTokenVerification = async (req, res) => {
       });
     }
 
-    let userData = null;
+    // Verify token with Google's API
+    const response = await axios.get(`https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=${token}`);
+    const userData = response.data;
 
-    try {
-      if (tokenType && tokenType === 'accessToken') {
-        // Verify access token by calling Google userinfo endpoint
-        const response = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        userData = response.data; // contains sub, email, name, picture, email_verified
-      } else {
-        // Default: treat token as id_token and verify
-        const response = await axios.get(`https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=${token}`);
-        userData = response.data; // contains sub, email, email_verified, name, picture
-      }
-    } catch (googleError) {
-      console.error('Google token verification failed:', googleError.response?.data || googleError.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Token Google không hợp lệ hoặc đã hết hạn'
-      });
-    }
-
-    if (!userData) {
-      return res.status(400).json({ success: false, message: 'Không thể lấy thông tin người dùng từ Google' });
-    }
-
-    if (userData.email_verified === false) {
+    if (!userData.email_verified) {
       return res.status(400).json({
         success: false,
         message: 'Email Google chưa được xác thực'
       });
     }
 
-    // Normalize fields: some endpoints use 'sub' for id and some use 'id'
-    const googleId = userData.sub || userData.id;
-
     // Check if user exists with this Google ID or email
-    let user = await User.findOne({ googleId: googleId });
+    let user = await User.findOne({ googleId: userData.sub });
     let isNewUser = false;
     
     if (!user) {
@@ -901,7 +876,7 @@ exports.googleTokenVerification = async (req, res) => {
       
       if (user) {
         // Link Google account to existing user
-        user.googleId = googleId;
+        user.googleId = userData.sub;
         user.authProvider = 'google';
         user.isVerified = true;
         if (!user.avatarUrl && userData.picture) {
@@ -912,7 +887,7 @@ exports.googleTokenVerification = async (req, res) => {
         // Create new user
         isNewUser = true;
         user = await User.create({
-          googleId: googleId,
+          googleId: userData.sub,
           email: userData.email,
           fullName: userData.name || 'Google User',
           authProvider: 'google',
@@ -931,8 +906,6 @@ exports.googleTokenVerification = async (req, res) => {
 
     // Generate JWT token
     const jwtToken = await generateToken(user._id);
-    // Debug log: print user id/email and token preview
-    console.log('Google login completed for user:', { id: user._id, email: user.email });
 
     // Return user data with token
     return res.status(200).json({

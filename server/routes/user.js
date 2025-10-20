@@ -39,9 +39,6 @@ router.post('/login', login);
 // GET /api/auth/profile - Get current user profile
 router.get('/profile', protect, userController.getUserProfile);
 
-// Compatibility route: GET /api/auth/me - return current user (some clients expect /me)
-router.get('/me', protect, userController.getUserProfile);
-
 // PUT /api/auth/profile - Update user profile
 router.put('/profile', protect, userController.updateUserProfile);
 

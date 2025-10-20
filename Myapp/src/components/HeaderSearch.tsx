@@ -46,20 +46,34 @@ export default function HeaderSearch({ userName, isLoggedIn = false, avatarUrl }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    backgroundColor: '#fff',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    padding: 12,
+    backgroundColor: '#E3F2FD', // Light blue background
+    paddingTop: 40, // Reduced padding for status bar
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 5,
   },
   avatarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    marginTop: 30, 
+    marginBottom: 8,
+    marginTop: 0, 
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
     backgroundColor: '#eee',
   },
   greeting: {

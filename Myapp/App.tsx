@@ -13,6 +13,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { setApiHost, initApiHostFromStorage, clearApiHost, API_BASE } from './src/config';
 import { apiService } from './src/services/api';
 import Toast from 'react-native-toast-message';
+import { configureGoogleSignIn } from './src/config/googleConfig';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -23,7 +24,7 @@ function App() {
       // Force clear any cached configuration to ensure we use the correct IP
       await clearApiHost();
       // Set the correct IP address
-      setApiHost('10.0.188.228', '5000');
+      setApiHost('10.0.242.205', '5000');
       // ensure apiService uses the current API_BASE after load/default
       try {
         const baseUrl = typeof API_BASE === 'function' ? API_BASE() : API_BASE as any;
@@ -33,6 +34,15 @@ function App() {
         console.error('[App] Failed to set API base URL:', error);
       }
     })();
+  }, []);
+
+  // Configure Google Sign-In once on app start
+  React.useEffect(() => {
+    try {
+      configureGoogleSignIn();
+    } catch (e) {
+      console.warn('Google Sign-In configuration failed', e);
+    }
   }, []);
 
   return (

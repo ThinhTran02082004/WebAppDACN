@@ -85,7 +85,7 @@ export default function AccountScreen() {
           </View>
           
           <Text style={styles.userName}>
-            {user ? `${user.id || 'ID'}_ ${user.fullName || user.email}` : 'Guest User'}
+            {user ? (user.fullName || user.email || 'User') : 'Guest User'}
           </Text>
           
           {user ? (

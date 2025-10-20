@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           apiService.setToken(token);
           // Optionally fetch current user
           const res = await apiService.getCurrentUser();
-          if (res.success) setUser(res.data.user || null);
+          if (res.success) setUser(res.data || null);
         }
       } catch {
         // ignore
@@ -51,7 +51,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         // fetch user
         const me = await apiService.getCurrentUser();
-        if (me.success) setUser(me.data.user || null);
+        if (me.success) setUser(me.data || null);
       } else {
         // server sometimes returns needVerification flag
         const err: any = new Error((res as any)?.message || 'Login failed');
@@ -82,7 +82,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (rememberMe) await AsyncStorage.setItem('token', res.data.token);
         apiService.setToken(res.data.token);
         const me = await apiService.getCurrentUser();
-        if (me.success) setUser(me.data.user || null);
+        if (me.success) setUser(me.data || null);
       } else {
         throw new Error(res.message || 'Google login failed');
       }

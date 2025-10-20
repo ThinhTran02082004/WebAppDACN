@@ -378,7 +378,7 @@ class ApiService {
 
   async getCurrentUser(): Promise<ApiResponse<any>> {
     try {
-      const res = await this.client.get('/auth/me');
+      const res = await this.client.get('/auth/profile');
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);

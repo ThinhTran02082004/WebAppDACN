@@ -88,7 +88,9 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 0, 
+    marginTop: 30,
+    padding: 0,
+    paddingTop: 16, // Increased padding top
     marginHorizontal: 16,
     marginBottom: 16,
     elevation: 3,
@@ -105,7 +107,7 @@ const styles = StyleSheet.create({
   item: {
     width: ITEM_WIDTH,
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 24, // Increased padding vertical
     marginRight: 1, 
   },
   title: {

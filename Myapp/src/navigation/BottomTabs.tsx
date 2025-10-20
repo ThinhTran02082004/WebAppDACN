@@ -1,7 +1,5 @@
 import React from 'react';
-import { Text, View, TouchableOpacity, Alert, Image } from 'react-native';
-// import { API_BASE, setApiHost, clearApiHost } from '../config';
-// import { apiService } from '../services/api';
+import { Text, View, TouchableOpacity, Alert, Image, ScrollView, StyleSheet } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -11,8 +9,10 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 
 function NotificationsScreen() {
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Thông báo</Text>
+    <View style={styles.container}>
+      <View style={styles.content}>
+        <Text>Thông báo</Text>
+      </View>
     </View>
   );
 }
@@ -53,3 +53,15 @@ export default function BottomTabs() {
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f7f7f7',
+  },
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

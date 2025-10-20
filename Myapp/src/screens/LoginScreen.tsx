@@ -17,6 +17,14 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { GOOGLE_CLIENT_ID } from '../config';
 
+// Configure once at module load using the shared config value
+GoogleSignin.configure({
+  webClientId: GOOGLE_CLIENT_ID,
+  offlineAccess: true,
+  hostedDomain: '',
+  forceCodeForRefreshToken: true,
+});
+
 type Props = {
   navigation: any;
 };
@@ -30,16 +38,7 @@ export default function LoginScreen({ navigation }: Props) {
   const { signIn } = useAuth();
   const { signInWithGoogle } = useAuth();
 
-  // Configure Google Signin once
-  try {
-    GoogleSignin.configure({
-      webClientId: GOOGLE_CLIENT_ID,
-      offlineAccess: false,
-    });
-  } catch (error) {
-    console.warn('Google Sign-In configuration failed:', error);
-    // ignore if already configured
-  }
+  // Google Sign-In already configured above
 
   const handleLogin = async () => {
     if (!email || !password) {

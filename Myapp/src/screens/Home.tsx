@@ -279,12 +279,17 @@ export default function Home({ navigation }: Props) {
   console.log('Home render - doctors:', doctors?.length);
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       <HeaderSearch 
         userName={userName} 
         isLoggedIn={isLoggedIn}
         avatarUrl={user?.avatarUrl}
       />
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
 
       <QuickAccess 
         items={quickAccessItems} 
@@ -430,7 +435,8 @@ export default function Home({ navigation }: Props) {
           ))}
         </ScrollView>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -438,6 +444,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f7f7f7',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 120, // Reduced space for smaller fixed header
   },
   sectionBlock: {
     marginTop: 16,
