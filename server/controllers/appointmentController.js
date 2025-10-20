@@ -2566,10 +2566,9 @@ exports.getAppointmentDetailAdmin = async (req, res) => {
         ]
       })
       .populate('hospitalId', 'name address contactInfo workingHours imageUrl image')
+      .populate('specialtyId', 'name description')
       .populate('serviceId', 'name price description')
-      .populate('roomId', 'name number floor')
-      .populate('createdBy', 'fullName email')
-      .populate('updatedBy', 'fullName email');
+      .populate('roomId', 'name number floor');
 
     if (!appointment) {
       return res.status(404).json({

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FaVideo, FaUsers, FaClock, FaCheckCircle, 
+import {
+  FaVideo, FaUsers, FaClock, FaCheckCircle,
   FaTimesCircle, FaSpinner, FaSync, FaTrash,
-  FaEye, FaUserTimes
+  FaEye, FaUserTimes, FaSignInAlt
 } from 'react-icons/fa';
 import api from '../../utils/api';
 import { toast } from 'react-toastify';
 import moment from 'moment';
 import 'moment/locale/vi';
+import VideoRoom from '../../components/VideoRoom/VideoRoom';
 
 moment.locale('vi');
 
@@ -22,6 +23,10 @@ const VideoRoomManagement = () => {
     pages: 1,
     total: 0
   });
+
+  // State for video room
+  const [showVideoRoom, setShowVideoRoom] = useState(false);
+  const [selectedRoomId, setSelectedRoomId] = useState(null);
 
   useEffect(() => {
     fetchRooms();
@@ -96,7 +101,7 @@ const VideoRoomManagement = () => {
         roomName,
         participantIdentity
       });
-      
+
       if (response.data.success) {
         toast.success('Đã xóa người tham gia');
         fetchActiveLiveKitRooms();
@@ -104,6 +109,39 @@ const VideoRoomManagement = () => {
     } catch (error) {
       console.error('Error removing participant:', error);
       toast.error('Không thể xóa người tham gia');
+    }
+  };
+
+  const handleJoinRoom = (roomId) => {
+    setSelectedRoomId(roomId);
+    setShowVideoRoom(true);
+  };
+
+  const handleJoinLiveKitRoom = async (roomName) => {
+    try {
+      // First, find the room in database by roomName
+      const roomResponse = await api.get(`/video-rooms?page=1&limit=100`);
+      if (roomResponse.data.success) {
+        const room = roomResponse.data.data.find(r => r.roomName === roomName);
+        if (room) {
+          handleJoinRoom(room._id);
+        } else {
+          toast.error('Không tìm thấy phòng trong database');
+        }
+      }
+    } catch (error) {
+      console.error('Error finding room:', error);
+      toast.error('Không thể tìm phòng');
+    }
+  };
+
+  const handleCloseVideoRoom = () => {
+    setShowVideoRoom(false);
+    setSelectedRoomId(null);
+    // Refresh rooms after closing
+    fetchRooms();
+    if (activeTab === 'livekit') {
+      fetchActiveLiveKitRooms();
     }
   };
 
@@ -134,6 +172,17 @@ const VideoRoomManagement = () => {
     }
     return `${mins} phút`;
   };
+
+  // Show video room if active
+  if (showVideoRoom && selectedRoomId) {
+    return (
+      <VideoRoom
+        roomId={selectedRoomId}
+        onClose={handleCloseVideoRoom}
+        userRole="admin"
+      />
+    );
+  }
 
   return (
     <div className="p-6">
@@ -281,13 +330,23 @@ const VideoRoomManagement = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <div className="flex items-center space-x-2">
                               {room.status === 'active' && (
-                                <button
-                                  onClick={() => handleEndRoom(room._id)}
-                                  className="text-red-600 hover:text-red-900"
-                                  title="Kết thúc phòng"
-                                >
-                                  <FaTimesCircle />
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => handleJoinRoom(room._id)}
+                                    className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 flex items-center text-xs"
+                                    title="Tham gia phòng"
+                                  >
+                                    <FaSignInAlt className="mr-1" />
+                                    Tham gia
+                                  </button>
+                                  <button
+                                    onClick={() => handleEndRoom(room._id)}
+                                    className="text-red-600 hover:text-red-900"
+                                    title="Kết thúc phòng"
+                                  >
+                                    <FaTimesCircle />
+                                  </button>
+                                </>
                               )}
                               <button
                                 className="text-blue-600 hover:text-blue-900"
@@ -339,7 +398,7 @@ const VideoRoomManagement = () => {
                   {activeRooms.map((room) => (
                     <div key={room.sid} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex justify-between items-start mb-3">
-                        <div>
+                        <div className="flex-1">
                           <h4 className="font-semibold text-gray-900">{room.name}</h4>
                           <p className="text-sm text-gray-500">
                             SID: {room.sid}
@@ -348,11 +407,19 @@ const VideoRoomManagement = () => {
                             Tạo lúc: {moment(room.creationTime * 1000).format('HH:mm:ss DD/MM/YYYY')}
                           </p>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-3">
                           <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
                             <FaUsers className="mr-1" />
                             {room.numParticipants} người
                           </span>
+                          <button
+                            onClick={() => handleJoinLiveKitRoom(room.name)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center text-sm"
+                            title="Tham gia phòng với quyền Admin"
+                          >
+                            <FaSignInAlt className="mr-2" />
+                            Tham gia
+                          </button>
                         </div>
                       </div>
 

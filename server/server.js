@@ -170,8 +170,8 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/medications', medicationRoutes);
 app.use('/api/doctor-auth', doctorAuthRoutes);
-app.use('/api', medicalRecordRoutes);
 app.use('/api/video-rooms', videoRoomRoutes);
+app.use('/api/medical-records', medicalRecordRoutes);
 
 
 

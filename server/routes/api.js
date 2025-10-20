@@ -12,7 +12,6 @@ const couponRoutes = require('./couponRoutes');
 const paymentRoutes = require('./paymentRoutes');
 const reviewRoutes = require('./reviewRoutes');
 const hospitalReviewRoutes = require('./hospitalReviewRoutes');
-const medicalRecordRoutes = require('./medicalRecordRoutes');
 const { getProvinces } = require('../controllers/hospitalController');
 
 // Đăng ký các routes
@@ -26,7 +25,6 @@ router.use('/coupons', couponRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/', hospitalReviewRoutes);
 router.use('/', paymentRoutes);
-router.use('/medical-records', medicalRecordRoutes);
 
 // Thêm route cho provinces
 router.get('/provinces', getProvinces);
