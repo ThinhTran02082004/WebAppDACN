@@ -58,17 +58,19 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
               style={styles.loadingIndicator}
             />
           )}
-          <Image
-            source={{ 
-              uri: imageError 
-                ? 'https://via.placeholder.com/160x120/0a84ff/ffffff?text=BS' 
-                : doctor.user?.avatarUrl || 'https://via.placeholder.com/160x120/0a84ff/ffffff?text=BS'
-            }}
-            style={styles.avatarVertical}
-            onLoad={handleImageLoad}
-            onError={handleImageError}
-            resizeMode="cover"
-          />
+          {imageError || !doctor.user?.avatarUrl ? (
+            <View style={styles.defaultAvatarVertical}>
+              <Ionicons name="person" size={50} color="#0a84ff" />
+            </View>
+          ) : (
+            <Image
+              source={{ uri: doctor.user.avatarUrl }}
+              style={styles.avatarVertical}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              resizeMode="cover"
+            />
+          )}
         </View>
 
         <View style={styles.verticalContent}>
@@ -123,17 +125,19 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
                 style={styles.loadingIndicator}
               />
             )}
-            <Image
-              source={{ 
-                uri: imageError 
-                  ? 'https://via.placeholder.com/60x60/0a84ff/ffffff?text=BS' 
-                  : doctor.user?.avatarUrl || 'https://via.placeholder.com/60x60/0a84ff/ffffff?text=BS'
-              }}
-              style={styles.avatar}
-              onLoad={handleImageLoad}
-              onError={handleImageError}
-              resizeMode="cover"
-            />
+            {imageError || !doctor.user?.avatarUrl ? (
+              <View style={styles.defaultAvatar}>
+                <Ionicons name="person" size={30} color="#0a84ff" />
+              </View>
+            ) : (
+              <Image
+                source={{ uri: doctor.user.avatarUrl }}
+                style={styles.avatar}
+                onLoad={handleImageLoad}
+                onError={handleImageError}
+                resizeMode="cover"
+              />
+            )}
           </View>
         </View>
 
@@ -216,6 +220,16 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
+  },
+  defaultAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#f0f8ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#0a84ff',
   },
   loadingIndicator: {
     position: 'absolute',
@@ -303,6 +317,15 @@ const styles = StyleSheet.create({
   avatarVertical: {
     width: '100%',
     height: 120,
+  },
+  defaultAvatarVertical: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#f0f8ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   verticalContent: {
     padding: 12,

@@ -173,15 +173,16 @@ exports.login = async (req, res) => {
       userModel = User;
     }
     
-    // Tìm user theo email
-    user = await userModel.findOne({ email });
+    // Tìm user theo email (case insensitive)
+    user = await userModel.findOne({ email: email.toLowerCase() });
     
     // Kiểm tra nếu user không tồn tại
     if (!user) {
+      console.log('User not found for email:', email);
       return res.status(401).json({
         success: false,
         field: 'email',
-        message: 'Tài khoản hoặc mật khẩu không chính xác  '
+        message: 'Tài khoản hoặc mật khẩu không chính xác'
       });
     }
     
@@ -220,8 +221,12 @@ exports.login = async (req, res) => {
     }
     
     // Kiểm tra mật khẩu
+    console.log('Checking password for user:', user.email);
     const isPasswordCorrect = await user.comparePassword(password);
+    console.log('Password check result:', isPasswordCorrect);
+    
     if (!isPasswordCorrect) {
+      console.log('Password incorrect for user:', user.email);
       return res.status(401).json({
         success: false,
         field: 'password',

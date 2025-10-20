@@ -116,7 +116,23 @@ const userSchema = new mongoose.Schema({
 
 // Phương thức so sánh mật khẩu
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.passwordHash);
+  try {
+    console.log('Comparing password for user:', this.email);
+    console.log('Password hash exists:', !!this.passwordHash);
+    console.log('Password hash length:', this.passwordHash ? this.passwordHash.length : 0);
+    
+    if (!this.passwordHash) {
+      console.log('No password hash found for user');
+      return false;
+    }
+    
+    const result = await bcrypt.compare(candidatePassword, this.passwordHash);
+    console.log('Password comparison result:', result);
+    return result;
+  } catch (error) {
+    console.error('Error comparing password:', error);
+    return false;
+  }
 };
 
 // Middleware hash mật khẩu trước khi lưu
@@ -126,10 +142,16 @@ userSchema.pre('save', async function(next) {
   }
   
   try {
-    const salt = await bcrypt.genSalt(10);
-    this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
+    // Chỉ hash nếu passwordHash tồn tại và chưa được hash
+    if (this.passwordHash && !this.passwordHash.startsWith('$2')) {
+      console.log('Hashing password for user:', this.email);
+      const salt = await bcrypt.genSalt(10);
+      this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
+      console.log('Password hashed successfully');
+    }
     next();
   } catch (error) {
+    console.error('Error hashing password:', error);
     next(error);
   }
 });

@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import ToastService from '../services/ToastService';
 
 export default function AccountScreen() {
   const { user, signOut } = useAuth();
@@ -26,9 +27,9 @@ export default function AccountScreen() {
         onPress: async () => {
           try {
             await signOut();
-            Alert.alert('Đã đăng xuất');
+            ToastService.show('success', 'Đăng xuất thành công', 'Bạn đã đăng xuất khỏi tài khoản');
           } catch (e: any) {
-            Alert.alert('Lỗi', e.message || 'Không thể đăng xuất');
+            ToastService.show('error', 'Lỗi đăng xuất', e.message || 'Không thể đăng xuất');
           }
         } 
       }

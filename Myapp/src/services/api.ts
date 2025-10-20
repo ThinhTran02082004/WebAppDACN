@@ -101,7 +101,7 @@ export interface ApiResponse<T> {
 
 class ApiService {
   // Increase default timeout to 15s to accommodate slower endpoints on dev machines
-  private client = axios.create({ baseURL: 'http://10.0.188.228:5000/api', headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
+  private client = axios.create({ baseURL: 'http://10.0.242.205:5000/api', headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
   // Cache last successful reachability check for a short period to avoid repeated probes
   private _lastReachableAt: number | null = null;
   private _reachabilityTtl = 30 * 1000; // 30 seconds

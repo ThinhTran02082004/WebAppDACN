@@ -229,33 +229,32 @@ export default function Home({ navigation }: Props) {
   const handleQuickAccessPress = (item: any) => {
     console.log('Quick access pressed:', item.title);
 
-    requireLogin(() => {
-      switch (item.id) {
-        case '1':
-          console.log('Navigate to facility booking');
-          break;
-        case '2':
-          console.log('Navigate to specialty booking');
-          break;
-        case '3':
-          console.log('Navigate to video call');
-          break;
-        case '4':
-          console.log('Navigate to doctor appointment');
-          break;
-        case '5':
-          console.log('Navigate to payment');
-          break;
-        case '6':
-          console.log('Navigate to news');
-          break;
-        case '7':
-          console.log('Navigate to services');
-          break;
-        default:
-          console.log('Unknown function');
-      }
-    });
+    // Bỏ yêu cầu đăng nhập - cho phép truy cập trực tiếp
+    switch (item.id) {
+      case '1':
+        console.log('Navigate to facility booking');
+        break;
+      case '2':
+        console.log('Navigate to specialty booking');
+        break;
+      case '3':
+        console.log('Navigate to video call');
+        break;
+      case '4':
+        console.log('Navigate to doctor appointment');
+        break;
+      case '5':
+        console.log('Navigate to payment');
+        break;
+      case '6':
+        console.log('Navigate to news');
+        break;
+      case '7':
+        console.log('Navigate to services');
+        break;
+      default:
+        console.log('Unknown function');
+    }
   };
 
   const handleFacilityPress = (facility: Hospital) => {
@@ -299,7 +298,7 @@ export default function Home({ navigation }: Props) {
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Chi nhánh</Text>
-          <TouchableOpacity onPress={() => console.log('View all facilities')}>
+          <TouchableOpacity onPress={() => navigation.navigate('FacilityList')}>
             <Text style={styles.viewAllText}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>
@@ -315,7 +314,7 @@ export default function Home({ navigation }: Props) {
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Chuyên khoa</Text>
-          <TouchableOpacity onPress={() => console.log('View all specialties')}>
+          <TouchableOpacity onPress={() => navigation.navigate('SpecialtyList')}>
             <Text style={styles.viewAllText}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>
@@ -346,7 +345,7 @@ export default function Home({ navigation }: Props) {
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Dịch vụ</Text>
-          <TouchableOpacity onPress={() => console.log('View all services')}>
+          <TouchableOpacity onPress={() => navigation.navigate('ServiceList')}>
             <Text style={styles.viewAllText}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>
@@ -385,7 +384,7 @@ export default function Home({ navigation }: Props) {
       <View style={styles.doctorsSection}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Danh sách bác sĩ</Text>
-          <TouchableOpacity onPress={() => console.log('View all doctors')}>
+          <TouchableOpacity onPress={() => navigation.navigate('DoctorList')}>
             <Text style={styles.viewAllText}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>

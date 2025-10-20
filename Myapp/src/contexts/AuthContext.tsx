@@ -59,8 +59,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw err;
       }
     } catch (e: any) {
-      // rethrow so UI can handle fields like needVerification
-      throw e;
+      // Handle different types of errors
+      if (e?.response?.data) {
+        // Server returned an error response
+        const serverError = e.response.data;
+        const err: any = new Error(serverError.message || 'Login failed');
+        if (serverError.needVerification) err.needVerification = true;
+        if (serverError.field) err.field = serverError.field;
+        throw err;
+      } else if (e?.message) {
+        // Network or other error
+        throw e;
+      } else {
+        // Unknown error
+        throw new Error('Đăng nhập thất bại');
+      }
     }
   };
 
