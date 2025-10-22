@@ -40,10 +40,15 @@ temp/
 # Android sensitive files
 *.keystore
 !debug.keystore
-google-services.json
+**/google-services.json
 *.jks
+*.der
+upload-keystore.jks
+myapp-signing.keystore
+new-myapp.keystore
+upload_cert.der
 
 # iOS sensitive files
-GoogleService-Info.plist
-!GoogleService-Info.plist.example
+**/GoogleService-Info.plist
+!**/GoogleService-Info.plist.example
 
