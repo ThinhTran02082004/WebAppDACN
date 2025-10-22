@@ -6,46 +6,43 @@ const medicalRecordController = require('../controllers/medicalRecordController'
 // Tất cả routes yêu cầu xác thực
 router.use(protect);
 
-// GET /api/patients/:id/medical-records - Lấy hồ sơ bệnh án của bệnh nhân (cho cả bác sĩ và người dùng)
+// GET /api/medical-records/doctors/patients/:id/medical-records - Lấy hồ sơ bệnh án của bệnh nhân (cho cả bác sĩ và người dùng)
 router.get('/doctors/patients/:id/medical-records', medicalRecordController.getPatientMedicalRecords);
 
-// GET /api/doctors/patients/:id - Lấy thông tin bệnh nhân
+// GET /api/medical-records/doctors/patients/:id - Lấy thông tin bệnh nhân
 router.get('/doctors/patients/:id', medicalRecordController.getPatientInfo);
 
 // Get medical history for the logged-in user
-router.get('/history', protect, medicalRecordController.getMedicalHistory);
+router.get('/history', medicalRecordController.getMedicalHistory);
 
-// Get specific medical record by ID (accessible by the patient or doctor associated with the record)
-router.get('/:id', protect, medicalRecordController.getMedicalRecordById);
+// Admin only routes - must be before /:id route
+router.get(
+  '/all',
+  authorize('admin'),
+  medicalRecordController.getAllMedicalRecords
+);
 
 // Doctor and admin routes
 router.post(
-  '/', 
-  protect, 
-  authorize('doctor', 'admin'), 
+  '/',
+  authorize('doctor', 'admin'),
   medicalRecordController.createMedicalRecord
 );
 
 router.put(
-  '/:id', 
-  protect, 
-  authorize('doctor', 'admin'), 
+  '/:id',
+  authorize('doctor', 'admin'),
   medicalRecordController.updateMedicalRecord
 );
 
-// Admin only routes
-router.get(
-  '/all', 
-  protect, 
-  authorize('admin'), 
-  medicalRecordController.getAllMedicalRecords
-);
-
 router.delete(
-  '/:id', 
-  protect, 
-  authorize('admin'), 
+  '/:id',
+  authorize('admin'),
   medicalRecordController.deleteMedicalRecord
 );
+
+// Get specific medical record by ID - MUST BE LAST to avoid conflicts
+// (accessible by the patient or doctor associated with the record)
+router.get('/:id', medicalRecordController.getMedicalRecordById);
 
 module.exports = router; 

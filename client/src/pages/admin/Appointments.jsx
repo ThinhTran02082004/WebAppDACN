@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { FaEdit, FaSearch, FaFilter, FaDownload, FaCalendarAlt, FaUserMd, FaUser, FaHospital } from 'react-icons/fa';
+import { FaEdit, FaSearch, FaFilter, FaDownload, FaCalendarAlt, FaUserMd, FaUser, FaHospital, FaEye } from 'react-icons/fa';
+import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import { toast } from 'react-toastify';
 
 
 const Appointments = () => {
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [hospitals, setHospitals] = useState([]);
@@ -455,13 +457,22 @@ const Appointments = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(appointment.createdAt)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          className="text-blue-600 hover:text-blue-900"
-                          onClick={() => openModal('edit', appointment)}
-                          title="Cập nhật trạng thái"
-                        >
-                          <FaEdit />
-                        </button>
+                        <div className="flex items-center space-x-3">
+                          <button
+                            className="text-green-600 hover:text-green-900"
+                            onClick={() => navigate(`/admin/appointments/${appointment._id}`)}
+                            title="Xem chi tiết"
+                          >
+                            <FaEye />
+                          </button>
+                          <button
+                            className="text-blue-600 hover:text-blue-900"
+                            onClick={() => openModal('edit', appointment)}
+                            title="Cập nhật trạng thái"
+                          >
+                            <FaEdit />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

@@ -5,11 +5,12 @@ import {
   FaNotesMedical, FaClipboardCheck, FaTimesCircle, FaCheckCircle,
   FaArrowLeft, FaFileAlt, FaPrint, FaExclamationCircle,
   FaClock, FaStethoscope, FaRegHospital, FaInfoCircle,
-  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen
+  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen, FaVideo, FaPlus, FaTimes
 } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
 
 import api from '../../utils/api';
+import VideoCallButton from '../../components/VideoCallButton';
 
 const AppointmentDetail = () => {
   const { id } = useParams();
@@ -511,6 +512,15 @@ const AppointmentDetail = () => {
         {/* Actions */}
         <div className="px-4 sm:px-6 py-4 bg-gray-50 flex flex-wrap gap-3 justify-between border-b border-gray-100">
           <div className="flex flex-wrap gap-2 sm:gap-3">
+            {/* Video Call Button for confirmed appointments */}
+            {appointment.status === 'confirmed' && (
+              <VideoCallButton 
+                appointmentId={appointment._id}
+                userRole="doctor"
+                appointmentStatus={appointment.status}
+              />
+            )}
+            
             {appointment.status === 'pending' && (
               <>
                 <button 

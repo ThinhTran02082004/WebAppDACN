@@ -67,12 +67,15 @@ import Hospitals from './pages/admin/Hospitals';
 import AdminDoctors from './pages/admin/Doctors';
 // Thêm các trang admin mới
 import AdminAppointments from './pages/admin/Appointments';
+import AdminAppointmentDetail from './pages/admin/AppointmentDetail';
 import AdminCoupons from './pages/admin/Coupons';
 import AdminPayments from './pages/admin/Payments';
 import AdminReviews from './pages/admin/Reviews';
 import AdminDoctorSchedules from './pages/admin/DoctorSchedules';
 import AdminMedications from './pages/admin/Medications';
 import AdminNews from './pages/admin/News';
+import VideoRoomManagement from './pages/admin/VideoRoomManagement';
+import AdminVideoCallHistory from './pages/admin/VideoCallHistory';
 
 import Facilities from './pages/user/Facilities';
 import FacilitySurgery from './pages/user/FacilitySurgery';
@@ -80,6 +83,10 @@ import News from './pages/user/News';
 import NewsDetail from './pages/user/NewsDetail';
 import DoctorReviewsPage from './pages/reviews/DoctorReviews.jsx';
 import HospitalReviews from './pages/reviews/HospitalReviews.jsx';
+
+// Video call history pages
+import DoctorVideoCallHistory from './pages/doctor/VideoCallHistory';
+import UserVideoCallHistory from './pages/user/VideoCallHistory';
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
@@ -104,12 +111,15 @@ function AppContent() {
           <Route path="rooms" element={<AdminRooms />} />
           {/* Thêm routes cho các trang admin mới */}
           <Route path="appointments" element={<AdminAppointments />} />
+          <Route path="appointments/:id" element={<AdminAppointmentDetail />} />
           <Route path="coupons" element={<AdminCoupons />} />
           <Route path="payments" element={<AdminPayments />} />
           <Route path="reviews" element={<AdminReviews />} />
           <Route path="doctor-schedules" element={<AdminDoctorSchedules />} />
           <Route path="medications" element={<AdminMedications />} />
           <Route path="news" element={<AdminNews />} />
+          <Route path="video-rooms" element={<VideoRoomManagement />} />
+          <Route path="video-call-history" element={<AdminVideoCallHistory />} />
         </Route>
 
         {/* Doctor Routes - No Navbar/Footer */}
@@ -123,6 +133,7 @@ function AppContent() {
           <Route path="schedule" element={<DoctorSchedule />} />
           <Route path="profile" element={<DoctorProfile />} />
           <Route path="reviews" element={<DoctorReviews />} />
+          <Route path="video-call-history" element={<DoctorVideoCallHistory />} />
         </Route>
 
         {/* Public and User Routes - With Navbar/Footer */}
@@ -179,6 +190,7 @@ function AppContent() {
                   <Route path="/payment-history" element={<PaymentHistory />} />
                   <Route path="/medical-history" element={<MedicalHistory />} />
                   <Route path="/medical-record/:id" element={<MedicalRecordDetail />} />
+                  <Route path="/video-call-history" element={<UserVideoCallHistory />} />
                 </Route>
                 
                 {/* New routes */}
