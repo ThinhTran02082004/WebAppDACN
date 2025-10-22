@@ -38,12 +38,12 @@ export const SpecialtyCard = ({ specialty, size = 'medium', onPress }: Specialty
         )}
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Ionicons name="person" size={12} color="#64748b" />
-            <Text style={styles.statsText}>{specialty.doctorCount || 0}</Text>
+            <Ionicons name="person" size={14} color="#0a84ff" />
+            <Text style={styles.statsText}>{specialty.doctorCount || 0} </Text>
           </View>
           <View style={styles.statItem}>
-            <Ionicons name="construct" size={12} color="#64748b" />
-            <Text style={styles.statsText}>{specialty.serviceCount || 0}</Text>
+            <Ionicons name="construct" size={14} color="#0a84ff" />
+            <Text style={styles.statsText}>{specialty.serviceCount || 0} </Text>
           </View>
         </View>
         <TouchableOpacity style={styles.bookingButton} onPress={() => onPress?.(specialty)}>
@@ -99,28 +99,33 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     marginTop: 8,
+    marginBottom: 4,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
   statIcon: {
     fontSize: 12,
     marginRight: 4,
   },
   statsText: {
-    fontSize: 11,
-    color: '#64748b',
+    fontSize: 12,
+    color: '#1e293b',
     fontWeight: '600',
+    marginLeft: 4,
   },
   bookingButton: {
     backgroundColor: '#0a84ff',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
-    marginTop: 8,
     alignSelf: 'stretch',
   },
   bookingButtonText: {

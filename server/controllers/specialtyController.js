@@ -238,10 +238,27 @@ exports.getSpecialties = async (req, res) => {
     // Calculate total pages
     const totalPages = Math.ceil(total / parseInt(limit));
     
+    // Add doctor and service counts for each specialty
+    const Doctor = require('../models/Doctor');
+    const Service = require('../models/Service');
+    
+    const specialtiesWithCounts = await Promise.all(
+      specialties.map(async (specialty) => {
+        const doctorCount = await Doctor.countDocuments({ specialtyId: specialty._id });
+        const serviceCount = await Service.countDocuments({ specialtyId: specialty._id });
+        
+        return {
+          ...specialty.toObject(),
+          doctorCount,
+          serviceCount
+        };
+      })
+    );
+    
     return res.status(200).json({
       success: true,
       data: {
-        specialties,
+        specialties: specialtiesWithCounts,
         total,
         totalPages,
         currentPage: parseInt(page)

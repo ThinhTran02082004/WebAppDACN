@@ -101,11 +101,11 @@ export default function SpecialtyListScreen({ navigation }: Props) {
         )}
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Ionicons name="person" size={12} color="#64748b" />
+            <Ionicons name="person" size={14} color="#0a84ff" />
             <Text style={styles.statText}>{specialty.doctorCount || 0} bác sĩ</Text>
           </View>
           <View style={styles.statItem}>
-            <Ionicons name="construct" size={12} color="#64748b" />
+            <Ionicons name="construct" size={14} color="#0a84ff" />
             <Text style={styles.statText}>{specialty.serviceCount || 0} dịch vụ</Text>
           </View>
         </View>
@@ -346,16 +346,22 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     marginBottom: 8,
+    gap: 12,
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 12,
+    backgroundColor: '#f0f8ff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   statText: {
     fontSize: 12,
-    color: '#64748b',
+    color: '#1e293b',
     marginLeft: 4,
+    fontWeight: '600',
   },
   bookingButton: {
     backgroundColor: '#0a84ff',

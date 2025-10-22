@@ -429,8 +429,8 @@ export default function Home({ navigation }: Props) {
       {/* News */}
       <View style={[styles.sectionBlock, { paddingBottom: 20 }]}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Tin tá»©c</Text>
-          <TouchableOpacity onPress={() => console.log('View all news')}>
+          <Text style={styles.sectionTitle}>Tin tức</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('NewsList')}>
             <Text style={styles.viewAllText}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>
