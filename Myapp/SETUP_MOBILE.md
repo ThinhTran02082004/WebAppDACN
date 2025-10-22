@@ -48,7 +48,30 @@ pod install
 cd ..
 ```
 
-### 2. Setup Firebase Files
+### 2. Setup Environment Variables
+
+Create a `.env` file from the template:
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and update the IP addresses:
+- Replace `192.168.1.x` with your local machine's IP address
+- Find your IP:
+  - **Windows:** Run `ipconfig` in Command Prompt (look for IPv4 Address)
+  - **macOS/Linux:** Run `ifconfig` or `ip addr show`
+
+**Example `.env` file:**
+```
+REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.100
+METRO_HOST=192.168.1.100
+API_HOST=192.168.1.100
+API_PORT=5000
+SERVER_HOST=192.168.1.100
+SERVER_PORT=5000
+```
+
+### 3. Setup Firebase Files
 
 **Android:**
 ```bash
@@ -62,7 +85,7 @@ cd ..
 # Copy it to: Myapp/ios/Myapp/GoogleService-Info.plist
 ```
 
-### 3. Run the App
+### 4. Run the App
 
 **Android:**
 ```bash

@@ -1,10 +1,11 @@
-# Environment variables
-.env
+# Environment variables (but allow .env.example files)
+**/.env
+!**/.env.example
 .env.local
 .env.*.local
-*.env
 server/.env
 Myapp/.env
+Myapp/.env.local
 
 # Dependencies
 node_modules/
