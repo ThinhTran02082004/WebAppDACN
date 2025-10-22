@@ -37,3 +37,13 @@ build/
 tmp/
 temp/
 
+# Android sensitive files
+*.keystore
+!debug.keystore
+google-services.json
+*.jks
+
+# iOS sensitive files
+GoogleService-Info.plist
+!GoogleService-Info.plist.example
+
