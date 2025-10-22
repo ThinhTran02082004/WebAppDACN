@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  FaCalendarAlt, FaUserInjured, FaClipboardList, 
-  FaUserMd, FaClock, FaSignOutAlt, FaChartLine, 
+import {
+  FaCalendarAlt, FaUserInjured, FaClipboardList,
+  FaUserMd, FaClock, FaSignOutAlt, FaChartLine,
   FaTachometerAlt, FaCommentMedical,
-  FaBars, FaTimes
+  FaBars, FaTimes, FaHistory
 } from 'react-icons/fa';
 
 const DoctorLayout = ({ children }) => {
@@ -43,6 +43,7 @@ const DoctorLayout = ({ children }) => {
     { path: '/doctor/patients', label: 'Bệnh nhân', icon: <FaUserInjured /> },
     { path: '/doctor/schedule', label: 'Quản lý lịch trực', icon: <FaClock /> },
     { path: '/doctor/medical-records', label: 'Hồ sơ y tế', icon: <FaClipboardList /> },
+    { path: '/doctor/video-call-history', label: 'Lịch sử Video Call', icon: <FaHistory /> },
     { path: '/doctor/reviews', label: 'Đánh giá', icon: <FaCommentMedical /> },
     { path: '/doctor/profile', label: 'Hồ sơ cá nhân', icon: <FaUserMd /> },
   ];

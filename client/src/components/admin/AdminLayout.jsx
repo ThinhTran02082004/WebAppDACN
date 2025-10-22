@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  FaTachometerAlt, FaUsers, FaUserMd, FaHospital, 
+import {
+  FaTachometerAlt, FaUsers, FaUserMd, FaHospital,
   FaFileAlt, FaCalendarAlt, FaPercentage, FaCreditCard,
   FaStar, FaProcedures, FaDoorOpen, FaChartBar, FaSignOutAlt,
   FaClock, FaCog, FaSearch, FaBars, FaTimes,
-  FaUserShield, FaLock, FaExclamationTriangle, FaMedkit
+  FaUserShield, FaLock, FaExclamationTriangle, FaMedkit, FaVideo, FaHistory
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
@@ -32,6 +32,8 @@ const AdminLayout = ({ children }) => {
     '/admin/reviews',
     '/admin/medications',
     '/admin/news',
+    '/admin/video-rooms',
+    '/admin/video-call-history',
   ];
 
   const doctorRoutes = [
@@ -124,15 +126,19 @@ const AdminLayout = ({ children }) => {
     { path: '/admin/payments', label: 'Thanh toán', icon: <FaCreditCard /> },
     { path: '/admin/reviews', label: 'Đánh giá', icon: <FaStar /> },
     { path: '/admin/news', label: 'Tin tức', icon: <FaFileAlt /> },
+    { path: '/admin/video-rooms', label: 'Phòng Video', icon: <FaVideo /> },
+    { path: '/admin/video-call-history', label: 'Lịch sử Video Call', icon: <FaHistory /> },
   ] : [];
 
   // Group the navigation items for admin
   const groupedNavItems = {
-    main: [navItems[0]], // Dashboard
-    users: navItems.length > 2 ? [navItems[1], navItems[2]] : [], // Users, Doctors
-    scheduling: navItems.length > 9 ? [navItems[3], navItems[9]] : [], // Doctor schedules, Appointments
-    facilities: navItems.length > 8 ? [navItems[4], navItems[5], navItems[6], navItems[7], navItems[8]] : [], // Hospitals, Specialties, Services, Rooms, Medications
-    business: navItems.length > 13 ? [navItems[10], navItems[11], navItems[12], navItems[13]] : [] // Coupons, Payments, Reviews, News
+    main: [navItems[0]].filter(Boolean), // Dashboard
+    users: navItems.length > 2 ? [navItems[1], navItems[2]].filter(Boolean) : [], // Users, Doctors
+    scheduling: navItems.length > 9 ? [navItems[3], navItems[9]].filter(Boolean) : [], // Doctor schedules, Appointments
+    facilities: navItems.length > 8 ? [navItems[4], navItems[5], navItems[6], navItems[7], navItems[8]].filter(Boolean) : [], // Hospitals, Specialties, Services, Rooms, Medications
+    business: navItems.length > 15
+      ? [navItems[10], navItems[11], navItems[12], navItems[13], navItems[14], navItems[15], navItems[16]].filter(Boolean)
+      : [] // Coupons, Payments, Reviews, News, Video Rooms, Video Call History
   };
 
   // Get the current page name for header

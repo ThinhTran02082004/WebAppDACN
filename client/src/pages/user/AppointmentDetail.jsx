@@ -6,8 +6,9 @@ import { toast, ToastContainer } from 'react-toastify';
 
 import { FaCalendarAlt, FaClock, FaHospital, FaUserMd, FaNotesMedical, 
          FaMoneyBillWave, FaFileMedical, FaFileDownload, FaTimesCircle, 
-         FaCalendarCheck, FaPrint, FaStar, FaArrowLeft, FaMapMarkerAlt, FaRedo, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
+         FaCalendarCheck, FaPrint, FaStar, FaArrowLeft, FaMapMarkerAlt, FaRedo, FaCheckCircle, FaExclamationTriangle, FaVideo } from 'react-icons/fa';
 import CancelAppointmentModal from '../../components/shared/CancelAppointmentModal';
+import VideoCallButton from '../../components/VideoCallButton';
 
 
 const AppointmentDetail = () => {
@@ -397,6 +398,14 @@ const AppointmentDetail = () => {
               
               {/* Actions */}
               <div className="flex flex-wrap gap-2">
+                {/* Video Call Button */}
+                {(appointment.status === 'confirmed') && (
+                  <VideoCallButton 
+                    appointmentId={appointment._id}
+                    userRole="patient"
+                    appointmentStatus={appointment.status}
+                  />
+                )}
                 {(appointment.status === 'pending' || appointment.status === 'rescheduled') && (
                   <>
                     <button 
