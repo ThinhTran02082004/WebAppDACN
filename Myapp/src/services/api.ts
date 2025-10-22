@@ -1,9 +1,9 @@
 // import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE } from '../config';
+// import { API_BASE } from '../config';
 
-const BASE_URL = API_BASE;
+const BASE_URL = "http://localhost:5000/api";
 
 export interface Hospital {
   _id: string;
@@ -101,7 +101,7 @@ export interface ApiResponse<T> {
 
 class ApiService {
   // Increase default timeout to 15s to accommodate slower endpoints on dev machines
-  private client = axios.create({ baseURL: 'http://10.0.242.205:5000/api', headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
+  private client = axios.create({ baseURL: BASE_URL, headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
   // Cache last successful reachability check for a short period to avoid repeated probes
   private _lastReachableAt: number | null = null;
   private _reachabilityTtl = 30 * 1000; // 30 seconds
@@ -152,7 +152,7 @@ class ApiService {
   // Quick probe to check if backend is reachable (uses short timeout)
   private async probeBackend(): Promise<void> {
     try {
-      const base = this.client.defaults.baseURL || (typeof BASE_URL === 'function' ? BASE_URL() : BASE_URL);
+      const base = this.client.defaults.baseURL || BASE_URL;
       // If base includes the '/api' prefix, probe the server root health endpoint instead
       const serverRoot = String(base).replace(/\/api\/?$/i, '').replace(/\/$/, '');
       // If we recently probed successfully, skip

@@ -2,21 +2,22 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Default host for development. For Android emulator use 10.0.2.2 to reach host machine.
-// For physical devices, use the actual IP address of the development machine
-const DEFAULT_HOST = Platform.OS === 'android' ? '10.0.242.205' : 'localhost';
+// For physical devices via USB with adb reverse, use localhost
+// For physical devices via WiFi, use the actual IP address of the development machine
+const DEFAULT_HOST = Platform.OS === 'android' ? 'localhost' : 'localhost';
 const DEFAULT_PORT = 5000;
 
 // If you need to override these for production or device testing,
 // replace the values below or create a small config setup to inject them.
-let API_HOST = '10.0.242.205'; // Force use of correct IP address
+let API_HOST = 'localhost'; // Use localhost when connected via USB with adb reverse
 let API_PORT = '5000';
 
 const STORAGE_KEY = 'api_host_config_v1';
 
 export const initApiHostFromStorage = async (): Promise<boolean> => {
   try {
-    // Always use the correct IP address and port, ignore cached values
-    API_HOST = '10.0.242.205';
+    // Use localhost for USB connection with adb reverse
+    API_HOST = 'localhost';
     API_PORT = '5000';
     console.log('[config] Forced API host to:', API_HOST, 'port:', API_PORT);
     return true;
@@ -39,8 +40,8 @@ export const setApiHost = (host: string, port?: string) => {
 export const clearApiHost = async () => {
   try {
     await AsyncStorage.removeItem(STORAGE_KEY);
-    // Force reset to new IP address and port
-    API_HOST = '10.0.242.205';
+    // Force reset to localhost for USB connection
+    API_HOST = 'localhost';
     API_PORT = '5000';
     console.log('[config] Cleared API host cache, reset to:', API_HOST, 'port:', API_PORT);
   } catch {
@@ -50,7 +51,7 @@ export const clearApiHost = async () => {
 
 // Force reset to default host (useful for debugging network issues)
 export const resetApiHost = () => {
-  API_HOST = '10.0.242.205';
+  API_HOST = 'localhost';
   API_PORT = '5000';
   console.log('[config] Reset API host to default:', API_HOST, 'port:', API_PORT);
 };

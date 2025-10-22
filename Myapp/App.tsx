@@ -24,7 +24,7 @@ function App() {
       // Force clear any cached configuration to ensure we use the correct IP
       await clearApiHost();
       // Set the correct IP address
-      setApiHost('10.0.242.205', '5000');
+      setApiHost('localhost', '5000');
       // ensure apiService uses the current API_BASE after load/default
       try {
         const baseUrl = typeof API_BASE === 'function' ? API_BASE() : API_BASE as any;

@@ -6,7 +6,7 @@ const { width } = Dimensions.get('window');
 const PAGE_ITEMS = 8; 
 const COLS = 4;
 const GAP = 0;
-const ITEM_WIDTH = (width - 10 - (COLS - 1) * GAP) / COLS;
+const ITEM_WIDTH = (width - 40 - (COLS - 1) * GAP) / COLS;
 
 type QuickAccessItem = {
   id: string;

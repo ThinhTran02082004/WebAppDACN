@@ -232,25 +232,35 @@ export default function Home({ navigation }: Props) {
     // Bỏ yêu cầu đăng nhập - cho phép truy cập trực tiếp
     switch (item.id) {
       case '1':
-        console.log('Navigate to facility booking');
+        // Đặt khám tại cơ sở
+        console.log('Navigate to facility list');
+        navigation.navigate('FacilityList');
         break;
       case '2':
-        console.log('Navigate to specialty booking');
+        // Đặt khám chuyên khoa
+        console.log('Navigate to specialty list');
+        navigation.navigate('SpecialtyList');
         break;
       case '3':
         console.log('Navigate to video call');
         break;
       case '4':
-        console.log('Navigate to doctor appointment');
+        // Đặt lịch khám với bác sĩ
+        console.log('Navigate to doctor list');
+        navigation.navigate('DoctorList');
         break;
       case '5':
         console.log('Navigate to payment');
         break;
       case '6':
-        console.log('Navigate to news');
+        // Tin tức
+        console.log('Navigate to news list');
+        navigation.navigate('NewsList');
         break;
       case '7':
-        console.log('Navigate to services');
+        // Dịch vụ
+        console.log('Navigate to service list');
+        navigation.navigate('ServiceList');
         break;
       default:
         console.log('Unknown function');
