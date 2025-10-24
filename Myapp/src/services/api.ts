@@ -9,6 +9,7 @@ export interface Hospital {
   _id: string;
   name: string;
   address: string;
+  description?: string;
   imageUrl?: string;
   image?: {
     secureUrl: string;
@@ -17,8 +18,29 @@ export interface Hospital {
     phone?: string;
     email?: string;
   };
-  specialties?: string[];
-  services?: string[];
+  workingHours?: {
+    monday?: { open: string; close: string; isOpen: boolean };
+    tuesday?: { open: string; close: string; isOpen: boolean };
+    wednesday?: { open: string; close: string; isOpen: boolean };
+    thursday?: { open: string; close: string; isOpen: boolean };
+    friday?: { open: string; close: string; isOpen: boolean };
+    saturday?: { open: string; close: string; isOpen: boolean };
+    sunday?: { open: string; close: string; isOpen: boolean };
+  };
+  specialties?: Array<{
+    _id: string;
+    name: string;
+    description?: string;
+    icon?: string;
+    imageUrl?: string;
+    image?: { secureUrl: string };
+  }>;
+  services?: Array<{
+    _id: string;
+    name: string;
+    description?: string;
+    price?: number;
+  }>;
   isActive?: boolean;
 }
 
@@ -309,6 +331,15 @@ class ApiService {
   async getDoctorById(id: string): Promise<ApiResponse<Doctor>> {
     try {
       const res = await this.client.get(`/doctors/${id}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getDoctorReviews(doctorId: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<any[] | { reviews?: any[]; data?: any[]; count?: number; total?: number; averageRating: number }>> {
+    try {
+      const res = await this.client.get(`/reviews/doctor/${doctorId}`, { params });
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Specialty } from '../types/specialty';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { AppIcons, IconColors } from '../config/icons';
 
 interface SpecialtyCardProps {
   specialty: Specialty;
@@ -38,11 +39,11 @@ export const SpecialtyCard = ({ specialty, size = 'medium', onPress }: Specialty
         )}
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Ionicons name="person" size={14} color="#0a84ff" />
+            <Ionicons name={AppIcons.doctor} size={14} color={IconColors.primary} />
             <Text style={styles.statsText}>{specialty.doctorCount || 0} </Text>
           </View>
           <View style={styles.statItem}>
-            <Ionicons name="construct" size={14} color="#0a84ff" />
+            <Ionicons name={AppIcons.service} size={14} color={IconColors.primary} />
             <Text style={styles.statsText}>{specialty.serviceCount || 0} </Text>
           </View>
         </View>

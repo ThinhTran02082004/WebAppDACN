@@ -14,6 +14,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Doctor, apiService } from '../services/api';
+import { AppIcons, IconColors, IconSizes } from '../config/icons';
 
 type Props = {
   navigation: any;
@@ -45,11 +46,11 @@ export default function DoctorListScreen({ navigation }: Props) {
       
       if (response.success && response.data) {
         // Handle different response structures
-        let doctorsData = [];
+        let doctorsData: Doctor[] = [];
         if ('doctors' in response.data) {
           doctorsData = response.data.doctors || [];
         } else if ('data' in response.data) {
-          doctorsData = response.data.data || [];
+          doctorsData = (response.data as any).data || [];
         } else if (Array.isArray(response.data)) {
           doctorsData = response.data;
         }
@@ -60,115 +61,19 @@ export default function DoctorListScreen({ navigation }: Props) {
         // Extract unique specialties
         const uniqueSpecialties = [...new Set(
           doctorsData
-            .map(d => d.specialtyId?.name)
+            .map((d: Doctor) => d.specialtyId?.name)
             .filter(Boolean)
-        )];
+        )] as string[];
         setSpecialties(['all', ...uniqueSpecialties]);
       } else {
         console.log('No doctors data found');
-        // Create mock data for testing
-        const mockDoctors = [
-          {
-            _id: '1',
-            title: 'BS.',
-            user: {
-              _id: '1',
-              fullName: 'Nguyễn Văn A',
-              email: 'doctor1@example.com',
-              avatarUrl: 'https://placehold.co/200x200'
-            },
-            specialtyId: { _id: '1', name: 'Nội khoa' },
-            hospitalId: { _id: '1', name: 'Bệnh viện Chợ Rẫy' },
-            averageRating: 4.5,
-            experience: 10,
-            consultationFee: 300000
-          },
-          {
-            _id: '2',
-            title: 'TS.',
-            user: {
-              _id: '2',
-              fullName: 'Trần Thị B',
-              email: 'doctor2@example.com',
-              avatarUrl: 'https://placehold.co/200x200'
-            },
-            specialtyId: { _id: '2', name: 'Tim mạch' },
-            hospitalId: { _id: '2', name: 'Bệnh viện 115' },
-            averageRating: 4.8,
-            experience: 15,
-            consultationFee: 500000
-          },
-          {
-            _id: '3',
-            title: 'BS.',
-            user: {
-              _id: '3',
-              fullName: 'Lê Văn C',
-              email: 'doctor3@example.com',
-              avatarUrl: 'https://placehold.co/200x200'
-            },
-            specialtyId: { _id: '3', name: 'Nhi khoa' },
-            hospitalId: { _id: '3', name: 'Bệnh viện Nhi Đồng' },
-            averageRating: 4.3,
-            experience: 8,
-            consultationFee: 250000
-          }
-        ];
-        setDoctors(mockDoctors);
-        setSpecialties(['all', 'Nội khoa', 'Tim mạch', 'Nhi khoa']);
+        setDoctors([]);
+        setSpecialties(['all']);
       }
     } catch (error) {
       console.error('Error loading doctors:', error);
-      // Create mock data for testing
-      const mockDoctors = [
-        {
-          _id: '1',
-          title: 'BS.',
-          user: {
-            _id: '1',
-            fullName: 'Nguyễn Văn A',
-            email: 'doctor1@example.com',
-            avatarUrl: 'https://placehold.co/200x200'
-          },
-          specialtyId: { _id: '1', name: 'Nội khoa' },
-          hospitalId: { _id: '1', name: 'Bệnh viện Chợ Rẫy' },
-          averageRating: 4.5,
-          experience: 10,
-          consultationFee: 300000
-        },
-        {
-          _id: '2',
-          title: 'TS.',
-          user: {
-            _id: '2',
-            fullName: 'Trần Thị B',
-            email: 'doctor2@example.com',
-            avatarUrl: 'https://placehold.co/200x200'
-          },
-          specialtyId: { _id: '2', name: 'Tim mạch' },
-          hospitalId: { _id: '2', name: 'Bệnh viện 115' },
-          averageRating: 4.8,
-          experience: 15,
-          consultationFee: 500000
-        },
-        {
-          _id: '3',
-          title: 'BS.',
-          user: {
-            _id: '3',
-            fullName: 'Lê Văn C',
-            email: 'doctor3@example.com',
-            avatarUrl: 'https://placehold.co/200x200'
-          },
-          specialtyId: { _id: '3', name: 'Nhi khoa' },
-          hospitalId: { _id: '3', name: 'Bệnh viện Nhi Đồng' },
-          averageRating: 4.3,
-          experience: 8,
-          consultationFee: 250000
-        }
-      ];
-      setDoctors(mockDoctors);
-      setSpecialties(['all', 'Nội khoa', 'Tim mạch', 'Nhi khoa']);
+      setDoctors([]);
+      setSpecialties(['all']);
     } finally {
       setLoading(false);
     }
@@ -188,7 +93,7 @@ export default function DoctorListScreen({ navigation }: Props) {
 
     // Filter by active status
     if (selectedFilter === 'active') {
-      filtered = filtered.filter(doctor => doctor.isActive !== false);
+      filtered = filtered.filter(doctor => doctor.isAvailable !== false);
     }
 
     // Filter by specialty
@@ -201,7 +106,7 @@ export default function DoctorListScreen({ navigation }: Props) {
 
   const handleDoctorPress = (doctor: Doctor) => {
     console.log('Doctor pressed:', doctor.user?.fullName);
-    // TODO: Navigate to doctor detail
+    navigation.navigate('DoctorDetail', { id: doctor._id });
   };
 
   const handleBackPress = () => {
@@ -224,13 +129,13 @@ export default function DoctorListScreen({ navigation }: Props) {
           />
         ) : (
           <View style={styles.defaultAvatar}>
-            <Ionicons name="person" size={40} color="#0a84ff" />
+            <Ionicons name={AppIcons.user} size={IconSizes.xl} color={IconColors.primary} />
           </View>
         )}
       </View>
       <View style={styles.doctorContent}>
         <Text style={styles.doctorName} numberOfLines={1}>
-          {doctor.title || 'BS.'} {doctor.user?.fullName || 'Chưa cập nhật'}
+          {(doctor.title || 'BS.').replace(/CK[0-9]+/g, '').trim()} {doctor.user?.fullName || 'Chưa cập nhật'}
         </Text>
         <Text style={styles.specialty} numberOfLines={1}>
           {doctor.specialtyId?.name || 'Đang cập nhật chuyên khoa'}
@@ -239,7 +144,7 @@ export default function DoctorListScreen({ navigation }: Props) {
           {doctor.hospitalId?.name || 'Đang cập nhật bệnh viện'}
         </Text>
         <View style={styles.ratingContainer}>
-          <Ionicons name="star" size={12} color="#ff9500" />
+          <Ionicons name={AppIcons.star} size={12} color={IconColors.warning} />
           <Text style={styles.rating}>
             {doctor.averageRating ? Number(doctor.averageRating).toFixed(1) : 'N/A'}
           </Text>
@@ -266,7 +171,7 @@ export default function DoctorListScreen({ navigation }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
+          <Ionicons name={AppIcons.back} size={IconSizes.md} color={IconColors.dark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Danh sách bác sĩ</Text>
         <View style={styles.placeholder} />
@@ -275,7 +180,7 @@ export default function DoctorListScreen({ navigation }: Props) {
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color="#666" />
+          <Ionicons name={AppIcons.search} size={IconSizes.sm} color={IconColors.default} />
           <TextInput
             style={styles.searchInput}
             placeholder="Tìm kiếm bác sĩ..."
@@ -285,7 +190,7 @@ export default function DoctorListScreen({ navigation }: Props) {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#666" />
+              <Ionicons name={AppIcons.close} size={IconSizes.sm} color={IconColors.default} />
             </TouchableOpacity>
           )}
         </View>
@@ -358,7 +263,7 @@ export default function DoctorListScreen({ navigation }: Props) {
       {/* Doctor List */}
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0a84ff" />
+          <ActivityIndicator size="large" color={IconColors.primary} />
           <Text style={styles.loadingText}>Đang tải...</Text>
         </View>
       ) : (
@@ -371,7 +276,7 @@ export default function DoctorListScreen({ navigation }: Props) {
             filteredDoctors.map(renderDoctorCard)
           ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name="person" size={64} color="#ccc" />
+              <Ionicons name={AppIcons.doctorOutline} size={IconSizes.xxl} color={IconColors.light} />
               <Text style={styles.emptyText}>Không tìm thấy bác sĩ nào</Text>
               <Text style={styles.emptySubtext}>
                 Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc

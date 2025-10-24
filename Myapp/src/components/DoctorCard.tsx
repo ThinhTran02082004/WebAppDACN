@@ -22,7 +22,6 @@ type Props = {
 };
 
 export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertical = false }: Props) {
-  console.log('Rendering DoctorCard with doctor:', doctor);
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
 
@@ -75,7 +74,7 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
 
         <View style={styles.verticalContent}>
           <Text style={styles.doctorNameVertical} numberOfLines={1}>
-            {doctor.title || 'BS.'} {doctor.user?.fullName || 'Chưa cập nhật'}
+            {(doctor.title || 'BS.').replace(/CK[0-9]+/g, '').trim()} {doctor.user?.fullName || 'Chưa cập nhật'}
           </Text>
 
           <Text style={styles.specialtyVertical} numberOfLines={1}>
@@ -92,16 +91,16 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
             </Text>
           </View>
 
+          <Text style={styles.feeVertical}>
+            {typeof doctor.consultationFee === 'number' ? `${doctor.consultationFee.toLocaleString('vi-VN')}đ` : 'Liên hệ'}
+          </Text>
           <View style={styles.verticalFooter}>
-            <Text style={styles.feeVertical}>
-              {typeof doctor.consultationFee === 'number' ? `${doctor.consultationFee.toLocaleString('vi-VN')}đ` : 'Liên hệ'}
-            </Text>
             <TouchableOpacity
               style={styles.consultButtonVertical}
-              onPress={handleConsultPress}
+              onPress={handleCardPress}
               activeOpacity={0.8}
             >
-              <Text style={styles.consultButtonText}>Tư vấn</Text>
+              <Text style={styles.consultButtonText}>Đặt khám</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -143,7 +142,7 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
 
         <View style={styles.middleSection}>
           <Text style={styles.doctorName} numberOfLines={1}>
-            {doctor.title || 'BS.'} {doctor.user?.fullName || 'Chưa cập nhật'}
+            {(doctor.title || 'BS.').replace(/CK[0-9]+/g, '').trim()} {doctor.user?.fullName || 'Chưa cập nhật'}
           </Text>
           
           <Text style={styles.specialty} numberOfLines={1}>
@@ -166,17 +165,17 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
         </View>
 
         <View style={styles.rightSection}>
-          <TouchableOpacity
-            style={styles.consultButton}
-            onPress={handleConsultPress}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.consultButtonText}>Tư vấn ngay</Text>
-          </TouchableOpacity>
-          
           <Text style={styles.fee}>
             {(doctor.consultationFee || 0).toLocaleString('vi-VN')}đ
           </Text>
+          
+          <TouchableOpacity
+            style={styles.consultButton}
+            onPress={handleCardPress}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.consultButtonText}>Đặt khám</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
@@ -282,9 +281,10 @@ const styles = StyleSheet.create({
   consultButton: {
     backgroundColor: '#0a84ff',
     paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     borderRadius: 20,
-    marginBottom: 8,
+    marginTop: 8,
+    minWidth: 90,
   },
   consultButtonText: {
     color: '#fff',
@@ -292,8 +292,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   fee: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 13,
+    color: '#0a84ff',
+    fontWeight: '600',
     textAlign: 'center',
   },
   /* Vertical styles */
@@ -348,19 +349,23 @@ const styles = StyleSheet.create({
   },
   feeVertical: {
     fontSize: 13,
-    color: '#333',
+    color: '#0a84ff',
     fontWeight: '700',
+
+    marginTop: 8,
   },
   consultButtonVertical: {
     backgroundColor: '#0a84ff',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 16,
+    flex: 1,
+    alignItems: 'center',
   },
   verticalFooter: {
-    marginTop: 8,
+    marginTop: 6,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
   },
 });

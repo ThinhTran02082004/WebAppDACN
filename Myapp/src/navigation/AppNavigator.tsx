@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import BottomTabs from './BottomTabs';
 import DoctorDetail from '../screens/DoctorDetail';
+import FacilityDetail from '../screens/FacilityDetail';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import UsageRegulationsScreen from '../screens/UsageRegulationsScreen';
@@ -25,6 +26,7 @@ function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Home" component={BottomTabs} />
       <Stack.Screen name="DoctorDetail" component={DoctorDetail} />
+      <Stack.Screen name="FacilityDetail" component={FacilityDetail} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="UsageRegulations" component={UsageRegulationsScreen} />
@@ -41,6 +43,8 @@ function RootNavigator() {
 
 export type RootStackParamList = {
   Home: undefined;
+  DoctorDetail: { id: string };
+  FacilityDetail: { id: string };
   Login: undefined;
   Register: undefined;
   UsageRegulations: undefined;

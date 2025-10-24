@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, FlatList } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { IconColors, IconSizes } from '../config/icons';
 
 const { width } = Dimensions.get('window');
 const PAGE_ITEMS = 8; 
@@ -52,7 +53,7 @@ export default function QuickAccess({ items, onItemPress }: Props) {
                  const it = pageItems[colIdx];
                  return (
                    <TouchableOpacity key={`f-${colIdx}`} style={styles.item} onPress={() => it && onItemPress?.(it)} activeOpacity={0.8}>
-                     <Ionicons name={it?.icon as any || 'help'} size={25} color="#0a84ff" />
+                     <Ionicons name={it?.icon as any || 'help'} size={IconSizes.lg} color={IconColors.primary} />
                      <Text style={styles.title} numberOfLines={2}>{it?.title || ''}</Text>
                    </TouchableOpacity>
                  );
@@ -65,7 +66,7 @@ export default function QuickAccess({ items, onItemPress }: Props) {
                  const it = pageItems[COLS + colIdx];
                  return (
                    <TouchableOpacity key={`s-${colIdx}`} style={styles.item} onPress={() => it && onItemPress?.(it)} activeOpacity={0.8}>
-                     <Ionicons name={it?.icon as any || 'help'} size={25} color="#0a84ff" />
+                     <Ionicons name={it?.icon as any || 'help'} size={IconSizes.lg} color={IconColors.primary} />
                      <Text style={styles.title} numberOfLines={2}>{it?.title || ''}</Text>
                    </TouchableOpacity>
                  );
@@ -131,6 +132,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   dotActive: {
-    backgroundColor: '#0a84ff',
+    backgroundColor: IconColors.primary,
   },
 });

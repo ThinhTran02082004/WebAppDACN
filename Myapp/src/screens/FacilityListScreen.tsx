@@ -86,7 +86,7 @@ export default function FacilityListScreen({ navigation }: Props) {
 
   const handleHospitalPress = (hospital: Hospital) => {
     console.log('Hospital pressed:', hospital.name);
-    // TODO: Navigate to hospital detail
+    navigation.navigate('FacilityDetail', { id: hospital._id });
   };
 
   const handleBackPress = () => {

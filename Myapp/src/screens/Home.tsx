@@ -22,6 +22,7 @@ import { API_BASE, clearApiHost, resetApiHost } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { AppIcons, IconColors, IconSizes } from '../config/icons';
 
 // const { width } = Dimensions.get('window');
 
@@ -29,37 +30,37 @@ const quickAccessItems = [
   { 
     id: '1', 
     title: 'Đặt khám tại\ncơ sở', 
-    icon: 'medical',
+    icon: AppIcons.hospital,
   },
   { 
     id: '2',
     title: 'Đặt khám\nchuyên khoa', 
-    icon: 'medical-outline',
+    icon: AppIcons.specialtyOutline,
   },
   { 
     id: '3',
     title: 'Gọi video\nvới bác sĩ', 
-    icon: 'videocam',
+    icon: AppIcons.video,
   },
   { 
     id: '4',
     title: 'Đặt lịch khám\nvới bác sĩ', 
-    icon: 'person',
+    icon: AppIcons.doctor,
   },
   { 
     id: '5',
     title: 'Thanh toán', 
-    icon: 'card',
+    icon: AppIcons.card,
   },
   { 
     id: '6',
     title: 'Tin tức', 
-    icon: 'newspaper',
+    icon: AppIcons.news,
   },
   { 
     id: '7',
     title: 'Dịch vụ', 
-    icon: 'construct',
+    icon: AppIcons.service,
   },
 ];
 
@@ -269,7 +270,7 @@ export default function Home({ navigation }: Props) {
 
   const handleFacilityPress = (facility: Hospital) => {
     console.log('Facility pressed:', facility.name);
-    // Xử lý navigation đến chi tiết bệnh viện
+    navigation.navigate('FacilityDetail', { id: facility._id });
   };
 
   const handleDoctorConsultPress = (doctor: any) => {
@@ -285,7 +286,6 @@ export default function Home({ navigation }: Props) {
     navigation.navigate('DoctorDetail', { id: doctor._id });
   };
 
-  console.log('Home render - doctors:', doctors?.length);
 
   return (
     <View style={styles.container}>
@@ -344,7 +344,7 @@ export default function Home({ navigation }: Props) {
           </ScrollView>
         ) : (
           <View style={styles.emptyWrap}>
-            <Ionicons name="medical" size={40} color="#666" />
+            <Ionicons name={AppIcons.specialtyOutline} size={IconSizes.xl} color={IconColors.default} />
             <Text style={styles.emptyTitle}>Chưa có chuyên khoa</Text>
             <Text style={styles.emptyDesc}>Hiện tại chưa có chuyên khoa. Vui lòng quay lại sau. </Text>
           </View>
@@ -383,7 +383,7 @@ export default function Home({ navigation }: Props) {
           </ScrollView>
         ) : (
           <View style={styles.emptyWrap}>
-            <Ionicons name="construct" size={40} color="#666" />
+            <Ionicons name={AppIcons.serviceOutline} size={IconSizes.xl} color={IconColors.default} />
             <Text style={styles.emptyTitle}>Chưa có dịch vụ</Text>
             <Text style={styles.emptyDesc}>Hiện tại chưa có dịch vụ nào. Vui lòng quay lại sau.</Text>
           </View>
@@ -418,7 +418,7 @@ export default function Home({ navigation }: Props) {
             </ScrollView>
           ) : (
             <View style={styles.emptyWrap}>
-              <Ionicons name="person" size={40} color="#666" />
+              <Ionicons name={AppIcons.doctorOutline} size={IconSizes.xl} color={IconColors.default} />
               <Text style={styles.emptyTitle}>Chưa có bác sĩ </Text>
               <Text style={styles.emptyDesc}>Hiện tại chưa có bác sĩ nào. Vui lòng quay lại sau.</Text>
             </View>

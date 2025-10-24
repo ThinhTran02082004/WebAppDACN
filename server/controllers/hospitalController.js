@@ -500,6 +500,7 @@ exports.getHospitals = async (req, res) => {
     
     // Execute query with pagination
     const hospitals = await Hospital.find(query)
+      .populate('specialties', 'name icon')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -545,7 +546,8 @@ exports.getHospitalById = async (req, res) => {
       });
     }
     
-    const hospital = await Hospital.findById(id);
+    const hospital = await Hospital.findById(id)
+      .populate('specialties', 'name description icon imageUrl image');
     
     if (!hospital) {
       return res.status(404).json({
@@ -554,9 +556,25 @@ exports.getHospitalById = async (req, res) => {
       });
     }
     
+    // Get services by hospital's specialties
+    const Service = require('../models/Service');
+    let services = [];
+    
+    if (hospital.specialties && hospital.specialties.length > 0) {
+      const specialtyIds = hospital.specialties.map(s => s._id);
+      services = await Service.find({
+        specialtyId: { $in: specialtyIds },
+        isActive: true
+      }).select('name description price specialtyId');
+    }
+    
+    // Convert hospital to object and add services
+    const hospitalData = hospital.toObject();
+    hospitalData.services = services;
+      
     return res.status(200).json({
       success: true,
-      data: hospital
+      data: hospitalData
     });
   } catch (error) {
     console.error('Get hospital detail error:', error);
