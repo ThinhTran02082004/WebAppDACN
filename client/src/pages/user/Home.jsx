@@ -11,6 +11,7 @@ import AOS from 'aos';
 import 'aos/dist/aos.css';
 import { useInView } from 'react-intersection-observer';
 import { motion } from 'framer-motion';
+import ChatWidget from '../../components/ChatWidget';
 
 const Home = () => {
   const [loading, setLoading] = useState(true);
@@ -562,6 +563,8 @@ const Home = () => {
         </svg>
       </section>
 
+
+      <ChatWidget />
       {/* Discount Banner */}
       <section className="bg-gradient-to-r from-blue-500 to-blue-600 py-3 relative overflow-hidden">
         <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-400 rounded-full opacity-30"></div>
@@ -1826,7 +1829,7 @@ const Home = () => {
           <FaCalendarCheck />
         </Link>
         <a href="tel:0000000000" className="fab-secondary text-blue-600" title="Hotline: 1800 1008">
-          <FaPhone />
+          <FaPhone />                             
         </a>
         <a href="https://zalo.me/0379747517" className="fab-secondary text-green-600" title="Chat Zalo">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 26 26">
