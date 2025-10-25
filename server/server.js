@@ -24,7 +24,7 @@ const statisticsRoutes = require('./routes/statistics');
 const logRoutes = require('./routes/log');
 const scheduleRoutes = require('./routes/schedule');
 const adminRoutes = require('./routes/admin');
-
+const aiRoutes = require('./routes/ai');
 // Import các routes còn thiếu
 const apiRoutes = require('./routes/api');
 const couponRoutes = require('./routes/couponRoutes');
@@ -160,7 +160,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/admin', adminRoutes);
-
+app.use('/api/ai', aiRoutes);
 
 // Đăng ký các routes còn thiếu
 app.use('/api', apiRoutes);
