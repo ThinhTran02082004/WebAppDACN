@@ -9,6 +9,13 @@
   },
   "dependencies": {
     "@faker-js/faker": "^9.7.0",
+<<<<<<< HEAD
+=======
+    "@google/genai": "^1.25.0",
+    "@google/generative-ai": "^0.24.1",
+    "@types/node": "^24.7.2",
+    "ai": "^5.0.68",
+>>>>>>> 2d02535 (Tối ưu AI)
     "axios": "^1.8.4",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.41.3",
