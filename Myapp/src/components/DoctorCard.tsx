@@ -74,7 +74,7 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
 
         <View style={styles.verticalContent}>
           <Text style={styles.doctorNameVertical} numberOfLines={1}>
-            {(doctor.title || 'BS.').replace(/CK[0-9]+/g, '').trim()} {doctor.user?.fullName || 'Chưa cập nhật'}
+            {(doctor.title || 'BS.').trim()} {doctor.user?.fullName || 'Chưa cập nhật'}
           </Text>
 
           <Text style={styles.specialtyVertical} numberOfLines={1}>

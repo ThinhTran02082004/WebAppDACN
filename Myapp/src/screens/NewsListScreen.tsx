@@ -13,6 +13,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { NewsItem, apiService } from '../services/api';
+import NewsCard from '../components/NewsCard';
 
 type Props = {
   navigation: any;
@@ -87,7 +88,7 @@ export default function NewsListScreen({ navigation }: Props) {
 
   const handleNewsPress = (newsItem: NewsItem) => {
     console.log('News pressed:', newsItem.title);
-    // TODO: Navigate to news detail
+    navigation.navigate('NewsDetail', { newsId: newsItem._id });
   };
 
   const handleBackPress = () => {
@@ -104,40 +105,11 @@ export default function NewsListScreen({ navigation }: Props) {
   };
 
   const renderNewsCard = (newsItem: NewsItem) => (
-    <TouchableOpacity
+    <NewsCard
       key={newsItem._id}
-      style={styles.newsCard}
-      onPress={() => handleNewsPress(newsItem)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.newsImage} />
-      <View style={styles.newsContent}>
-        <Text style={styles.newsTitle} numberOfLines={2}>
-          {newsItem.title}
-        </Text>
-        {newsItem.summary && (
-          <Text style={styles.newsSummary} numberOfLines={3}>
-            {newsItem.summary}
-          </Text>
-        )}
-        <View style={styles.newsFooter}>
-          <View style={styles.newsDate}>
-            <Ionicons name="calendar-outline" size={14} color="#666" />
-            <Text style={styles.newsDateText}>
-              {formatDate(newsItem.publishedDate || newsItem.createdAt)}
-            </Text>
-          </View>
-          {newsItem.author && (
-            <View style={styles.newsAuthor}>
-              <Ionicons name="person-outline" size={14} color="#666" />
-              <Text style={styles.newsAuthorText}>
-                {typeof newsItem.author === 'string' ? newsItem.author : newsItem.author.fullName}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
+      newsItem={newsItem}
+      onPress={handleNewsPress}
+    />
   );
 
   return (
@@ -330,64 +302,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingTop: 24,
-  },
-  newsCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
-  },
-  newsImage: {
-    width: '100%',
-    height: 180,
-    backgroundColor: '#f0f0f0',
-  },
-  newsContent: {
-    padding: 16,
-  },
-  newsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-    lineHeight: 24,
-  },
-  newsSummary: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  newsFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  newsDate: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  newsDateText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4,
-  },
-  newsAuthor: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  newsAuthorText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4,
   },
   loadingContainer: {
     flex: 1,

@@ -131,13 +131,25 @@ export default function Home({ navigation }: Props) {
 
 
       let doctorsList: Doctor[] = [];
+
       
       if (doctorsResponse?.data?.doctors) {
         doctorsList = doctorsResponse.data.doctors;
+
       } else if (Array.isArray(doctorsResponse?.data)) {
         // Trường hợp API trả về trực tiếp mảng
         doctorsList = doctorsResponse.data;
+
+      } else {
+        console.log('No doctors found in expected structure');
+        console.log('Response structure:', {
+          hasResponse: !!doctorsResponse,
+          hasData: !!doctorsResponse?.data,
+          dataType: typeof doctorsResponse?.data,
+          dataKeys: doctorsResponse?.data ? Object.keys(doctorsResponse.data) : 'no data'
+        });
       }
+
       
 
       const specialtiesList = specialtiesResponse && (specialtiesResponse as any).data && (specialtiesResponse as any).data.specialties
@@ -362,7 +374,12 @@ export default function Home({ navigation }: Props) {
         {services && services.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScrollContent}>
             {services.map((sv) => (
-              <View key={sv._id} style={styles.serviceCard}>
+              <TouchableOpacity 
+                key={sv._id} 
+                style={styles.serviceCard}
+                onPress={() => navigation.navigate('ServiceDetail', { serviceId: sv._id })}
+                activeOpacity={0.7}
+              >
                 <Image
                   source={{ uri: sv.imageUrl || sv.image?.secureUrl || 'https://placehold.co/160x120' }}
                   style={styles.serviceImage}
@@ -374,11 +391,17 @@ export default function Home({ navigation }: Props) {
                     <Text numberOfLines={2} style={styles.serviceDescription}>{sv.description}</Text>
                   )}
                   <Text style={styles.servicePrice}>{(sv.price || 0).toLocaleString('vi-VN')}đ</Text>
-                  <TouchableOpacity style={styles.bookingButton}>
+                  <TouchableOpacity 
+                    style={styles.bookingButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      navigation.navigate('ServiceDetail', { serviceId: sv._id });
+                    }}
+                  >
                     <Text style={styles.bookingButtonText}>Đặt khám</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         ) : (
@@ -436,11 +459,26 @@ export default function Home({ navigation }: Props) {
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScrollContent}>
           {news.map((n) => (
-            <View key={n._id} style={styles.newsCard}>
-              <View style={styles.newsImage} />
+            <TouchableOpacity 
+              key={n._id} 
+              style={styles.newsCard}
+              onPress={() => navigation.navigate('NewsDetail', { newsId: n._id })}
+              activeOpacity={0.7}
+            >
+              {n.image?.secureUrl ? (
+                <Image 
+                  source={{ uri: n.image.secureUrl }} 
+                  style={styles.newsImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.newsImage}>
+                  <Ionicons name="newspaper" size={24} color="#ccc" />
+                </View>
+              )}
               <Text style={styles.newsTitle} numberOfLines={2}>{n.title}</Text>
               {n.summary ? (<Text style={styles.newsSummary} numberOfLines={2}>{n.summary}</Text>) : null}
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
@@ -496,6 +534,7 @@ const styles = StyleSheet.create({
     width: 160,
     height: 280,
     marginRight: 12,
+    marginBottom: 12,
     backgroundColor: '#fff',
     borderRadius: 12,
     shadowColor: '#000',
@@ -596,12 +635,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    marginBottom: 12,
   },
   newsImage: {
     height: 100,
     borderRadius: 8,
     backgroundColor: '#eee',
     marginBottom: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   newsTitle: {
     fontSize: 14,
@@ -614,5 +656,3 @@ const styles = StyleSheet.create({
     color: '#666',
   },
 });
-
-

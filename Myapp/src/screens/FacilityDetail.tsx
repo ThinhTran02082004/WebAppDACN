@@ -394,7 +394,12 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
             {hospital.specialties && hospital.specialties.length > 0 ? (
               <>
                 {hospital.specialties.map((specialty) => (
-                  <View key={specialty._id} style={styles.specialtyCard}>
+                  <TouchableOpacity 
+                    key={specialty._id} 
+                    style={styles.specialtyCard}
+                    onPress={() => navigation.navigate('SpecialtyDetail', { specialtyId: specialty._id })}
+                    activeOpacity={0.7}
+                  >
                     <View style={styles.specialtyHeader}>
                       <View style={styles.specialtyIconContainer}>
                         <Ionicons name={AppIcons.specialty} size={IconSizes.md} color={IconColors.primary} />
@@ -406,7 +411,7 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
                         {specialty.description}
                       </Text>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </>
             ) : (
@@ -422,7 +427,12 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
             {hospital.services && hospital.services.length > 0 ? (
               <>
                 {hospital.services.map((service) => (
-                  <View key={service._id} style={styles.serviceCard}>
+                  <TouchableOpacity 
+                    key={service._id} 
+                    style={styles.serviceCard}
+                    onPress={() => navigation.navigate('ServiceDetail', { serviceId: service._id })}
+                    activeOpacity={0.7}
+                  >
                     <View style={styles.serviceHeader}>
                       <View style={styles.serviceIconContainer}>
                         <Ionicons name={AppIcons.service} size={IconSizes.md} color={IconColors.secondary} />
@@ -441,7 +451,7 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
                         {service.description}
                       </Text>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </>
             ) : (

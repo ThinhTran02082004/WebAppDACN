@@ -69,7 +69,7 @@ export default function SpecialtyListScreen({ navigation }: Props) {
 
   const handleSpecialtyPress = (specialty: Specialty) => {
     console.log('Specialty pressed:', specialty.name);
-    // TODO: Navigate to specialty detail
+    navigation.navigate('SpecialtyDetail', { specialtyId: specialty._id });
   };
 
   const handleBackPress = () => {
@@ -109,7 +109,10 @@ export default function SpecialtyListScreen({ navigation }: Props) {
             <Text style={styles.statText}>{specialty.serviceCount || 0} dịch vụ</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.bookingButton}>
+        <TouchableOpacity 
+          style={styles.bookingButton}
+          onPress={() => handleSpecialtyPress(specialty)}
+        >
           <Text style={styles.bookingButtonText}>Đặt khám ngay</Text>
         </TouchableOpacity>
       </View>

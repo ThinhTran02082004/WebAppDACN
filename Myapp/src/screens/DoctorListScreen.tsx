@@ -80,6 +80,13 @@ export default function DoctorListScreen({ navigation }: Props) {
   };
 
   const filterDoctors = () => {
+    console.log('Filtering doctors:', {
+      totalDoctors: doctors.length,
+      searchQuery,
+      selectedFilter,
+      selectedSpecialty
+    });
+    
     let filtered = doctors;
 
     // Filter by search query
@@ -89,18 +96,22 @@ export default function DoctorListScreen({ navigation }: Props) {
         doctor.specialtyId?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         doctor.hospitalId?.name?.toLowerCase().includes(searchQuery.toLowerCase())
       );
+      console.log('After search filter:', filtered.length);
     }
 
     // Filter by active status
     if (selectedFilter === 'active') {
       filtered = filtered.filter(doctor => doctor.isAvailable !== false);
+      console.log('After active filter:', filtered.length);
     }
 
     // Filter by specialty
     if (selectedSpecialty !== 'all') {
       filtered = filtered.filter(doctor => doctor.specialtyId?.name === selectedSpecialty);
+      console.log('After specialty filter:', filtered.length);
     }
 
+    console.log('Final filtered doctors:', filtered.length);
     setFilteredDoctors(filtered);
   };
 

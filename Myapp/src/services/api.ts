@@ -103,6 +103,7 @@ export interface ServiceItem {
   imageUrl?: string;
   image?: { secureUrl: string };
   isActive?: boolean;
+  duration?: string; // Thời gian thực hiện dịch vụ
 }
 
 export interface NewsItem {
@@ -113,6 +114,9 @@ export interface NewsItem {
   category?: string;
   image?: { secureUrl?: string };
   publishDate?: string;
+  createdAt?: string;
+  author?: string | { fullName: string };
+  isPublished?: boolean;
 }
 
 export interface ApiResponse<T> {

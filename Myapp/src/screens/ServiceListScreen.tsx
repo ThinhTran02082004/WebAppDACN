@@ -164,7 +164,7 @@ export default function ServiceListScreen({ navigation }: Props) {
 
   const handleServicePress = (service: ServiceItem) => {
     console.log('Service pressed:', service.name);
-    // TODO: Navigate to service detail
+    navigation.navigate('ServiceDetail', { serviceId: service._id });
   };
 
   const handleBackPress = () => {

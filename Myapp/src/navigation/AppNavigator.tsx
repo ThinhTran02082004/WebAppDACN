@@ -14,6 +14,9 @@ import SpecialtyListScreen from '../screens/SpecialtyListScreen';
 import ServiceListScreen from '../screens/ServiceListScreen';
 import DoctorListScreen from '../screens/DoctorListScreen';
 import NewsListScreen from '../screens/NewsListScreen';
+import NewsDetailScreen from '../screens/NewsDetailScreen';
+import ServiceDetailScreen from '../screens/ServiceDetailScreen';
+import SpecialtyDetailScreen from '../screens/SpecialtyDetailScreen';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 
 function RootNavigator() {
@@ -37,6 +40,9 @@ function RootNavigator() {
       <Stack.Screen name="ServiceList" component={ServiceListScreen} />
       <Stack.Screen name="DoctorList" component={DoctorListScreen} />
       <Stack.Screen name="NewsList" component={NewsListScreen} />
+      <Stack.Screen name="NewsDetail" component={NewsDetailScreen} />
+      <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
+      <Stack.Screen name="SpecialtyDetail" component={SpecialtyDetailScreen} />
     </Stack.Navigator>
   );
 }
@@ -55,6 +61,9 @@ export type RootStackParamList = {
   ServiceList: undefined;
   DoctorList: undefined;
   NewsList: undefined;
+  NewsDetail: { newsId: string };
+  ServiceDetail: { serviceId: string };
+  SpecialtyDetail: { specialtyId: string };
 };
 
 // const Stack = createStackNavigator<RootStackParamList>();
