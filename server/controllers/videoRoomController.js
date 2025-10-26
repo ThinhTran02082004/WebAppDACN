@@ -1,4 +1,4 @@
-const VideoRoom = require('../models/VideoRoom');
+﻿const VideoRoom = require('../models/VideoRoom');
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 const Doctor = require('../models/Doctor');
@@ -221,7 +221,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
   if (totalRoomsCount >= 3) {
     return res.status(400).json({
       success: false,
-      message: 'Đã đạt giới hạn tối đa 3 phòng video cho lịch hẹn này. Không thể tạo thêm phòng mới.',
+      message: 'Đã đạt giới hạn tối đa 3 phòng video cho lịch hẹn này. Không thể tạo thêm phòng mới.Vui lòng liên hệ holine',
       limit: 3,
       current: totalRoomsCount
     });

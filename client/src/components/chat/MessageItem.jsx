@@ -83,11 +83,19 @@ const MessageItem = ({ message, isOwnMessage, user, currentUser }) => {
 
   // Render appointment message
   if (message.messageType === 'appointment' && message.appointmentData) {
+    const appointmentId =
+      message.appointmentData?.appointmentId?._id || message.appointmentData?.appointmentId;
+    const isDoctor =
+      currentUser?.role === 'doctor' || currentUser?.roleType === 'doctor';
+    const appointmentLink = appointmentId
+      ? `${isDoctor ? '/doctor/appointments' : '/appointments'}/${appointmentId}`
+      : '#';
+
     return (
       <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4`}>
         <div className="max-w-[80%]">
           <Link 
-            to={`/appointments/${message.appointmentData.appointmentId}`}
+            to={appointmentLink}
             className="block"
           >
             <div className="bg-white border-2 border-blue-200 rounded-lg p-4 shadow-md hover:shadow-lg transition-shadow cursor-pointer">

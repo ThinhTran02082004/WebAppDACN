@@ -91,7 +91,18 @@ const VideoCallButton = ({ appointmentId, userRole, appointmentStatus }) => {
       }
     } catch (error) {
       console.error('Error starting video call:', error);
-      toast.error('Không thể bắt đầu cuộc gọi video');
+      const responseData = error?.response?.data;
+      if (responseData?.errorCode === 'VIDEO_ROOM_LIMIT_REACHED') {
+        const limit = responseData?.limit ?? 3;
+        const current = responseData?.current ?? limit;
+        toast.error(`${responseData.message} (Da tao ${current}/${limit} phong.)`);
+      } else {
+        const fallbackMessage =
+          responseData?.message ||
+          error?.message ||
+          'Không thể bắt đầu cuộc gọi video';
+        toast.error(fallbackMessage);
+      }
     } finally {
       setLoading(false);
     }
