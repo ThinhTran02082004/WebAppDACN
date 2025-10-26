@@ -1747,13 +1747,13 @@ const Home = () => {
         /* Floating Action Buttons */
         .floating-action-buttons {
           position: fixed;
-          bottom: 1rem;
+          bottom: 7rem; /* Đặt cao hơn để không đè lên chat widget */
           right: 1rem;
           display: flex;
           flex-direction: column;
           align-items: flex-end;
           gap: 0.5rem;
-          z-index: 1000;
+          z-index: 50;
         }
         
         .fab-main {
@@ -1793,7 +1793,7 @@ const Home = () => {
         
         @media (min-width: 640px) {
           .floating-action-buttons {
-            bottom: 2rem;
+            bottom: 8rem; /* Cao hơn trên desktop */
             right: 2rem;
             gap: 1rem;
           }
@@ -1820,7 +1820,7 @@ const Home = () => {
         }
       `}</style>
       
-      {/* Floating Action Buttons */}
+      {/* Floating Action Buttons - Hiển thị cao hơn để không đè lên chat widget */}
       <div className="floating-action-buttons">
         <Link to="/appointment" className="fab-main" title="Đặt lịch khám">
           <FaCalendarCheck />

@@ -92,7 +92,13 @@ const videoRoomSchema = new mongoose.Schema({
 });
 
 // Indexes
-videoRoomSchema.index({ appointmentId: 1 });
+videoRoomSchema.index(
+  { appointmentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ['waiting', 'active'] } }
+  }
+);
 videoRoomSchema.index({ doctorId: 1 });
 videoRoomSchema.index({ patientId: 1 });
 videoRoomSchema.index({ status: 1 });

@@ -44,7 +44,8 @@
 }
 
 .video-room-loading,
-.video-room-error {
+.video-room-error,
+.video-room-ended {
   flex: 1;
   display: flex;
   flex-direction: column;

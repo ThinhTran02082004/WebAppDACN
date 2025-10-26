@@ -1,8 +1,12 @@
 const socketIO = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Message = require('../models/Message');
+const Conversation = require('../models/Conversation');
 
 let io;
+// Store online users
+const onlineUsers = new Map(); // userId -> socketId
 // Store mapping of temporarily locked time slots
 const lockedTimeSlots = new Map();
 // Store timeout IDs to clear them if user books or cancels
@@ -55,6 +59,104 @@ const initializeSocket = (server) => {
     if (socket.userRole) {
       socket.join(`role:${socket.userRole}`);
     }
+    
+    // Mark user as online
+    onlineUsers.set(socket.userId.toString(), socket.id);
+
+    // Send current online list to the connected user
+    socket.emit('online_users', Array.from(onlineUsers.keys()));
+    
+    // Broadcast user online status to their contacts
+    socket.broadcast.emit('user_online', { userId: socket.userId.toString() });
+    
+    // =============== CHAT EVENTS ===============
+    
+    // Join conversation room
+    socket.on('join_conversation', ({ conversationId }) => {
+      socket.join(`conversation:${conversationId}`);
+      console.log(`User ${socket.userId} joined conversation ${conversationId}`);
+    });
+    
+    // Leave conversation room
+    socket.on('leave_conversation', ({ conversationId }) => {
+      socket.leave(`conversation:${conversationId}`);
+      console.log(`User ${socket.userId} left conversation ${conversationId}`);
+    });
+    
+    // Send message (real-time)
+    socket.on('send_message', async (messageData) => {
+      try {
+        const { conversationId, receiverId } = messageData;
+        
+        // Emit to conversation room
+        io.to(`conversation:${conversationId}`).emit('new_message', messageData);
+        
+        // Emit to receiver's personal room for notification
+        io.to(receiverId.toString()).emit('message_notification', {
+          ...messageData,
+          senderId: socket.userId
+        });
+        
+        console.log(`Message sent in conversation ${conversationId}`);
+      } catch (error) {
+        console.error('Error sending message via socket:', error);
+        socket.emit('message_error', { error: 'Failed to send message' });
+      }
+    });
+    
+    // Typing indicator
+    socket.on('typing_start', ({ conversationId, receiverId }) => {
+      io.to(receiverId.toString()).emit('user_typing', {
+        conversationId,
+        userId: socket.userId
+      });
+    });
+    
+    socket.on('typing_stop', ({ conversationId, receiverId }) => {
+      io.to(receiverId.toString()).emit('user_stop_typing', {
+        conversationId,
+        userId: socket.userId
+      });
+    });
+    
+    // Mark messages as read
+    socket.on('mark_as_read', async ({ conversationId, messageIds }) => {
+      try {
+        // Update messages in database
+        await Message.updateMany(
+          { _id: { $in: messageIds }, conversationId },
+          { readAt: new Date() }
+        );
+        
+        // Notify sender that messages were read
+        io.to(`conversation:${conversationId}`).emit('messages_read', {
+          conversationId,
+          messageIds,
+          readBy: socket.userId
+        });
+      } catch (error) {
+        console.error('Error marking messages as read:', error);
+      }
+    });
+    
+    // Video call events
+    socket.on('video_call_started', ({ conversationId, roomId, receiverId }) => {
+      io.to(receiverId.toString()).emit('incoming_video_call', {
+        conversationId,
+        roomId,
+        callerId: socket.userId
+      });
+    });
+    
+    socket.on('video_call_ended', ({ conversationId, roomId, receiverId, duration }) => {
+      io.to(receiverId.toString()).emit('video_call_ended_notification', {
+        conversationId,
+        roomId,
+        duration
+      });
+    });
+    
+    // =============== END CHAT EVENTS ===============
     
     // Handle time slot locking
     socket.on('lock_time_slot', ({ scheduleId, timeSlotId, doctorId, date }) => {
@@ -150,6 +252,12 @@ const initializeSocket = (server) => {
     // Handle disconnect
     socket.on('disconnect', () => {
       console.log(`User disconnected: ${socket.userId}`);
+      
+      // Remove user from online users
+      onlineUsers.delete(socket.userId.toString());
+      
+      // Broadcast user offline status
+      socket.broadcast.emit('user_offline', { userId: socket.userId.toString() });
       
       // Clean up appointment rooms
       if (appointmentRooms.has(socket.id)) {
@@ -256,11 +364,23 @@ const getTimeSlotLocker = (scheduleId, timeSlotId) => {
   return lockedTimeSlots.get(slotKey);
 };
 
+// Check if user is online
+const isUserOnline = (userId) => {
+  return onlineUsers.has(userId.toString());
+};
+
+// Get online users
+const getOnlineUsers = () => {
+  return Array.from(onlineUsers.keys());
+};
+
 module.exports = {
   initializeSocket,
   broadcastTimeSlotUpdate,
   lockTimeSlot,
   unlockTimeSlot,
   isTimeSlotLocked,
-  getTimeSlotLocker
+  getTimeSlotLocker,
+  isUserOnline,
+  getOnlineUsers
 }; 

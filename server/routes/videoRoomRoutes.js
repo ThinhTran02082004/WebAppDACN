@@ -11,7 +11,8 @@ const {
   removeParticipantFromRoom,
   getRoomByAppointmentId,
   getVideoCallHistory,
-  getVideoCallHistoryDetail
+  getVideoCallHistoryDetail,
+  leaveVideoRoom
 } = require('../controllers/videoRoomController');
 
 // Protected routes - require authentication
@@ -35,6 +36,7 @@ router.get('/', listVideoRooms);
 
 // Routes with :roomId parameter - MUST BE LAST
 router.get('/:roomId', getVideoRoomDetails);
+router.post('/:roomId/leave', leaveVideoRoom);
 router.post('/:roomId/end', endVideoRoom);
 
 module.exports = router;

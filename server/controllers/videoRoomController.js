@@ -1,8 +1,166 @@
 const VideoRoom = require('../models/VideoRoom');
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
+const Doctor = require('../models/Doctor');
 const livekitService = require('../services/livekitService');
 const asyncHandler = require('../middlewares/async');
+const { createVideoCallMessage } = require('../utils/chatHelpers');
+
+const normalizeId = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (value._id) return value._id.toString();
+  if (value.toString) return value.toString();
+  return null;
+};
+
+const resolveParticipantRole = (videoRoom, user) => {
+  if (!videoRoom || !user) return null;
+
+  const currentUserId = normalizeId(user.id || user._id);
+  if (!currentUserId) return null;
+
+  const doctorUserId = normalizeId(
+    videoRoom.doctorId && videoRoom.doctorId.user
+      ? videoRoom.doctorId.user
+      : null
+  );
+  const patientUserId = normalizeId(videoRoom.patientId);
+
+  if (doctorUserId && doctorUserId === currentUserId) {
+    return 'doctor';
+  }
+
+  if (patientUserId && patientUserId === currentUserId) {
+    return 'patient';
+  }
+
+  if (user.role === 'admin' || user.roleType === 'admin') {
+    return 'admin';
+  }
+
+  if (user.role === 'doctor' || user.roleType === 'doctor') {
+    return 'doctor';
+  }
+
+  if (user.role === 'user' || user.roleType === 'user') {
+    return 'patient';
+  }
+
+  return null;
+};
+
+const getVideoRoomParticipantIds = async (videoRoom) => {
+  if (!videoRoom) return { doctorUserId: null, patientUserId: null };
+
+  let doctorUserId = null;
+  if (videoRoom.doctorId && videoRoom.doctorId.user) {
+    doctorUserId = normalizeId(videoRoom.doctorId.user);
+  } else if (videoRoom.doctorId) {
+    const doctorDoc = await Doctor.findById(videoRoom.doctorId).select('user');
+    doctorUserId = normalizeId(doctorDoc?.user);
+  }
+
+  const patientUserId = normalizeId(videoRoom.patientId);
+
+  return { doctorUserId, patientUserId };
+};
+
+const sanitizeRoomPayload = (videoRoom) => ({
+  _id: videoRoom?._id,
+  appointmentId: normalizeId(videoRoom?.appointmentId),
+  roomName: videoRoom?.roomName,
+  status: videoRoom?.status,
+  startTime: videoRoom?.startTime,
+  endTime: videoRoom?.endTime,
+  duration: videoRoom?.duration,
+  createdAt: videoRoom?.createdAt,
+  updatedAt: videoRoom?.updatedAt
+});
+
+const emitVideoRoomUpdate = async (videoRoom) => {
+  if (!global.io || !videoRoom) return;
+  const { doctorUserId, patientUserId } = await getVideoRoomParticipantIds(videoRoom);
+  const recipients = [doctorUserId, patientUserId].filter(Boolean);
+  if (!recipients.length) return;
+
+  const payload = {
+    appointmentId: normalizeId(videoRoom.appointmentId),
+    room: sanitizeRoomPayload(videoRoom)
+  };
+
+  recipients.forEach((userId) => {
+    global.io.to(userId).emit('video_room_updated', payload);
+  });
+};
+
+const finalizeVideoRoom = async (videoRoom) => {
+  if (!videoRoom || videoRoom.status === 'ended') {
+    return videoRoom;
+  }
+
+  // Mark as ended immediately to prevent race conditions
+  videoRoom.status = 'ended';
+  videoRoom.endTime = new Date();
+
+  if (videoRoom.startTime) {
+    videoRoom.duration = Math.round(
+      (videoRoom.endTime - videoRoom.startTime) / (1000 * 60)
+    );
+  }
+
+  videoRoom.participants.forEach((participant) => {
+    if (!participant.leftAt) {
+      participant.leftAt = new Date();
+    }
+  });
+
+  await videoRoom.save();
+
+  // Try to delete LiveKit room (non-blocking)
+  try {
+    await livekitService.deleteRoom(videoRoom.roomName);
+  } catch (error) {
+    console.error('Error deleting LiveKit room:', error?.message || error);
+  }
+
+  // Create video call end message (only once)
+  if (videoRoom.doctorId && videoRoom.patientId) {
+    try {
+      let doctorUserId = null;
+
+      if (videoRoom.doctorId.user) {
+        doctorUserId = videoRoom.doctorId.user._id || videoRoom.doctorId.user;
+      } else {
+        const doctorRecord = await Doctor.findById(videoRoom.doctorId).select('user');
+        doctorUserId = doctorRecord?.user?._id || doctorRecord?.user || null;
+      }
+
+      const patientUserId = videoRoom.patientId._id || videoRoom.patientId;
+
+      if (doctorUserId && patientUserId) {
+        await createVideoCallMessage({
+          doctorUserId: doctorUserId.toString(),
+          patientUserId: patientUserId.toString(),
+          type: 'video_call_end',
+          videoCallData: {
+            roomId: videoRoom._id,
+            roomName: videoRoom.roomName,
+            duration: videoRoom.duration,
+            startTime: videoRoom.startTime,
+            endTime: videoRoom.endTime
+          }
+        });
+      }
+    } catch (chatError) {
+      console.error('Error creating video call message:', chatError);
+    }
+  }
+
+  await emitVideoRoomUpdate(videoRoom);
+
+  return videoRoom;
+};
 
 // Create a video room for an appointment
 exports.createVideoRoom = asyncHandler(async (req, res) => {
@@ -71,20 +229,9 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
 
   // Generate unique room name
   const roomName = `appointment_${appointmentId}_${Date.now()}`;
+  videoRoom = null;
 
   try {
-    // Create room in LiveKit
-    await livekitService.createRoom(roomName, {
-      maxParticipants: 3, // Doctor, Patient, and potentially an Admin
-      emptyTimeout: 1800, // 30 minutes
-      metadata: {
-        appointmentId: appointmentId.toString(),
-        doctorId: appointment.doctorId ? appointment.doctorId._id.toString() : null,
-        patientId: patientId ? patientId.toString() : null
-      }
-    });
-
-    // Create room in database
     videoRoom = await VideoRoom.create({
       roomName,
       appointmentId,
@@ -99,20 +246,57 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
         enableChat: true
       }
     });
-
-    res.status(201).json({
-      success: true,
-      message: 'Tạo phòng video thành công',
-      data: videoRoom
-    });
   } catch (error) {
+    if (error?.code === 11000) {
+      const existingRoom = await VideoRoom.findOne({
+        appointmentId,
+        status: { $in: ['waiting', 'active'] }
+      });
+
+      if (existingRoom) {
+        return res.status(200).json({
+          success: true,
+          message: 'Phòng đã tồn tại',
+          data: existingRoom
+        });
+      }
+    }
+
     console.error('Error creating video room:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Không thể tạo phòng video',
       error: error.message
     });
   }
+
+  try {
+    await livekitService.createRoom(roomName, {
+      maxParticipants: 3, // Doctor, Patient, and potentially an Admin
+      emptyTimeout: 1800, // 30 minutes
+      metadata: {
+        appointmentId: appointmentId.toString(),
+        doctorId: appointment.doctorId ? appointment.doctorId._id.toString() : null,
+        patientId: patientId ? patientId.toString() : null
+      }
+    });
+  } catch (livekitError) {
+    await VideoRoom.findByIdAndDelete(videoRoom._id).catch(() => {});
+    console.error('Error creating video room in LiveKit:', livekitError);
+    return res.status(500).json({
+      success: false,
+      message: 'Không thể tạo phòng video',
+      error: livekitError.message
+    });
+  }
+
+  await emitVideoRoomUpdate(videoRoom);
+
+  res.status(201).json({
+    success: true,
+    message: 'Tạo phòng video thành công',
+    data: videoRoom
+  });
 });
 
 // Join a video room
@@ -230,32 +414,28 @@ exports.joinVideoRoom = asyncHandler(async (req, res) => {
   // console.log('WS URL:', process.env.LIVEKIT_WS_URL);
   // console.log('==================');
 
-  // Update room status if first participant
-  if (videoRoom.status === 'waiting') {
-    videoRoom.status = 'active';
-    videoRoom.startTime = new Date();
-    
-    // Add participant to the list
+  const addParticipantRecord = async () => {
     videoRoom.participants.push({
       userId,
       role,
       joinedAt: new Date()
     });
-    
     await videoRoom.save();
+  };
+
+  // Update room status if first participant
+  if (videoRoom.status === 'waiting') {
+    videoRoom.status = 'active';
+    videoRoom.startTime = new Date();
+    await addParticipantRecord();
   } else {
-    // Check if participant already exists
-    const existingParticipant = videoRoom.participants.find(
-      p => p.userId.toString() === userId
+    // Only add if there isn't an active (not left) record for this user
+    const activeParticipant = videoRoom.participants.find(
+      (p) => p.userId && p.userId.toString() === userId && !p.leftAt
     );
-    
-    if (!existingParticipant) {
-      videoRoom.participants.push({
-        userId,
-        role,
-        joinedAt: new Date()
-      });
-      await videoRoom.save();
+
+    if (!activeParticipant) {
+      await addParticipantRecord();
     }
   }
 
@@ -286,7 +466,15 @@ exports.endVideoRoom = asyncHandler(async (req, res) => {
   const { roomId } = req.params;
   const userId = req.user.id;
 
-  const videoRoom = await VideoRoom.findById(roomId);
+  const videoRoom = await VideoRoom.findById(roomId)
+    .populate({
+      path: 'doctorId',
+      populate: {
+        path: 'user',
+        model: 'User'
+      }
+    })
+    .populate('patientId');
 
   if (!videoRoom) {
     return res.status(404).json({
@@ -295,10 +483,19 @@ exports.endVideoRoom = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check authorization - handle possible null values
+  let doctorUserId = normalizeId(videoRoom.doctorId?.user);
+  if (!doctorUserId && videoRoom.doctorId) {
+    const doctorRecord = await Doctor.findById(videoRoom.doctorId).select('user');
+    doctorUserId = normalizeId(doctorRecord?.user);
+  }
+  const patientUserId = normalizeId(videoRoom.patientId);
+  const createdById = normalizeId(videoRoom.createdBy);
+  const currentUserId = normalizeId(userId);
+
   const isAuthorized = 
-    (videoRoom.doctorId && videoRoom.doctorId.toString() === userId) ||
-    (videoRoom.createdBy && videoRoom.createdBy.toString() === userId) ||
+    (doctorUserId && doctorUserId === currentUserId) ||
+    (patientUserId && patientUserId === currentUserId) ||
+    (createdById && createdById === currentUserId) ||
     req.user.role === 'admin' ||
     req.user.roleType === 'admin';
 
@@ -310,28 +507,7 @@ exports.endVideoRoom = asyncHandler(async (req, res) => {
   }
 
   try {
-    // Delete room from LiveKit
-    await livekitService.deleteRoom(videoRoom.roomName);
-
-    // Update room status in database
-    videoRoom.status = 'ended';
-    videoRoom.endTime = new Date();
-    
-    if (videoRoom.startTime) {
-      videoRoom.duration = Math.round(
-        (videoRoom.endTime - videoRoom.startTime) / (1000 * 60)
-      );
-    }
-
-    // Update participants' left time
-    videoRoom.participants.forEach(participant => {
-      if (!participant.leftAt) {
-        participant.leftAt = new Date();
-      }
-    });
-
-    await videoRoom.save();
-
+    await finalizeVideoRoom(videoRoom);
     res.json({
       success: true,
       message: 'Kết thúc phòng video thành công',
@@ -348,6 +524,101 @@ exports.endVideoRoom = asyncHandler(async (req, res) => {
       error: error.message
     });
   }
+});
+
+// Mark participant as left; auto-end if no one remains
+exports.leaveVideoRoom = asyncHandler(async (req, res) => {
+  const { roomId } = req.params;
+  const userId = req.user.id;
+
+  const videoRoom = await VideoRoom.findById(roomId)
+    .populate({
+      path: 'doctorId',
+      populate: {
+        path: 'user',
+        model: 'User'
+      }
+    })
+    .populate('patientId');
+
+  if (!videoRoom) {
+    return res.status(404).json({
+      success: false,
+      message: 'Phòng video không tồn tại'
+    });
+  }
+
+  if (videoRoom.status === 'ended') {
+    return res.json({
+      success: true,
+      autoEnded: true,
+      message: 'Phòng video đã kết thúc'
+    });
+  }
+
+  const fallbackRole =
+    req.user.role === 'doctor' || req.user.roleType === 'doctor'
+      ? 'doctor'
+      : (req.user.role === 'admin' || req.user.roleType === 'admin'
+        ? 'admin'
+        : 'patient');
+  const participantRole = resolveParticipantRole(videoRoom, req.user) || fallbackRole;
+
+  let participantMarked = false;
+  videoRoom.participants.forEach((participant) => {
+    if (
+      participant.userId &&
+      participant.userId.toString() === userId &&
+      !participant.leftAt
+    ) {
+      participant.leftAt = new Date();
+      participantMarked = true;
+    }
+  });
+
+  if (!participantMarked) {
+    videoRoom.participants.push({
+      userId,
+      role: participantRole,
+      joinedAt: new Date(),
+      leftAt: new Date()
+    });
+  }
+
+  await videoRoom.save();
+
+  let activeParticipants = videoRoom.participants.filter((p) => !p.leftAt);
+
+  try {
+    const livekitParticipants = await livekitService.listParticipants(videoRoom.roomName);
+    if (Array.isArray(livekitParticipants)) {
+      const activeIdentities = new Set(
+        livekitParticipants.map((participant) => participant.identity?.toString())
+      );
+      activeParticipants = activeParticipants.filter((participant) =>
+        activeIdentities.has(participant.userId?.toString())
+      );
+    }
+  } catch (error) {
+    console.error('Error fetching LiveKit participants:', error);
+    // Fall back to local participant tracking
+  }
+
+  if (activeParticipants.length === 0) {
+    await finalizeVideoRoom(videoRoom);
+    return res.json({
+      success: true,
+      autoEnded: true,
+      message: 'Cuộc gọi đã kết thúc vì không còn người tham gia'
+    });
+  }
+
+  await emitVideoRoomUpdate(videoRoom);
+
+  return res.json({
+    success: true,
+    autoEnded: false
+  });
 });
 
 // Get video room details
@@ -610,17 +881,19 @@ exports.getRoomByAppointmentId = asyncHandler(async (req, res) => {
 
 // Get video call history with role-based access control
 exports.getVideoCallHistory = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, status } = req.query;
+  const { page = 1, limit = 10, status, date } = req.query;
   const userId = req.user.id;
-  const userRole = req.user.role;
+  const userRole = (req.user.roleType || req.user.role || '').toLowerCase();
 
-  let query = {};
+  const query = {};
 
-  // Filter by status if provided (only show ended calls by default for history)
+  // Handle status filtering - default to "ended" when param missing, skip when "all"
   if (status) {
-    query.status = status;
+    if (status !== 'all') {
+      query.status = status;
+    }
   } else {
-    query.status = 'ended'; // Default to only ended calls for history
+    query.status = 'ended';
   }
 
   // Role-based filtering
@@ -644,6 +917,25 @@ exports.getVideoCallHistory = asyncHandler(async (req, res) => {
   } else {
     // Patient (user role) can only see their own video calls
     query.patientId = userId;
+  }
+
+  // Filter by specific date if provided (match either startTime or createdAt)
+  if (date) {
+    const parsedDate = new Date(date);
+    if (!isNaN(parsedDate.getTime())) {
+      const startOfDay = new Date(parsedDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(parsedDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { startTime: { $gte: startOfDay, $lte: endOfDay } },
+          { createdAt: { $gte: startOfDay, $lte: endOfDay } }
+        ]
+      });
+    }
   }
 
   const skip = (page - 1) * limit;

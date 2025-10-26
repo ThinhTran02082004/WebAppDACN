@@ -4,6 +4,8 @@ const User = require('../models/User');
 const Doctor = require('../models/Doctor');
 const Appointment = require('../models/Appointment');
 const { validationResult } = require('express-validator');
+const { createNotification } = require('./notificationController');
+const { uploadMediaToCloudinary } = require('../utils/mediaUpload');
 
 /**
  * @desc    Get all conversations for the current user
@@ -90,7 +92,7 @@ exports.getMessages = async (req, res) => {
       .limit(parseInt(limit))
       .populate({
         path: 'senderId',
-        select: 'fullName profileImage roleType'
+        select: 'fullName profileImage roleType avatarUrl avatar'
       });
 
     // Mark unread messages as read
@@ -200,8 +202,39 @@ exports.sendMessage = async (req, res) => {
     // Populate sender info
     await message.populate({
       path: 'senderId',
-      select: 'fullName profileImage roleType'
+      select: 'fullName profileImage roleType avatarUrl avatar'
     });
+
+    // Emit socket event for real-time message
+    if (global.io) {
+      global.io.to(`conversation:${conversationId}`).emit('new_message', message);
+      global.io.to(receiverId.toString()).emit('message_notification', {
+        conversationId,
+        message,
+        senderId,
+        senderName: message.senderId.fullName
+      });
+    }
+
+    // Create notification for receiver
+    try {
+      await createNotification({
+        userId: receiverId,
+        type: 'message',
+        title: 'Tin nhắn mới',
+        content: `${message.senderId.fullName}: ${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`,
+        data: {
+          conversationId,
+          messageId: message._id,
+          senderId,
+          senderName: message.senderId.fullName,
+          senderAvatar: message.senderId.avatarUrl || message.senderId.avatar?.url
+        }
+      });
+    } catch (notifError) {
+      console.error('Error creating notification:', notifError);
+      // Don't fail the message send if notification fails
+    }
 
     return res.status(201).json({
       success: true,
@@ -379,8 +412,14 @@ exports.createConversation = async (req, res) => {
     // Populate participants info
     await conversation.populate({
       path: 'participants',
-      select: 'fullName profileImage roleType email'
+      select: 'fullName profileImage roleType email avatarUrl avatar'
     });
+
+    // Emit socket event for new conversation
+    if (global.io) {
+      // Notify the other participant
+      global.io.to(resolvedParticipantId).emit('new_conversation', conversation);
+    }
 
     return res.status(201).json({
       success: true,
@@ -673,6 +712,178 @@ exports.deleteMessage = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Lỗi khi xóa tin nhắn',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Upload media (image/video) to Cloudinary
+ * @route   POST /api/chat/upload-media
+ * @access  Private (User, Doctor)
+ */
+exports.uploadChatMedia = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const mediaData = await uploadMediaToCloudinary(
+      req.file.buffer,
+      req.file.originalname,
+      'chat-media'
+    );
+
+    res.status(200).json({
+      success: true,
+      data: mediaData
+    });
+  } catch (error) {
+    console.error('Error uploading media:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload media',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Send appointment message in conversation
+ * @route   POST /api/chat/conversations/:conversationId/send-appointment
+ * @access  Private (User, Doctor)
+ */
+exports.sendAppointmentMessage = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { appointmentId } = req.body;
+    const senderId = req.user.id;
+
+    if (!appointmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Appointment ID is required'
+      });
+    }
+
+    // Fetch appointment details
+    const appointment = await Appointment.findById(appointmentId)
+      .populate('patientId', 'fullName avatarUrl profileImage phone email')
+      .populate({
+        path: 'doctorId',
+        populate: { path: 'user', select: 'fullName avatarUrl profileImage' }
+      })
+      .populate('serviceId', 'name')
+      .populate('hospitalId', 'name');
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Appointment not found'
+      });
+    }
+
+    // Get conversation
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      participants: senderId,
+      isActive: true
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    // Determine receiver
+    const receiverId = conversation.participants.find(
+      p => p.toString() !== senderId.toString()
+    );
+
+    // Create appointment message
+    const message = new Message({
+      senderId,
+      receiverId,
+      conversationId,
+      content: 'Đã chia sẻ thông tin lịch hẹn',
+      messageType: 'appointment',
+      appointmentData: {
+        appointmentId: appointment._id,
+        bookingCode: appointment.bookingCode,
+        doctorName: appointment.doctorId?.user?.fullName || 'N/A',
+        patientName: appointment.patientId?.fullName || 'N/A',
+        appointmentDate: appointment.appointmentDate,
+        timeSlot: appointment.timeSlot,
+        serviceName: appointment.serviceId?.name || 'N/A',
+        hospitalName: appointment.hospitalId?.name || 'N/A',
+        status: appointment.status
+      }
+    });
+
+    await message.save();
+
+    // Update conversation
+    conversation.lastMessage = {
+      content: 'Đã chia sẻ thông tin lịch hẹn',
+      senderId,
+      timestamp: new Date()
+    };
+    conversation.lastActivity = new Date();
+
+    if (!conversation.unreadCount) {
+      conversation.unreadCount = new Map();
+    }
+    
+    const receiverUnreadCount = conversation.unreadCount.get(receiverId.toString()) || 0;
+    conversation.unreadCount.set(receiverId.toString(), receiverUnreadCount + 1);
+    
+    await conversation.save();
+
+    await message.populate('senderId', 'fullName avatarUrl avatar');
+
+    // Emit socket events
+    if (global.io) {
+      global.io.to(`conversation:${conversationId}`).emit('new_message', message);
+      global.io.to(receiverId.toString()).emit('message_notification', {
+        conversationId,
+        message,
+        senderId,
+        senderName: message.senderId.fullName
+      });
+    }
+
+    // Create notification
+    try {
+      await createNotification({
+        userId: receiverId,
+        type: 'message',
+        title: 'Tin nhắn mới',
+        content: 'Đã chia sẻ thông tin lịch hẹn',
+        data: {
+          conversationId,
+          messageId: message._id,
+          senderId,
+          senderName: message.senderId.fullName
+        }
+      });
+    } catch (notifError) {
+      console.error('Error creating notification:', notifError);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: message
+    });
+  } catch (error) {
+    console.error('Error sending appointment message:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send appointment message',
       error: error.message
     });
   }

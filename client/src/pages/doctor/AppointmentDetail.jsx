@@ -5,7 +5,7 @@ import {
   FaNotesMedical, FaClipboardCheck, FaTimesCircle, FaCheckCircle,
   FaArrowLeft, FaFileAlt, FaPrint, FaExclamationCircle,
   FaClock, FaStethoscope, FaRegHospital, FaInfoCircle,
-  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen, FaVideo, FaPlus, FaTimes
+  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen, FaVideo, FaPlus, FaTimes, FaComments, FaShare
 } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
 
@@ -107,6 +107,64 @@ const AppointmentDetail = () => {
   const handleRejection = () => {
     if (rejectionReason.trim()) {
       handleStatusChange('rejected', rejectionReason);
+    }
+  };
+
+  const handleChatWithPatient = async () => {
+    try {
+      // Get patient's user ID
+      const patientUserId = appointment?.patientId?._id || appointment?.patientId;
+      
+      if (!patientUserId) {
+        toast.error('Không thể tìm thấy thông tin bệnh nhân');
+        return;
+      }
+
+      // Create or get existing conversation
+      const response = await api.post('/chat/conversations', {
+        participantId: patientUserId,
+        appointmentId: appointment._id
+      });
+
+      if (response.data.success) {
+        // Navigate to chat page with conversation ID
+        navigate(`/doctor/chat/${response.data.data._id}`);
+      }
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      toast.error(error.response?.data?.message || 'Không thể bắt đầu trò chuyện. Vui lòng thử lại sau.');
+    }
+  };
+
+  const handleShareToChat = async () => {
+    try {
+      const patientUserId = appointment?.patientId?._id || appointment?.patientId;
+      
+      if (!patientUserId) {
+        toast.error('Không thể tìm thấy thông tin bệnh nhân');
+        return;
+      }
+
+      // Create or get conversation
+      const response = await api.post('/chat/conversations', {
+        participantId: patientUserId,
+        appointmentId: appointment._id
+      });
+
+      if (response.data.success) {
+        const conversationId = response.data.data._id;
+        
+        // Send appointment to chat
+        await api.post(`/chat/conversations/${conversationId}/send-appointment`, {
+          appointmentId: appointment._id
+        });
+        
+        toast.success('Đã chia sẻ lịch hẹn vào chat');
+        navigate(`/doctor/chat/${conversationId}`);
+      }
+    } catch (error) {
+      console.error('Error sharing appointment:', error);
+      toast.error('Không thể chia sẻ lịch hẹn');
     }
   };
 
@@ -512,6 +570,27 @@ const AppointmentDetail = () => {
         {/* Actions */}
         <div className="px-4 sm:px-6 py-4 bg-gray-50 flex flex-wrap gap-3 justify-between border-b border-gray-100">
           <div className="flex flex-wrap gap-2 sm:gap-3">
+            {/* Chat Button - Show for pending, confirmed, or completed appointments */}
+            {(appointment.status === 'pending' || appointment.status === 'confirmed' || appointment.status === 'completed') && (
+              <>
+                <button
+                  className="inline-flex items-center px-3 sm:px-4 py-2 rounded-lg bg-green-100 text-green-800 hover:bg-green-200 transition-all text-sm font-medium"
+                  onClick={handleChatWithPatient}
+                >
+                  <FaComments className="mr-1.5" />
+                  <span className="hidden sm:inline">Chat với bệnh nhân</span>
+                  <span className="sm:hidden">Chat</span>
+                </button>
+                <button
+                  onClick={handleShareToChat}
+                  className="inline-flex items-center px-3 sm:px-4 py-2 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 transition-all text-sm font-medium"
+                >
+                  <FaShare className="mr-1.5" />
+                  <span className="hidden sm:inline">Chia sẻ vào chat</span>
+                  <span className="sm:hidden">Chia sẻ</span>
+                </button>
+              </>
+            )}
             {/* Video Call Button for confirmed appointments */}
             {appointment.status === 'confirmed' && (
               <VideoCallButton 

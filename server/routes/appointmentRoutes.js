@@ -37,6 +37,9 @@ router.use(protect);
 // Kiểm tra trạng thái khóa của khung giờ
 router.get('/schedules/:scheduleId/time-slots/:timeSlotId/availability', appointmentController.checkTimeSlotAvailability);
 
+// Lấy lịch hẹn phục vụ tính năng chat (giữa bác sĩ và bệnh nhân)
+router.get('/chat/shared', appointmentController.getSharedAppointmentsForChat);
+
 // === ROUTES DÀNH CHO BỆNH NHÂN ===
 
 // POST /api/appointments – Đặt lịch khám

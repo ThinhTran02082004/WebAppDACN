@@ -3726,6 +3726,110 @@ exports.getPatientAppointments = async (req, res) => {
 };
 
 /**
+ * @desc    Get appointments shared between logged-in user and the other participant for chat
+ * @route   GET /api/appointments/chat/shared?otherUserId={id}
+ * @access  Private (doctor, patient)
+ */
+exports.getSharedAppointmentsForChat = async (req, res) => {
+  try {
+    const { otherUserId } = req.query;
+    const currentUserId = req.user.id;
+    const currentUserRole = req.user.roleType || req.user.role;
+
+    if (!otherUserId || !mongoose.Types.ObjectId.isValid(otherUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'otherUserId is required'
+      });
+    }
+
+    if (!['doctor', 'user'].includes(currentUserRole)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only doctors and patients can use this feature'
+      });
+    }
+
+    const otherUser = await User.findById(otherUserId).select('roleType fullName');
+
+    if (!otherUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Other user not found'
+      });
+    }
+
+    if (!['doctor', 'user'].includes(otherUser.roleType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid participant combination'
+      });
+    }
+
+    let doctorUserId;
+    let patientUserId;
+
+    if (currentUserRole === 'doctor' && otherUser.roleType === 'user') {
+      doctorUserId = currentUserId;
+      patientUserId = otherUserId;
+    } else if (currentUserRole === 'user' && otherUser.roleType === 'doctor') {
+      doctorUserId = otherUserId;
+      patientUserId = currentUserId;
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: 'Chat appointments are only available between doctors and patients'
+      });
+    }
+
+    const doctor = await Doctor.findOne({ user: doctorUserId }).select('_id');
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Doctor information not found'
+      });
+    }
+
+    const appointments = await Appointment.find({
+      doctorId: doctor._id,
+      patientId: patientUserId,
+      status: { $nin: ['cancelled', 'rejected'] }
+    })
+      .populate({
+        path: 'doctorId',
+        select: 'fullName user',
+        populate: {
+          path: 'user',
+          select: 'fullName avatarUrl profileImage'
+        }
+      })
+      .populate({
+        path: 'patientId',
+        select: 'fullName avatarUrl profileImage phone email'
+      })
+      .populate('hospitalId', 'name')
+      .populate('serviceId', 'name')
+      .sort({ appointmentDate: -1, 'timeSlot.startTime': -1 })
+      .limit(50)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: appointments.length,
+      data: appointments
+    });
+  } catch (error) {
+    console.error('Error fetching chat appointments:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error while fetching appointments for chat',
+      error: error.message
+    });
+  }
+};
+
+/**
  * @desc    Mark appointment as no-show
  * @route   PUT /api/appointments/:id/no-show
  * @access  Private (doctor)

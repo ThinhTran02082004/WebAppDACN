@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
+import { FaEnvelope } from 'react-icons/fa';
 
 const Navbar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const { user, logout } = useAuth();
+  const { messageUnreadCount } = useNotification();
   const navigate = useNavigate();
   const userMenuRef = useRef(null);
   const [avatarError, setAvatarError] = useState(false);
@@ -149,6 +152,21 @@ const Navbar = () => {
           <div className="hidden lg:flex items-center space-x-4">
             {user ? (
               <div className="flex items-center space-x-4">
+                {/* Message icon - only for user and doctor */}
+                {(user.role === 'user' || user.role === 'doctor' || user.roleType === 'user' || user.roleType === 'doctor') && (
+                  <Link
+                    to={user.role === 'doctor' || user.roleType === 'doctor' ? '/doctor/chat' : '/chat'}
+                    className="relative p-2 text-gray-600 hover:text-primary transition-colors"
+                    title="Tin nhắn"
+                  >
+                    <FaEnvelope className="w-5 h-5" />
+                    {messageUnreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        {messageUnreadCount > 9 ? '9+' : messageUnreadCount}
+                      </span>
+                    )}
+                  </Link>
+                )}
                 <div className="relative" ref={userMenuRef}>
                   <button 
                     className="flex items-center focus:outline-none"
@@ -202,6 +220,25 @@ const Navbar = () => {
                           </svg>
                         Lịch sử Video Call
                         </Link>
+
+                        {/* Chat link for user and doctor */}
+                        {(user.role === 'user' || user.role === 'doctor' || user.roleType === 'user' || user.roleType === 'doctor') && (
+                          <Link 
+                            to={user.role === 'doctor' || user.roleType === 'doctor' ? '/doctor/chat' : '/chat'} 
+                            className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary transition-colors" 
+                            onClick={() => setIsUserMenuOpen(false)}
+                          >
+                            <svg className="w-4 h-4 text-gray-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            Tin nhắn
+                            {messageUnreadCount > 0 && (
+                              <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                {messageUnreadCount > 9 ? '9+' : messageUnreadCount}
+                              </span>
+                            )}
+                          </Link>
+                        )}
 
                         {user.role === 'admin' && (
                           <Link to="/admin/dashboard" className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary transition-colors" onClick={() => setIsUserMenuOpen(false)}>
@@ -370,6 +407,22 @@ const Navbar = () => {
                     >
                       Lịch sử Video Call
                     </Link>
+
+                    {/* Chat link for mobile - user and doctor */}
+                    {(user.role === 'user' || user.role === 'doctor' || user.roleType === 'user' || user.roleType === 'doctor') && (
+                      <Link
+                        to={user.role === 'doctor' || user.roleType === 'doctor' ? '/doctor/chat' : '/chat'}
+                        className="block px-4 py-3 text-gray-800 hover:bg-gray-50 rounded-lg transition-colors relative"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        Tin nhắn
+                        {messageUnreadCount > 0 && (
+                          <span className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                            {messageUnreadCount > 9 ? '9+' : messageUnreadCount}
+                          </span>
+                        )}
+                      </Link>
+                    )}
 
                     {user.role === 'admin' && (
                       <Link 

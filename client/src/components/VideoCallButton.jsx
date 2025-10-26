@@ -1,37 +1,82 @@
-import React, { useState, useEffect } from 'react';
-import { FaVideo, FaSpinner, FaExclamationCircle } from 'react-icons/fa';
+import React, { useState, useEffect, useCallback } from 'react';
+import { FaVideo, FaSpinner } from 'react-icons/fa';
 import api from '../utils/api';
 import VideoRoom from './VideoRoom/VideoRoom';
 import { toast } from 'react-toastify';
+import { useSocket } from '../context/SocketContext';
 
 const VideoCallButton = ({ appointmentId, userRole, appointmentStatus }) => {
   const [showVideoRoom, setShowVideoRoom] = useState(false);
   const [loading, setLoading] = useState(false);
   const [roomInfo, setRoomInfo] = useState(null);
   const [checking, setChecking] = useState(false);
+  const { socket, on, off } = useSocket();
 
-  useEffect(() => {
-    // Check if there's an active room for this appointment
-    checkExistingRoom();
-  }, [appointmentId]);
-
-  const checkExistingRoom = async () => {
+  const fetchExistingRoom = useCallback(async () => {
     try {
-      setChecking(true);
       const response = await api.get(`/video-rooms/appointment/${appointmentId}`);
       if (response.data.success && response.data.data) {
-        setRoomInfo(response.data.data);
+        return response.data.data;
       }
+    } catch (error) {
+      console.error('Error checking existing room:', error);
+    }
+    return null;
+  }, [appointmentId]);
+
+  const checkExistingRoom = useCallback(async () => {
+    try {
+      setChecking(true);
+      const existingRoom = await fetchExistingRoom();
+      setRoomInfo(existingRoom);
     } catch (error) {
       console.error('Error checking existing room:', error);
     } finally {
       setChecking(false);
     }
-  };
+  }, [fetchExistingRoom]);
+
+  useEffect(() => {
+    // Check if there's an active room for this appointment
+    checkExistingRoom();
+  }, [checkExistingRoom]);
+
+  useEffect(() => {
+    if (!socket || !appointmentId) return;
+
+    const handleRoomUpdate = (payload) => {
+      if (!payload?.appointmentId) return;
+      const incomingAppointmentId = payload.appointmentId.toString();
+      if (incomingAppointmentId !== appointmentId.toString()) return;
+
+      const room = payload.room;
+      if (room && ['waiting', 'active'].includes(room.status)) {
+        setRoomInfo(room);
+      } else {
+        setRoomInfo(null);
+        setShowVideoRoom(false);
+      }
+    };
+
+    on('video_room_updated', handleRoomUpdate);
+    return () => {
+      off('video_room_updated', handleRoomUpdate);
+    };
+  }, [socket, appointmentId, on, off]);
 
   const handleStartVideoCall = async () => {
     try {
       setLoading(true);
+
+      // Double-check if a room already exists to avoid race conditions
+      const existingRoom = await fetchExistingRoom();
+      if (existingRoom && ['waiting', 'active'].includes(existingRoom.status)) {
+        toast.info('Phòng video đã sẵn sàng, tham gia ngay!');
+        setRoomInfo(existingRoom);
+        setShowVideoRoom(true);
+        setLoading(false);
+        return;
+      }
       
       // Create or get existing room
       const response = await api.post('/video-rooms/create', {

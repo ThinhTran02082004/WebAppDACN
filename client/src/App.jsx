@@ -22,6 +22,8 @@ import PaymentHistory from './pages/PaymentHistory.jsx';
 import MedicalHistory from './pages/MedicalHistory.jsx';
 import MedicalRecordDetail from './pages/MedicalRecordDetail.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import { SocketProvider } from './context/SocketContext.jsx';
+import { NotificationProvider } from './context/NotificationContext.jsx';
 import ForgotPassword from './pages/user/ForgotPassword';
 import OtpVerification from './pages/user/OtpVerification';
 import ResetPassword from './pages/user/ResetPassword';
@@ -88,14 +90,22 @@ import HospitalReviews from './pages/reviews/HospitalReviews.jsx';
 import DoctorVideoCallHistory from './pages/doctor/VideoCallHistory';
 import UserVideoCallHistory from './pages/user/VideoCallHistory';
 
+// Chat pages
+import UserChat from './pages/user/Chat';
+import DoctorChat from './pages/doctor/Chat';
+import ChatWidget from './components/chat/ChatWidget';
+
 function AppContent() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">
       <div className="spinner"></div>
     </div>;
   }
+
+  // Show chat widget only for user role (not doctor or admin)
+  const showChatWidget = isAuthenticated && user && (user.role === 'user' || user.roleType === 'user');
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -134,6 +144,8 @@ function AppContent() {
           <Route path="profile" element={<DoctorProfile />} />
           <Route path="reviews" element={<DoctorReviews />} />
           <Route path="video-call-history" element={<DoctorVideoCallHistory />} />
+          <Route path="chat" element={<DoctorChat />} />
+          <Route path="chat/:conversationId" element={<DoctorChat />} />
         </Route>
 
         {/* Public and User Routes - With Navbar/Footer */}
@@ -191,6 +203,8 @@ function AppContent() {
                   <Route path="/medical-history" element={<MedicalHistory />} />
                   <Route path="/medical-record/:id" element={<MedicalRecordDetail />} />
                   <Route path="/video-call-history" element={<UserVideoCallHistory />} />
+                  <Route path="/chat" element={<UserChat />} />
+                  <Route path="/chat/:conversationId" element={<UserChat />} />
                 </Route>
                 
                 {/* New routes */}
@@ -214,6 +228,9 @@ function AppContent() {
           </>
         } />
       </Routes>
+      
+      {/* Chat widget for regular users (not in admin or doctor portals) */}
+      {showChatWidget && <ChatWidget currentUserId={user?.id} />}
     </div>
   );
 }
@@ -221,27 +238,31 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AppContent />
-        <ToastContainer
-          position="top-right"
-          autoClose={5000}
-          hideProgressBar={false}
-          newestOnTop
-          closeOnClick={false}
-          rtl={false}
-          pauseOnFocusLoss
-          draggable={false}
-          pauseOnHover
-          theme="light"
-          limit={3}
-          style={{
-            fontSize: '16px',
-            zIndex: 9999,
-            marginTop: '4.5rem'
-          }}
-        />
-      </Router>
+      <SocketProvider>
+        <NotificationProvider>
+          <Router>
+            <AppContent />
+            <ToastContainer
+              position="top-right"
+              autoClose={5000}
+              hideProgressBar={false}
+              newestOnTop
+              closeOnClick={false}
+              rtl={false}
+              pauseOnFocusLoss
+              draggable={false}
+              pauseOnHover
+              theme="light"
+              limit={3}
+              style={{
+                fontSize: '16px',
+                zIndex: 9999,
+                marginTop: '4.5rem'
+              }}
+            />
+          </Router>
+        </NotificationProvider>
+      </SocketProvider>
     </AuthProvider>
   );
 }

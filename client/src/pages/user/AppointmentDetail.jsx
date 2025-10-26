@@ -6,7 +6,7 @@ import { toast, ToastContainer } from 'react-toastify';
 
 import { FaCalendarAlt, FaClock, FaHospital, FaUserMd, FaNotesMedical, 
          FaMoneyBillWave, FaFileMedical, FaFileDownload, FaTimesCircle, 
-         FaCalendarCheck, FaPrint, FaStar, FaArrowLeft, FaMapMarkerAlt, FaRedo, FaCheckCircle, FaExclamationTriangle, FaVideo } from 'react-icons/fa';
+         FaCalendarCheck, FaPrint, FaStar, FaArrowLeft, FaMapMarkerAlt, FaRedo, FaCheckCircle, FaExclamationTriangle, FaVideo, FaComments, FaShare } from 'react-icons/fa';
 import CancelAppointmentModal from '../../components/shared/CancelAppointmentModal';
 import VideoCallButton from '../../components/VideoCallButton';
 
@@ -101,6 +101,64 @@ const AppointmentDetail = () => {
 
   const handleReschedule = () => {
     navigate(`/appointments/${id}/reschedule`);
+  };
+
+  const handleChatWithDoctor = async () => {
+    try {
+      // Get doctor's user ID
+      const doctorUserId = appointment?.doctorId?.user?._id || appointment?.doctorId?.user;
+      
+      if (!doctorUserId) {
+        toast.error('Không thể tìm thấy thông tin bác sĩ');
+        return;
+      }
+
+      // Create or get existing conversation
+      const response = await api.post('/chat/conversations', {
+        participantId: doctorUserId,
+        appointmentId: appointment._id
+      });
+
+      if (response.data.success) {
+        // Navigate to chat page with conversation ID
+        navigate(`/chat/${response.data.data._id}`);
+      }
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      toast.error(error.response?.data?.message || 'Không thể bắt đầu trò chuyện. Vui lòng thử lại sau.');
+    }
+  };
+
+  const handleShareToChat = async () => {
+    try {
+      const doctorUserId = appointment?.doctorId?.user?._id || appointment?.doctorId?.user;
+      
+      if (!doctorUserId) {
+        toast.error('Không thể tìm thấy thông tin bác sĩ');
+        return;
+      }
+
+      // Create or get conversation
+      const response = await api.post('/chat/conversations', {
+        participantId: doctorUserId,
+        appointmentId: appointment._id
+      });
+
+      if (response.data.success) {
+        const conversationId = response.data.data._id;
+        
+        // Send appointment to chat
+        await api.post(`/chat/conversations/${conversationId}/send-appointment`, {
+          appointmentId: appointment._id
+        });
+        
+        toast.success('Đã chia sẻ lịch hẹn vào chat');
+        navigate(`/chat/${conversationId}`);
+      }
+    } catch (error) {
+      console.error('Error sharing appointment:', error);
+      toast.error('Không thể chia sẻ lịch hẹn');
+    }
   };
 
   const formatDate = (dateString) => {
@@ -398,6 +456,23 @@ const AppointmentDetail = () => {
               
               {/* Actions */}
               <div className="flex flex-wrap gap-2">
+                {/* Chat Button - Show for pending, confirmed, or completed appointments */}
+                {(appointment.status === 'pending' || appointment.status === 'confirmed' || appointment.status === 'completed') && (
+                  <>
+                    <button 
+                      className="inline-flex items-center bg-green-100 text-green-800 hover:bg-green-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                      onClick={handleChatWithDoctor}
+                    >
+                      <FaComments className="mr-2" /> Chat với bác sĩ
+                    </button>
+                    <button
+                      onClick={handleShareToChat}
+                      className="inline-flex items-center bg-blue-100 text-blue-800 hover:bg-blue-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <FaShare className="mr-2" /> Chia sẻ vào chat
+                    </button>
+                  </>
+                )}
                 {/* Video Call Button */}
                 {(appointment.status === 'confirmed') && (
                   <VideoCallButton 
