@@ -11,16 +11,18 @@ import {
 import '@livekit/components-styles';
 import { Track } from 'livekit-client';
 import api from '../../utils/api';
-import { FaTimes, FaSpinner } from 'react-icons/fa';
+import { FaTimes, FaSpinner, FaCopy, FaCheck } from 'react-icons/fa';
+import { toast } from 'react-toastify';
 import './VideoRoom.css';
 
-const VideoRoom = ({ roomId, onClose, userRole }) => {
-  const [token, setToken] = useState(null);
-  const [roomInfo, setRoomInfo] = useState(null);
-  const [loading, setLoading] = useState(true);
+const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToken = null, initialRoomInfo = null }) => {
+  const [token, setToken] = useState(initialToken);
+  const [roomInfo, setRoomInfo] = useState(initialRoomInfo);
+  const [loading, setLoading] = useState(!initialToken);
   const [error, setError] = useState(null);
   const [connected, setConnected] = useState(false);
   const [roomEnded, setRoomEnded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const hasLeftRef = useRef(false);
   const roomIdRef = useRef(roomId);
   const cleanupReadyRef = useRef(false);
@@ -53,9 +55,43 @@ const VideoRoom = ({ roomId, onClose, userRole }) => {
       if (!targetRoomId || hasLeftRef.current) return;
 
       const attemptKeepAlive = options.keepalive && typeof fetch === 'function';
+      const apiBaseUrl = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+
+      if (meetingMode) {
+        if (attemptKeepAlive) {
+          const tokenValue = getStoredToken();
+          if (tokenValue) {
+            try {
+              await fetch(`${apiBaseUrl}/doctor-meetings/${targetRoomId}/leave`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${tokenValue}`
+                },
+                body: JSON.stringify({ reason: options.reason || 'leave' }),
+                keepalive: true
+              });
+              hasLeftRef.current = true;
+              return;
+            } catch (keepAliveError) {
+              console.error('Keepalive leave request failed (meeting):', keepAliveError);
+            }
+          }
+        }
+
+        try {
+          await api.post(`/doctor-meetings/${targetRoomId}/leave`, {
+            reason: options.reason || 'leave'
+          });
+          hasLeftRef.current = true;
+        } catch (leaveError) {
+          console.error('Error notifying server about leaving meeting:', leaveError);
+        }
+        return;
+      }
+
       if (attemptKeepAlive) {
         const tokenValue = getStoredToken();
-        const apiBaseUrl = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
         if (tokenValue) {
           try {
             await fetch(`${apiBaseUrl}/video-rooms/${targetRoomId}/leave`, {
@@ -82,10 +118,16 @@ const VideoRoom = ({ roomId, onClose, userRole }) => {
         console.error('Error notifying server about leaving video room:', leaveError);
       }
     },
-    [getStoredToken]
+    [getStoredToken, meetingMode]
   );
 
   const joinRoom = useCallback(async () => {
+    // Skip if already have token (from meeting join)
+    if (initialToken && initialRoomInfo) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const response = await api.get(`/video-rooms/join/${roomId}`);
@@ -102,7 +144,7 @@ const VideoRoom = ({ roomId, onClose, userRole }) => {
     } finally {
       setLoading(false);
     }
-  }, [roomId]);
+  }, [roomId, initialToken, initialRoomInfo]);
 
   useEffect(() => {
     hasLeftRef.current = false;
@@ -140,6 +182,29 @@ const VideoRoom = ({ roomId, onClose, userRole }) => {
   };
 
   const handleLeave = async () => {
+    if (meetingMode) {
+      const targetMeetingId = roomInfo?.meetingId || roomIdRef.current;
+
+      if (userRole === 'doctor' && roomInfo) {
+        // If doctor leaves, optionally end the meeting for everyone
+        const confirmEnd = window.confirm('Bạn có muốn kết thúc cuộc gọi cho tất cả người tham gia không?');
+        if (confirmEnd && targetMeetingId) {
+          try {
+            await api.post(`/doctor-meetings/${targetMeetingId}/end`);
+            hasLeftRef.current = true;
+          } catch (error) {
+            console.error('Error ending meeting:', error);
+          }
+          onClose();
+          return;
+        }
+      }
+
+      await notifyLeave({ reason: 'leave' });
+      onClose();
+      return;
+    }
+
     if (userRole === 'doctor' && roomInfo) {
       // If doctor leaves, optionally end the room
       const confirmEnd = window.confirm('Bạn có muốn kết thúc cuộc gọi cho tất cả người tham gia không?');
@@ -156,6 +221,19 @@ const VideoRoom = ({ roomId, onClose, userRole }) => {
     }
     await notifyLeave();
     onClose();
+  };
+
+  const handleCopyRoomCode = () => {
+    if (roomInfo?.roomCode) {
+      navigator.clipboard.writeText(roomInfo.roomCode).then(() => {
+        setCopied(true);
+        toast.success('Đã sao chép mã phòng!');
+        setTimeout(() => setCopied(false), 2000);
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        toast.error('Không thể sao chép mã phòng');
+      });
+    }
   };
 
   if (loading) {
@@ -189,12 +267,29 @@ const VideoRoom = ({ roomId, onClose, userRole }) => {
     <div className="video-room-container">
       <div className="video-room-header">
         <div className="room-info">
-          <h3 className="text-lg font-semibold text-white">Phòng video khám bệnh</h3>
+          <h3 className="text-lg font-semibold text-white">
+            {roomInfo?.meetingType === 'internal' ? 'Cuộc họp nội bộ' : 'Phòng video khám bệnh'}
+          </h3>
           {roomInfo?.appointmentInfo && (
             <div className="text-sm text-gray-200">
               <span>Bác sĩ: {roomInfo.appointmentInfo.doctorName}</span>
               <span className="mx-2">•</span>
               <span>Bệnh nhân: {roomInfo.appointmentInfo.patientName}</span>
+            </div>
+          )}
+          {roomInfo?.roomCode && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm text-gray-200">
+                Mã phòng: <strong className="text-yellow-300 text-base">{roomInfo.roomCode}</strong>
+              </span>
+              <button
+                onClick={handleCopyRoomCode}
+                className="px-2 py-1 bg-white/20 hover:bg-white/30 rounded text-xs flex items-center gap-1 transition-colors"
+                title="Sao chép mã phòng"
+              >
+                {copied ? <FaCheck className="text-green-300" /> : <FaCopy />}
+                {copied ? 'Đã sao chép' : 'Sao chép'}
+              </button>
             </div>
           )}
         </div>

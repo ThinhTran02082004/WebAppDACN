@@ -85,6 +85,7 @@ const messageSchema = new mongoose.Schema({
 messageSchema.index({ conversationId: 1, createdAt: -1 });
 messageSchema.index({ senderId: 1, receiverId: 1 });
 messageSchema.index({ isDeleted: 1 });
+messageSchema.index({ readAt: 1 }); // Index for unread messages queries
 
 const Message = mongoose.model('Message', messageSchema);
 

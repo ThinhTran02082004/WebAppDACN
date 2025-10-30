@@ -56,8 +56,12 @@ const appointmentSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'completed', 'cancelled', 'rescheduled', 'no-show', 'rejected'],
+    enum: ['pending', 'confirmed', 'completed', 'cancelled', 'rescheduled', 'no-show', 'rejected', 'hospitalized'],
     default: 'pending'
+  },
+  hospitalizationId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Hospitalization'
   },
   bookingCode: {
     type: String,

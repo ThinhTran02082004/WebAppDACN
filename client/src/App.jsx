@@ -24,6 +24,7 @@ import MedicalRecordDetail from './pages/MedicalRecordDetail.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { SocketProvider } from './context/SocketContext.jsx';
 import { NotificationProvider } from './context/NotificationContext.jsx';
+import VideoCallNotification from './components/VideoCallNotification';
 import ForgotPassword from './pages/user/ForgotPassword';
 import OtpVerification from './pages/user/OtpVerification';
 import ResetPassword from './pages/user/ResetPassword';
@@ -77,7 +78,11 @@ import AdminDoctorSchedules from './pages/admin/DoctorSchedules';
 import AdminMedications from './pages/admin/Medications';
 import AdminNews from './pages/admin/News';
 import VideoRoomManagement from './pages/admin/VideoRoomManagement';
+import AdminDoctorMeetings from './pages/admin/DoctorMeetings';
 import AdminVideoCallHistory from './pages/admin/VideoCallHistory';
+import MedicationInventory from './pages/admin/MedicationInventory';
+import PrescriptionTemplates from './pages/admin/PrescriptionTemplates';
+import InpatientRooms from './pages/admin/InpatientRooms';
 
 import Facilities from './pages/user/Facilities';
 import FacilitySurgery from './pages/user/FacilitySurgery';
@@ -88,6 +93,7 @@ import HospitalReviews from './pages/reviews/HospitalReviews.jsx';
 
 // Video call history pages
 import DoctorVideoCallHistory from './pages/doctor/VideoCallHistory';
+import DoctorMeetingHub from './pages/doctor/DoctorMeetingHub';
 import UserVideoCallHistory from './pages/user/VideoCallHistory';
 
 // Chat pages
@@ -127,8 +133,12 @@ function AppContent() {
           <Route path="reviews" element={<AdminReviews />} />
           <Route path="doctor-schedules" element={<AdminDoctorSchedules />} />
           <Route path="medications" element={<AdminMedications />} />
+          <Route path="medication-inventory" element={<MedicationInventory />} />
+          <Route path="prescription-templates" element={<PrescriptionTemplates />} />
+          <Route path="inpatient-rooms" element={<InpatientRooms />} />
           <Route path="news" element={<AdminNews />} />
           <Route path="video-rooms" element={<VideoRoomManagement />} />
+          <Route path="doctor-meetings" element={<AdminDoctorMeetings />} />
           <Route path="video-call-history" element={<AdminVideoCallHistory />} />
         </Route>
 
@@ -143,6 +153,7 @@ function AppContent() {
           <Route path="schedule" element={<DoctorSchedule />} />
           <Route path="profile" element={<DoctorProfile />} />
           <Route path="reviews" element={<DoctorReviews />} />
+          <Route path="meetings" element={<DoctorMeetingHub />} />
           <Route path="video-call-history" element={<DoctorVideoCallHistory />} />
           <Route path="chat" element={<DoctorChat />} />
           <Route path="chat/:conversationId" element={<DoctorChat />} />
@@ -231,6 +242,9 @@ function AppContent() {
       
       {/* Chat widget for regular users (not in admin or doctor portals) */}
       {showChatWidget && <ChatWidget currentUserId={user?.id} />}
+      
+      {/* Video call notification for all authenticated users */}
+      {isAuthenticated && <VideoCallNotification />}
     </div>
   );
 }

@@ -51,6 +51,11 @@ const medicationSchema = new mongoose.Schema({
     required: [true, 'Tên hiển thị đơn vị thuốc là bắt buộc'],
     default: 'viên'
   },
+  unitPrice: {
+    type: Number,
+    default: 0,
+    min: [0, 'Giá đơn vị không thể âm']
+  },
   stockQuantity: {
     type: Number,
     default: 0,

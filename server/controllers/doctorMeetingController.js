@@ -117,20 +117,41 @@ const buildMeetingPayload = async (meetingOrId) => {
   };
 };
 
-const broadcastMeetingEvent = (eventName, meetingPayload, extra = {}) => {
+const broadcastMeetingEvent = (eventName, meetingPayload, extra = {}, options = {}) => {
   if (!global.io || !meetingPayload) return;
 
   const payload = { ...extra, meeting: meetingPayload };
   const meetingId = resolveId(meetingPayload._id);
 
+  // Emit to meeting room (participants who are in video call)
   if (meetingId) {
     global.io.to(`meeting:${meetingId}`).emit(eventName, payload);
   }
 
-  if (Array.isArray(meetingPayload.hospitalIds)) {
+  // Emit to hospital rooms (for general meeting updates)
+  // Skip if onlyParticipants is true (e.g., when ending meeting)
+  if (!options.onlyParticipants && Array.isArray(meetingPayload.hospitalIds)) {
     meetingPayload.hospitalIds.forEach((hospitalId) => {
       if (hospitalId) {
         global.io.to(`hospital:${hospitalId}`).emit(eventName, payload);
+      }
+    });
+  }
+
+  // Emit to individual participants via their personal rooms
+  if (options.onlyParticipants && Array.isArray(meetingPayload.participants)) {
+    meetingPayload.participants.forEach((participant) => {
+      const doctorId = resolveId(participant.doctorId);
+      if (doctorId) {
+        // Find user ID from doctor ID and emit to their personal room
+        Doctor.findById(doctorId).then(doctor => {
+          if (doctor && doctor.user) {
+            const userId = resolveId(doctor.user);
+            if (userId) {
+              global.io.to(userId).emit(eventName, payload);
+            }
+          }
+        }).catch(err => console.error('Error finding doctor for notification:', err));
       }
     });
   }
@@ -355,6 +376,7 @@ exports.joinMeetingByCode = asyncHandler(async (req, res) => {
       }
     });
 
+    // Emit participant_joined event to meeting and hospital rooms
     if (global.io && meetingPayload) {
       const participantInfo = {
         doctorId: doctor._id,
@@ -362,12 +384,15 @@ exports.joinMeetingByCode = asyncHandler(async (req, res) => {
         joinedAt
       };
 
-      global.io.to(`meeting:${meetingPayload._id}`).emit('participant_joined', {
+      const participantPayload = {
         meetingId: meetingPayload._id,
         participant: participantInfo,
         activeCount: meetingPayload.activeParticipantCount,
         meeting: meetingPayload
-      });
+      };
+
+      // Broadcast to all relevant rooms
+      broadcastMeetingEvent('participant_joined', meetingPayload, participantPayload);
     }
   } else {
     meetingPayload = await buildMeetingPayload(meeting);
@@ -412,7 +437,7 @@ exports.listMyMeetings = asyncHandler(async (req, res) => {
 
   const doctorHospitalId = doctor.hospitalId._id;
 
-  // Build query: meetings at doctor's hospital OR meetings doctor participated in
+  // Build query: meetings at doctor's hospital OR meetings doctor participated in OR created
   const query = {
     $or: [
       // Active meetings at doctor's hospital
@@ -424,13 +449,21 @@ exports.listMyMeetings = asyncHandler(async (req, res) => {
       {
         status: 'ended',
         'participants.doctorId': doctor._id
+      },
+      // Ended meetings created by doctor (even if didn't participate)
+      {
+        status: 'ended',
+        createdBy: doctor._id
       }
     ]
   };
 
   // Additional status filter if provided
   if (status) {
-    if (status === 'ended') {
+    // Handle comma-separated statuses (e.g., "active,waiting")
+    const statuses = status.split(',').map(s => s.trim());
+    
+    if (statuses.includes('ended')) {
       // For ended meetings, only show those doctor participated in
       query.$or = [
         {
@@ -443,13 +476,17 @@ exports.listMyMeetings = asyncHandler(async (req, res) => {
       query.$or = [
         {
           hospitals: doctorHospitalId,
-          status: status
+          status: { $in: statuses }
         }
       ];
     }
   }
 
   const skip = (page - 1) * limit;
+
+  // Debug logging
+  console.log('[listMyMeetings] Doctor:', doctor._id, 'Hospital:', doctorHospitalId);
+  console.log('[listMyMeetings] Query:', JSON.stringify(query, null, 2));
 
   const meetings = await DoctorMeeting.find(query)
     .populate({
@@ -474,9 +511,19 @@ exports.listMyMeetings = asyncHandler(async (req, res) => {
 
   const total = await DoctorMeeting.countDocuments(query);
 
+  // Format meetings with buildMeetingPayload
+  const formattedMeetings = await Promise.all(
+    meetings.map(meeting => buildMeetingPayload(meeting))
+  );
+
+  console.log('[listMyMeetings] Found', formattedMeetings.length, 'meetings');
+  formattedMeetings.forEach(m => {
+    console.log('  -', m.title, 'Status:', m.status, 'Hospitals:', m.hospitalIds);
+  });
+
   res.json({
     success: true,
-    data: meetings,
+    data: formattedMeetings.filter(Boolean),
     pagination: {
       total,
       page: parseInt(page),
@@ -538,16 +585,21 @@ exports.endMeeting = asyncHandler(async (req, res) => {
     console.error('Error deleting LiveKit room:', error);
   }
 
-  const meetingPayload = await emitMeetingUpdated(meeting._id, {
-    status: meeting.status
-  });
+  const meetingPayload = await buildMeetingPayload(meeting);
 
-  if (meetingPayload) {
-    await emitMeetingEnded(meetingPayload, {
+  // Emit meeting_ended ONLY to participants (not to hospital rooms)
+  if (meetingPayload && global.io) {
+    const payload = {
+      meeting: meetingPayload,
       reason: 'manual_end',
       endTime: meetingPayload.endTime,
       duration: meetingPayload.duration
-    });
+    };
+
+    // Broadcast only to participants who joined
+    broadcastMeetingEvent('meeting_ended', meetingPayload, payload, { onlyParticipants: true });
+    
+    console.log(`[endMeeting] Notified ${meetingPayload.participants.length} participants about meeting end`);
   }
 
   res.json({
@@ -586,7 +638,9 @@ exports.getMeetingDetails = asyncHandler(async (req, res) => {
         path: 'user',
         select: 'fullName'
       }
-    });
+    })
+    .populate('hospitals', 'name address')
+    .populate('primaryHospital', 'name address');
 
   if (!meeting) {
     return res.status(404).json({
@@ -610,9 +664,12 @@ exports.getMeetingDetails = asyncHandler(async (req, res) => {
     });
   }
 
+  // Format meeting with buildMeetingPayload
+  const meetingPayload = await buildMeetingPayload(meeting);
+
   res.json({
     success: true,
-    data: meeting
+    data: meetingPayload
   });
 });
 
@@ -703,15 +760,19 @@ exports.leaveMeeting = asyncHandler(async (req, res) => {
       : null
   });
 
+  // Emit participant_left event to meeting and hospital rooms
   if (global.io && participantMarked && meetingPayload) {
-    global.io.to(`meeting:${meetingPayload._id}`).emit('participant_left', {
+    const leftPayload = {
       meetingId: meetingPayload._id,
       doctorId: doctor._id,
       doctorName: req.user.fullName,
       leftAt: now,
       activeCount: meetingPayload.activeParticipantCount,
       meeting: meetingPayload
-    });
+    };
+
+    // Broadcast to all relevant rooms
+    broadcastMeetingEvent('participant_left', meetingPayload, leftPayload);
   }
 
   res.json({
@@ -720,6 +781,160 @@ exports.leaveMeeting = asyncHandler(async (req, res) => {
     message: '?? r?i kh?i cu?c h?p'
   });
 });
+// List all meetings (Admin only)
+exports.listAllMeetings = asyncHandler(async (req, res) => {
+  const { status, page = 1, limit = 50 } = req.query;
+
+  // Build query
+  const query = {};
+  
+  if (status) {
+    const statuses = status.split(',').map(s => s.trim());
+    query.status = { $in: statuses };
+  }
+
+  const skip = (page - 1) * limit;
+
+  const meetings = await DoctorMeeting.find(query)
+    .populate({
+      path: 'createdBy',
+      populate: {
+        path: 'user',
+        select: 'fullName email'
+      }
+    })
+    .populate({
+      path: 'organizer',
+      populate: {
+        path: 'user',
+        select: 'fullName email'
+      }
+    })
+    .populate({
+      path: 'participants.doctorId',
+      populate: {
+        path: 'user',
+        select: 'fullName'
+      }
+    })
+    .populate('hospitals', 'name address')
+    .populate('primaryHospital', 'name address')
+    .sort({ createdAt: -1 })
+    .limit(limit * 1)
+    .skip(skip);
+
+  const total = await DoctorMeeting.countDocuments(query);
+
+  // Format meetings with buildMeetingPayload
+  const formattedMeetings = await Promise.all(
+    meetings.map(meeting => buildMeetingPayload(meeting))
+  );
+
+  res.json({
+    success: true,
+    data: formattedMeetings.filter(Boolean),
+    pagination: {
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit)
+    }
+  });
+});
+
+// Get active LiveKit rooms for meetings (Admin only)
+exports.getActiveRooms = asyncHandler(async (req, res) => {
+  try {
+    const rooms = await livekitService.listRooms();
+    
+    // Filter only internal meeting rooms (not appointment rooms)
+    const meetingRooms = [];
+    
+    for (const room of rooms) {
+      try {
+        const metadata = room.metadata ? JSON.parse(room.metadata) : {};
+        if (metadata.meetingType === 'internal') {
+          // Get meeting details from database
+          const meetingId = metadata.meetingId;
+          if (meetingId) {
+            const meeting = await DoctorMeeting.findById(meetingId)
+              .populate('createdBy', 'title')
+              .populate({
+                path: 'createdBy',
+                populate: { path: 'user', select: 'fullName' }
+              })
+              .populate('hospitals', 'name');
+            
+            if (meeting) {
+              // Get participants from LiveKit
+              const participants = await livekitService.listParticipants(room.name);
+              
+              meetingRooms.push({
+                sid: room.sid,
+                name: room.name,
+                roomCode: metadata.roomCode || meeting.roomCode,
+                title: meeting.title,
+                _id: meeting._id,
+                meetingId: meeting._id,
+                creationTime: room.creationTime,
+                numParticipants: room.numParticipants,
+                participants: participants.map(p => ({
+                  sid: p.sid,
+                  identity: p.identity,
+                  name: p.name,
+                  joinedAt: p.joinedAt
+                })),
+                hospitals: meeting.hospitals
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error processing room:', error);
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: meetingRooms
+    });
+  } catch (error) {
+    console.error('Error fetching active rooms:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Không thể lấy danh sách phòng hoạt động',
+      error: error.message
+    });
+  }
+});
+
+// Remove participant from meeting (Admin only)
+exports.removeParticipant = asyncHandler(async (req, res) => {
+  const { roomName, participantIdentity } = req.body;
+
+  if (!roomName || !participantIdentity) {
+    return res.status(400).json({
+      success: false,
+      message: 'Thiếu thông tin roomName hoặc participantIdentity'
+    });
+  }
+
+  try {
+    await livekitService.removeParticipant(roomName, participantIdentity);
+    
+    res.json({
+      success: true,
+      message: 'Đã kick người tham gia khỏi phòng'
+    });
+  } catch (error) {
+    console.error('Error removing participant:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Không thể kick người tham gia',
+      error: error.message
+    });
+  }
+});
+
 // Validate meeting code (for admin management)
 exports.validateMeetingCode = asyncHandler(async (req, res) => {
   const { code } = req.params;

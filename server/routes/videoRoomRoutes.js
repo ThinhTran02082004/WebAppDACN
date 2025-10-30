@@ -12,7 +12,9 @@ const {
   getRoomByAppointmentId,
   getVideoCallHistory,
   getVideoCallHistoryDetail,
-  leaveVideoRoom
+  leaveVideoRoom,
+  validateRoomCode,
+  joinByRoomCode
 } = require('../controllers/videoRoomController');
 
 // Protected routes - require authentication
@@ -29,6 +31,8 @@ router.get('/history/:roomId', getVideoCallHistoryDetail);
 // Routes for all authenticated users
 router.post('/create', createVideoRoom);
 router.get('/join/:roomId', joinVideoRoom);
+router.post('/join-by-code', joinByRoomCode);
+router.get('/validate-code/:code', validateRoomCode);
 router.get('/appointment/:appointmentId', getRoomByAppointmentId);
 
 // General room routes - list must be before /:roomId

@@ -135,8 +135,8 @@ const DoctorMeetingHub = () => {
       if (response.data.success) {
         const rawMeetings = Array.isArray(response.data.data) ? response.data.data : [];
         const normalizedMeetings = rawMeetings.map(normalizeMeeting);
-        const filteredMeetings = normalizedMeetings.filter(includeMeetingForDoctor);
-        setMeetings(sortMeetings(filteredMeetings));
+        // Backend đã filter theo hospital, không cần filter lại ở đây
+        setMeetings(sortMeetings(normalizedMeetings));
       }
     } catch (error) {
       console.error('Error fetching meetings:', error);
@@ -144,14 +144,20 @@ const DoctorMeetingHub = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, includeMeetingForDoctor]);
+  }, [activeTab]);
 
+  // Load doctor hospital và meetings khi mount
   useEffect(() => {
-    const loadDoctorHospital = async () => {
+    let mounted = true;
+
+    const initializeData = async () => {
       try {
-        const response = await api.get('/doctors/profile');
-        if (response.data.success) {
-          const hospital = response.data.data?.hospital;
+        // 1. Load doctor hospital info
+        const profileResponse = await api.get('/doctors/profile');
+        if (!mounted) return;
+
+        if (profileResponse.data.success) {
+          const hospital = profileResponse.data.data?.hospital;
           if (hospital) {
             const hospitalId = hospital._id ? hospital._id.toString() : null;
             const formattedHospital =
@@ -159,55 +165,39 @@ const DoctorMeetingHub = () => {
                 ? { ...hospital, _id: hospitalId }
                 : hospital;
 
-            setCurrentDoctorHospital((prev) => {
-              if (!formattedHospital) return prev;
-              if (!prev) return formattedHospital;
-              if (hospitalId && prev._id === hospitalId) {
-                return { ...prev, ...formattedHospital };
-              }
-              return formattedHospital;
-            });
+            setCurrentDoctorHospital(formattedHospital);
 
             if (hospitalId) {
-              setSelectedHospitals((prev) =>
-                prev.length > 0 ? prev : [hospitalId]
-              );
+              setSelectedHospitals([hospitalId]);
             }
           }
         }
+
+        // 2. Load hospitals list
+        await fetchHospitals();
+
+        // 3. Load meetings - backend sẽ filter theo hospital
+        await fetchMeetings();
       } catch (error) {
-        console.error('Error fetching doctor profile:', error);
+        console.error('Error initializing data:', error);
       }
     };
 
-    loadDoctorHospital();
+    initializeData();
+
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fetch meetings khi đổi tab hoặc có currentDoctorHospital
   useEffect(() => {
-    fetchHospitals();
-  }, []);
-
-  useEffect(() => {
-    if (!doctorHospitalId) return;
-    setHospitals(prev => {
-      if (!Array.isArray(prev)) return prev;
-      const sorted = [...prev];
-      sorted.sort((a, b) => {
-        const aId = extractHospitalId(a);
-        const bId = extractHospitalId(b);
-        if (aId === doctorHospitalId) return -1;
-        if (bId === doctorHospitalId) return 1;
-        const aName = a?.name || '';
-        const bName = b?.name || '';
-        return aName.localeCompare(bName);
-      });
-      return sorted;
-    });
-  }, [doctorHospitalId]);
-
-  useEffect(() => {
-    fetchMeetings();
-  }, [fetchMeetings]);
+    if (currentDoctorHospital) {
+      fetchMeetings();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     if (!socket) return;
@@ -330,7 +320,7 @@ const DoctorMeetingHub = () => {
         toast.success('Tạo cuộc họp thành công!');
         setTitle('');
         setDescription('');
-        setSelectedHospitals(() => (doctorHospitalId ? [doctorHospitalId] : []));
+        setSelectedHospitals([]);
         setShowCreateForm(false);
         fetchMeetings();
         
@@ -467,19 +457,6 @@ const DoctorMeetingHub = () => {
           </h1>
           <p className="text-gray-600">Tạo và tham gia các cuộc họp với các bác sĩ khác</p>
         </div>
-
-        {currentDoctorHospital && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-center gap-3">
-            <FaHospital className="text-blue-500 text-xl" />
-            <div>
-              <p className="text-sm text-blue-600 uppercase tracking-wide">Chi nh?nh c?a b?n</p>
-              <p className="text-lg font-semibold text-blue-900">{currentDoctorHospital.name}</p>
-              {currentDoctorHospital.address && (
-                <p className="text-sm text-blue-700">{currentDoctorHospital.address}</p>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Actions */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
@@ -712,27 +689,12 @@ const DoctorMeetingHub = () => {
                     {/* Hospital Info */}
                     {meeting.hospitals && meeting.hospitals.length > 0 && (
                       <div className="mb-2 flex flex-wrap gap-2">
-                    {meeting.hospitals && meeting.hospitals.length > 0 && (
-                      <div className="mb-2 flex flex-wrap gap-2">
-                        {meeting.hospitals.map((hospital, idx) => {
-                          const hospitalId = extractHospitalId(hospital);
-                          const isDoctorHospital = doctorHospitalId && hospitalId === doctorHospitalId;
-                          const label = typeof hospital === 'string' ? hospital : (hospital?.name || 'B?nh vi?n');
-                          const itemKey = hospitalId || idx;
-                          const baseClasses = 'inline-flex items-center gap-2 px-2 py-1 rounded-md text-xs border transition-colors';
-                          const variantClasses = isDoctorHospital
-                            ? 'bg-green-100 text-green-800 border-green-300 font-semibold'
-                            : 'bg-blue-50 text-blue-700 border-blue-200';
-                          return (
-                            <span key={itemKey} className={`${baseClasses} ${variantClasses}`}>
-                              <FaHospital className="text-xs" />
-                              <span>{label}</span>
-                              {isDoctorHospital && (
-                                <span className="ml-1 uppercase text-[10px] tracking-wide text-green-700">Chi nh?nh c?a b?n</span>
-                              )}
-                            </span>
-                          );
-                        })}
+                        {meeting.hospitals.map((hospital, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-md text-xs">
+                            <FaHospital className="text-xs" />
+                            {hospital.name || 'Bệnh viện'}
+                          </span>
+                        ))}
                       </div>
                     )}
                     

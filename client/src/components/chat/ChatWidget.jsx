@@ -3,6 +3,7 @@ import { FaComments, FaTimes, FaMinus } from 'react-icons/fa';
 import ConversationList from './ConversationList';
 import ChatWindow from './ChatWindow';
 import { useNotification } from '../../context/NotificationContext';
+import { useSocket } from '../../context/SocketContext';
 import api from '../../utils/api';
 
 const ChatWidget = ({ currentUserId }) => {
@@ -11,12 +12,15 @@ const ChatWidget = ({ currentUserId }) => {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [loading, setLoading] = useState(false);
-  const { messageUnreadCount } = useNotification();
+  const { messageUnreadCount, fetchMessageUnreadCount } = useNotification();
+  const { socket, isConnected } = useSocket();
 
   // Fetch conversations when widget opens
   useEffect(() => {
     if (isOpen && !isMinimized) {
       fetchConversations();
+      // Refresh unread count when opening widget
+      messageUnreadCount > 0 && fetchMessageUnreadCount();
     }
   }, [isOpen, isMinimized]);
 
@@ -42,6 +46,8 @@ const ChatWidget = ({ currentUserId }) => {
     setIsOpen(false);
     setIsMinimized(false);
     setSelectedConversation(null);
+    // Refresh unread count when closing
+    fetchMessageUnreadCount();
   };
 
   const handleMinimize = () => {
@@ -50,6 +56,9 @@ const ChatWidget = ({ currentUserId }) => {
 
   const handleBackToList = () => {
     setSelectedConversation(null);
+    // Refresh conversations and unread count
+    fetchConversations();
+    fetchMessageUnreadCount();
   };
 
   return (
@@ -70,7 +79,7 @@ const ChatWidget = ({ currentUserId }) => {
         </button>
       )}
 
-      {/* Chat widget popup */}
+      Chat widget popup
       {isOpen && (
         <div
           className={`fixed bottom-6 right-6 bg-white rounded-lg shadow-2xl transition-all duration-300 animate-slide-up max-md:fixed max-md:inset-0 max-md:w-full max-md:h-screen max-md:rounded-none max-md:bottom-0 max-md:right-0 w-[400px] ${

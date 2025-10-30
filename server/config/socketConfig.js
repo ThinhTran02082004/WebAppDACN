@@ -1,6 +1,7 @@
 const socketIO = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Doctor = require('../models/Doctor');
 const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 
@@ -49,7 +50,7 @@ const initializeSocket = (server) => {
     }
   });
 
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     console.log(`User connected: ${socket.userId}`);
     
     // User joins their personal room for targeted messages
@@ -58,6 +59,27 @@ const initializeSocket = (server) => {
     // Join role-based rooms for broadcasts to specific user types
     if (socket.userRole) {
       socket.join(`role:${socket.userRole}`);
+    }
+    
+    // Auto-join inventory_updates room for admins and doctors
+    if (socket.userRole === 'admin' || socket.userRole === 'doctor') {
+      socket.join('inventory_updates');
+      console.log(`User ${socket.userId} joined inventory_updates room`);
+    }
+
+    // Auto-join hospital room for doctors
+    if (socket.userRole === 'doctor') {
+      try {
+        const doctor = await Doctor.findOne({ user: socket.userId }).populate('hospitalId');
+        if (doctor && doctor.hospitalId) {
+          const hospitalRoomKey = `hospital:${doctor.hospitalId._id}`;
+          socket.join(hospitalRoomKey);
+          socket.doctorHospitalId = doctor.hospitalId._id.toString();
+          console.log(`Doctor ${socket.userId} joined hospital room: ${hospitalRoomKey}`);
+        }
+      } catch (error) {
+        console.error('Error joining hospital room:', error);
+      }
     }
     
     // Mark user as online
@@ -123,17 +145,29 @@ const initializeSocket = (server) => {
     socket.on('mark_as_read', async ({ conversationId, messageIds }) => {
       try {
         // Update messages in database
-        await Message.updateMany(
+        const result = await Message.updateMany(
           { _id: { $in: messageIds }, conversationId },
           { readAt: new Date() }
         );
         
-        // Notify sender that messages were read
-        io.to(`conversation:${conversationId}`).emit('messages_read', {
-          conversationId,
-          messageIds,
-          readBy: socket.userId
-        });
+        // Only emit if messages were actually updated
+        if (result.modifiedCount > 0) {
+          // Notify all participants in conversation EXCEPT the reader
+          socket.to(`conversation:${conversationId}`).emit('messages_read', {
+            conversationId,
+            messageIds,
+            readBy: socket.userId
+          });
+          
+          // Emit to ALL devices/tabs of the reader (including this socket)
+          io.to(socket.userId.toString()).emit('messages_read', {
+            conversationId,
+            messageIds,
+            readBy: socket.userId
+          });
+          
+          console.log(`[Socket] Marked ${result.modifiedCount} messages as read in conversation ${conversationId}`);
+        }
       } catch (error) {
         console.error('Error marking messages as read:', error);
       }
@@ -154,6 +188,36 @@ const initializeSocket = (server) => {
         roomId,
         duration
       });
+    });
+
+    // Video call accept/reject/cancel events
+    socket.on('video_call_accepted', ({ roomId, roomName }) => {
+      console.log(`[Socket] Video call accepted for room: ${roomId}`);
+      // Broadcast to room participants
+      io.to(`video_room:${roomId}`).emit('call_accepted', {
+        roomId,
+        roomName,
+        acceptedBy: socket.userId
+      });
+    });
+
+    socket.on('video_call_rejected', ({ roomId, roomName }) => {
+      console.log(`[Socket] Video call rejected for room: ${roomId}`);
+      // Notify the caller
+      io.to(`video_room:${roomId}`).emit('call_rejected', {
+        roomId,
+        roomName,
+        rejectedBy: socket.userId
+      });
+    });
+
+    socket.on('cancel_video_call', ({ roomId, receiverId }) => {
+      console.log(`[Socket] Video call cancelled for room: ${roomId}`);
+      if (receiverId) {
+        io.to(receiverId.toString()).emit('video_call_cancelled', {
+          roomId
+        });
+      }
     });
     
     // =============== END CHAT EVENTS ===============
@@ -248,6 +312,24 @@ const initializeSocket = (server) => {
         socket.emit('current_locked_slots', { lockedSlots });
       }
     });
+
+    // =============== MEETING EVENTS ===============
+    
+    // Join meeting room to receive real-time updates
+    socket.on('join_meeting_room', ({ meetingId }) => {
+      const meetingRoomKey = `meeting:${meetingId}`;
+      socket.join(meetingRoomKey);
+      console.log(`User ${socket.userId} joined meeting room: ${meetingRoomKey}`);
+    });
+
+    // Leave meeting room
+    socket.on('leave_meeting_room', ({ meetingId }) => {
+      const meetingRoomKey = `meeting:${meetingId}`;
+      socket.leave(meetingRoomKey);
+      console.log(`User ${socket.userId} left meeting room: ${meetingRoomKey}`);
+    });
+    
+    // =============== END MEETING EVENTS ===============
     
     // Handle disconnect
     socket.on('disconnect', () => {

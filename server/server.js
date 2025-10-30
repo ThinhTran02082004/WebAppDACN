@@ -36,6 +36,13 @@ const medicationRoutes = require('./routes/medicationRoutes');
 const newsRoutes = require('./routes/newsRoutes');
 const videoRoomRoutes = require('./routes/videoRoomRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const doctorMeetingRoutes = require('./routes/doctorMeetingRoutes');
+const prescriptionTemplateRoutes = require('./routes/prescriptionTemplateRoutes');
+const prescriptionRoutes = require('./routes/prescriptionRoutes');
+const medicationInventoryRoutes = require('./routes/medicationInventoryRoutes');
+const hospitalizationRoutes = require('./routes/hospitalizationRoutes');
+const inpatientRoomRoutes = require('./routes/inpatientRoomRoutes');
+const billingRoutes = require('./routes/billingRoutes');
 
 // Load environment variables
 console.log('Loading environment variables from .env file');
@@ -172,6 +179,13 @@ app.use('/api/news', newsRoutes);
 app.use('/api/medications', medicationRoutes);
 app.use('/api/doctor-auth', doctorAuthRoutes);
 app.use('/api/video-rooms', videoRoomRoutes);
+app.use('/api/doctor-meetings', doctorMeetingRoutes);
+app.use('/api/prescription-templates', prescriptionTemplateRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/medication-inventory', medicationInventoryRoutes);
+app.use('/api/hospitalizations', hospitalizationRoutes);
+app.use('/api/inpatient-rooms', inpatientRoomRoutes);
+app.use('/api/billing', billingRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/notifications', notificationRoutes);
 

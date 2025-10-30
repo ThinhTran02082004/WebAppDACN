@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FaPaperPlane, FaCircle, FaVideo, FaPaperclip, FaCalendarAlt } from 'react-icons/fa';
+import { FaPaperPlane, FaCircle, FaVideo, FaPaperclip, FaCalendarAlt, FaDoorOpen } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import MessageItem from './MessageItem';
 import AppointmentSelectorModal from './AppointmentSelectorModal';
 import MediaPreviewModal from './MediaPreviewModal';
+import RoomCodeInput from '../VideoRoom/RoomCodeInput';
+import VideoRoom from '../VideoRoom/VideoRoom';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
+import { useNotification } from '../../context/NotificationContext';
 import api from '../../utils/api';
 
 const ChatWindow = ({ conversation, currentUserId, onClose }) => {
@@ -19,11 +22,15 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [mediaCaption, setMediaCaption] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [activeVideoRoom, setActiveVideoRoom] = useState(null);
+  const [showRoomCodeInput, setShowRoomCodeInput] = useState(false);
   const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
+  const markedMessagesRef = useRef(new Set()); // Track already marked messages
   const { socket, isConnected, emit, on, off, isUserOnline } = useSocket();
   const { user: authUser } = useAuth();
+  const { fetchMessageUnreadCount } = useNotification();
 
   const otherParticipant = conversation?.participants?.[0];
   const conversationId = conversation?.id || conversation?._id;
@@ -33,6 +40,9 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
   // Fetch messages when conversation changes
   useEffect(() => {
     if (conversationId) {
+      // Reset marked messages when switching conversations
+      markedMessagesRef.current.clear();
+      
       fetchMessages();
       
       // Join conversation room for real-time updates
@@ -57,10 +67,17 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
         setMessages(prev => [...prev, message]);
         scrollToBottom();
         
-        // Mark as read if it's not from current user
+        // Mark as read if it's not from current user and not already marked
         const incomingSenderId = typeof message.senderId === 'object' ? message.senderId?._id : message.senderId;
         if (incomingSenderId && resolvedCurrentUserId && incomingSenderId !== resolvedCurrentUserId) {
-          markMessagesAsRead([message._id]);
+          if (!markedMessagesRef.current.has(message._id)) {
+            markMessagesAsRead([message._id]);
+            markedMessagesRef.current.add(message._id);
+            // Update notification count after marking as read
+            setTimeout(() => {
+              fetchMessageUnreadCount();
+            }, 500);
+          }
         }
       }
     };
@@ -90,6 +107,27 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
     };
   }, [socket, isConnected, conversationId, resolvedCurrentUserId]);
 
+  // Listen for messages_read event to update unread count
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const handleMessagesRead = ({ conversationId: readConvId }) => {
+      // If messages were read in this conversation, refresh the unread count
+      if (readConvId === conversationId) {
+        console.log('[ChatWindow] Messages read event received, refreshing unread count');
+        setTimeout(() => {
+          fetchMessageUnreadCount();
+        }, 500);
+      }
+    };
+
+    on('messages_read', handleMessagesRead);
+
+    return () => {
+      off('messages_read', handleMessagesRead);
+    };
+  }, [socket, isConnected, conversationId, fetchMessageUnreadCount]);
+
   // Auto scroll to bottom
   useEffect(() => {
     scrollToBottom();
@@ -109,8 +147,30 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
       setLoading(true);
       const response = await api.get(`/chat/conversations/${conversationId}/messages`);
       if (response.data.success) {
-        setMessages(response.data.data);
+        const fetchedMessages = response.data.data;
+        setMessages(fetchedMessages);
         setTimeout(() => scrollToBottom('auto'), 0);
+        
+        // Mark unread messages as read (only if not already marked)
+        const unreadMessageIds = fetchedMessages
+          .filter(msg => {
+            const messageSenderId = typeof msg.senderId === 'object' ? msg.senderId?._id : msg.senderId;
+            const isUnread = messageSenderId !== resolvedCurrentUserId && !msg.isRead;
+            const notMarked = !markedMessagesRef.current.has(msg._id);
+            return isUnread && notMarked;
+          })
+          .map(msg => msg._id);
+        
+        if (unreadMessageIds.length > 0) {
+          console.log('[ChatWindow] Marking', unreadMessageIds.length, 'messages as read');
+          markMessagesAsRead(unreadMessageIds);
+          // Add to marked set
+          unreadMessageIds.forEach(id => markedMessagesRef.current.add(id));
+          // Update notification count after a short delay
+          setTimeout(() => {
+            fetchMessageUnreadCount();
+          }, 500);
+        }
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -254,6 +314,20 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
     }
   };
 
+  // Handle joining video room
+  const handleJoinRoom = (roomData) => {
+    setActiveVideoRoom(roomData.roomId);
+  };
+
+  const handleCloseVideoRoom = () => {
+    setActiveVideoRoom(null);
+  };
+
+  // Show video room if active
+  if (activeVideoRoom) {
+    return <VideoRoom roomId={activeVideoRoom} onClose={handleCloseVideoRoom} userRole={authUser?.role} />;
+  }
+
   if (!conversation) {
     return (
       <div className="flex items-center justify-center h-full bg-gray-50">
@@ -299,10 +373,14 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
 
         {/* Actions */}
         <div className="flex items-center space-x-2">
-          {/* Video call button - can be implemented later */}
-          {/* <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors">
-            <FaVideo className="w-5 h-5" />
-          </button> */}
+          {/* Join Room by Code Button */}
+          <button
+            onClick={() => setShowRoomCodeInput(!showRoomCodeInput)}
+            className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+            title="Tham gia phòng bằng mã"
+          >
+            <FaDoorOpen className="w-5 h-5" />
+          </button>
           
           {onClose && (
             <button
@@ -314,6 +392,28 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
           )}
         </div>
       </div>
+
+      {/* Room Code Input Modal */}
+      {showRoomCodeInput && (
+        <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-blue-900">Tham gia phòng video bằng mã</h3>
+            <button
+              onClick={() => setShowRoomCodeInput(false)}
+              className="text-blue-600 hover:text-blue-800 text-sm"
+            >
+              ✕
+            </button>
+          </div>
+          <RoomCodeInput 
+            onJoinRoom={(data) => {
+              handleJoinRoom(data);
+              setShowRoomCodeInput(false);
+            }} 
+            compact={true}
+          />
+        </div>
+      )}
 
       {/* Messages */}
       <div
@@ -453,4 +553,3 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
 };
 
 export default ChatWindow;
-

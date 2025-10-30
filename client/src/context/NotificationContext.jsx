@@ -43,24 +43,30 @@ export const NotificationProvider = ({ children }) => {
     if (!socket || !isConnected) return;
 
     // New notification
-    socket.on('new_notification', (notification) => {
+    const onNewNotification = (notification) => {
       handleNewNotification(notification);
-    });
+    };
 
     // New message notification
-    socket.on('message_notification', (data) => {
+    const onNewMessageNotification = (data) => {
       handleNewMessageNotification(data);
-    });
+    };
 
-    // Video call notification
-    socket.on('incoming_video_call', (data) => {
-      handleIncomingVideoCall(data);
-    });
+    // Messages marked as read - refresh unread count
+    const onMessagesRead = (data) => {
+      console.log('[NotificationContext] Messages marked as read event received');
+      // Refresh unread count immediately
+      fetchMessageUnreadCount();
+    };
+
+    socket.on('new_notification', onNewNotification);
+    socket.on('message_notification', onNewMessageNotification);
+    socket.on('messages_read', onMessagesRead);
 
     return () => {
-      socket.off('new_notification');
-      socket.off('message_notification');
-      socket.off('incoming_video_call');
+      socket.off('new_notification', onNewNotification);
+      socket.off('message_notification', onNewMessageNotification);
+      socket.off('messages_read', onMessagesRead);
     };
   }, [socket, isConnected]);
 
@@ -96,7 +102,15 @@ export const NotificationProvider = ({ children }) => {
     try {
       const response = await api.get('/chat/unread-count');
       if (response.data.success) {
-        setMessageUnreadCount(response.data.data.unreadCount);
+        const newCount = response.data.data.unreadCount;
+        // Only update if changed to avoid unnecessary re-renders
+        setMessageUnreadCount(prev => {
+          if (prev !== newCount) {
+            console.log('[NotificationContext] Message unread count updated:', prev, '->', newCount);
+            return newCount;
+          }
+          return prev;
+        });
       }
     } catch (error) {
       console.error('Error fetching message unread count:', error);
@@ -170,49 +184,6 @@ export const NotificationProvider = ({ children }) => {
     // Play sound
     playNotificationSound('message');
   }, [user]);
-
-  // Handle incoming video call
-  const handleIncomingVideoCall = useCallback((data) => {
-    const { roomId, roomName } = data;
-
-    // Show toast notification with action
-    toast.info(
-      <div>
-        <div className="font-bold">📹 Cuộc gọi video đến</div>
-        <div className="text-sm">Bạn có một cuộc gọi video đến</div>
-        <button
-          className="mt-2 bg-green-500 text-white px-4 py-1 rounded hover:bg-green-600"
-          onClick={() => {
-            // Navigate to video room
-            window.location.href = `/video-room/${roomId}`;
-          }}
-        >
-          Tham gia
-        </button>
-      </div>,
-      {
-        autoClose: false,
-        closeButton: true
-      }
-    );
-
-    // Show browser notification
-    showBrowserNotification(
-      'Cuộc gọi video đến',
-      'Bạn có một cuộc gọi video đến',
-      {
-        requireInteraction: true,
-        data: { roomId, roomName },
-        tag: 'video_call',
-        onClick: (data) => {
-          window.location.href = `/video-room/${data.roomId}`;
-        }
-      }
-    );
-
-    // Play sound
-    playNotificationSound('video_call');
-  }, []);
 
   // Mark notification as read
   const markAsRead = async (notificationId) => {

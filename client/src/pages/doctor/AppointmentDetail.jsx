@@ -11,6 +11,9 @@ import { toast, ToastContainer } from 'react-toastify';
 
 import api from '../../utils/api';
 import VideoCallButton from '../../components/VideoCallButton';
+import PrescriptionManager from '../../components/PrescriptionManager';
+import HospitalizationManager from '../../components/HospitalizationManager';
+import BillingManager from '../../components/BillingManager';
 
 const AppointmentDetail = () => {
   const { id } = useParams();
@@ -28,6 +31,8 @@ const AppointmentDetail = () => {
     prescription: [],
     notes: ''
   });
+  const [activeTab, setActiveTab] = useState('info'); // 'info', 'prescription', 'hospitalization', 'billing'
+  const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
 
   useEffect(() => {
     fetchAppointmentDetail();
@@ -620,13 +625,21 @@ const AppointmentDetail = () => {
             )}
             
             {appointment.status === 'confirmed' && (
-              <button 
-                className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
-                onClick={() => handleStatusChange('completed')}
-                disabled={isUpdating}
-              >
-                <FaClipboardCheck className="mr-1.5" /> Hoàn thành lịch hẹn
-              </button>
+              <>
+                <button 
+                  className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
+                  onClick={() => { setActiveTab('prescription'); setShowPrescriptionForm(true); }}
+                >
+                  <FaNotesMedical className="mr-1.5" /> Kê Đơn Thuốc
+                </button>
+                <button 
+                  className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
+                  onClick={() => handleStatusChange('completed')}
+                  disabled={isUpdating}
+                >
+                  <FaClipboardCheck className="mr-1.5" /> Hoàn Thành Khám
+                </button>
+              </>
             )}
           </div>
           
@@ -823,7 +836,7 @@ const AppointmentDetail = () => {
       </div>
 
       {/* Patient Medical Information */}
-      <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden mb-6 sm:mb-8">
+      <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden mb-6">
         <div className="px-4 sm:px-6 py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white">
           <h2 className="text-base sm:text-lg font-semibold flex items-center">
             <FaNotesMedical className="mr-2" /> Thông tin bệnh lý
@@ -852,6 +865,102 @@ const AppointmentDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Tabs Section */}
+      {(appointment.status === 'confirmed' || appointment.status === 'completed' || appointment.status === 'hospitalized') && (
+        <div className="bg-white rounded-xl shadow-md overflow-hidden mb-6 sm:mb-8">
+          {/* Tab Headers */}
+          <div className="flex border-b overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('prescription')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === 'prescription'
+                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
+                  : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+              }`}
+            >
+              <FaNotesMedical className="inline mr-2" />
+              Đơn Thuốc
+            </button>
+            <button
+              onClick={() => setActiveTab('hospitalization')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === 'hospitalization'
+                  ? 'border-b-2 border-purple-600 text-purple-600 bg-purple-50'
+                  : 'text-gray-600 hover:text-purple-600 hover:bg-gray-50'
+              }`}
+            >
+              <FaRegHospital className="inline mr-2" />
+              Nằm Viện
+            </button>
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === 'billing'
+                  ? 'border-b-2 border-green-600 text-green-600 bg-green-50'
+                  : 'text-gray-600 hover:text-green-600 hover:bg-gray-50'
+              }`}
+            >
+              <FaFileMedical className="inline mr-2" />
+              Thanh Toán
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {activeTab === 'prescription' && (
+              <div>
+                {showPrescriptionForm ? (
+                  <PrescriptionManager
+                    appointmentId={appointment._id}
+                    patientId={appointment.patientId?._id}
+                    onPrescriptionCreated={() => {
+                      setShowPrescriptionForm(false);
+                      toast.success('Đơn thuốc đã được tạo thành công');
+                      fetchAppointmentDetail();
+                    }}
+                  />
+                ) : (
+                  <div className="text-center py-8">
+                    <FaNotesMedical className="mx-auto text-5xl text-gray-300 mb-4" />
+                    <p className="text-gray-500 mb-4">Chưa có đơn thuốc nào được kê</p>
+                    {appointment.status === 'confirmed' && (
+                      <button
+                        onClick={() => setShowPrescriptionForm(true)}
+                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        <FaPlus className="inline mr-2" />
+                        Kê Đơn Thuốc Mới
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'hospitalization' && (
+              <HospitalizationManager
+                appointmentId={appointment._id}
+                patientId={appointment.patientId?._id}
+                onUpdate={() => {
+                  fetchAppointmentDetail();
+                  toast.success('Cập nhật thông tin nằm viện thành công');
+                }}
+              />
+            )}
+
+            {activeTab === 'billing' && (
+              <BillingManager
+                appointmentId={appointment._id}
+                onPaymentComplete={() => {
+                  fetchAppointmentDetail();
+                  toast.success('Thanh toán thành công');
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
