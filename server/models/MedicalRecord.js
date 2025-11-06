@@ -16,6 +16,10 @@ const medicalRecordSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Appointment'
   },
+  prescriptionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Prescription'
+  },
   specialty: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Specialty'
@@ -80,6 +84,7 @@ const medicalRecordSchema = new mongoose.Schema({
 medicalRecordSchema.index({ patientId: 1 });
 medicalRecordSchema.index({ doctorId: 1 });
 medicalRecordSchema.index({ appointmentId: 1 });
+medicalRecordSchema.index({ prescriptionId: 1 });
 medicalRecordSchema.index({ specialty: 1 });
 medicalRecordSchema.index({ status: 1 });
 medicalRecordSchema.index({ createdAt: 1 });

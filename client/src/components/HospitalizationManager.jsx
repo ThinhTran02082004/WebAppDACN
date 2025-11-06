@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'react-toastify';
 import { FaBed, FaExchangeAlt, FaSignOutAlt, FaClock, FaMoneyBillWave } from 'react-icons/fa';
 
@@ -52,11 +52,7 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
   const fetchHospitalization = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/hospitalizations/appointment/${appointmentId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await api.get(`/hospitalizations/appointment/${appointmentId}`);
 
       if (response.data.data) {
         setHospitalization(response.data.data);
@@ -64,22 +60,18 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
       }
     } catch (error) {
       console.error('Error fetching hospitalization:', error);
+      // Không hiển thị toast nếu không có hospitalization (404) vì đó là trường hợp bình thường
+      if (error.response?.status !== 404) {
+        toast.error('Không thể tải thông tin nằm viện');
+      }
     }
   };
 
   const fetchAvailableRooms = async (type = '') => {
     try {
-      const token = localStorage.getItem('token');
       const params = {};
       if (type) params.type = type;
-
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/hospitalizations/available-rooms`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          params
-        }
-      );
+      const response = await api.get('/hospitalizations/available-rooms', { params });
       setAvailableRooms(response.data.data);
     } catch (error) {
       toast.error('Không thể tải danh sách phòng trống');
@@ -110,16 +102,10 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/hospitalizations/assign`,
-        {
-          appointmentId,
-          ...assignForm
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await api.post('/hospitalizations/assign', {
+        appointmentId,
+        ...assignForm
+      });
 
       toast.success('Phân phòng nội trú thành công');
       setHospitalization(response.data.data);
@@ -145,18 +131,15 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/hospitalizations/${hospitalization._id}/transfer`,
-        transferForm,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await api.post(`/hospitalizations/${hospitalization._id}/transfer`, transferForm);
 
       toast.success('Chuyển phòng thành công');
       setHospitalization(response.data.data);
+      setCurrentInfo(response.data.data.currentInfo);
       setShowTransferForm(false);
       setTransferForm({ newRoomId: '', reason: '' });
+
+      if (onUpdate) onUpdate();
 
     } catch (error) {
       toast.error(error.response?.data?.message || 'Không thể chuyển phòng');
@@ -172,13 +155,7 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/hospitalizations/${hospitalization._id}/discharge`,
-        dischargeForm,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await api.post(`/hospitalizations/${hospitalization._id}/discharge`, dischargeForm);
 
       toast.success('Xuất viện thành công');
       setHospitalization(response.data.data);
@@ -393,17 +370,43 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
       )}
 
       {/* Room History */}
-      {hospitalization.roomHistory && hospitalization.roomHistory.length > 1 && (
-        <div className="mb-4">
-          <p className="text-sm font-medium text-gray-700 mb-2">Lịch sử chuyển phòng:</p>
-          <div className="space-y-2">
-            {hospitalization.roomHistory.map((room, index) => (
-              <div key={index} className="text-sm bg-gray-50 p-2 rounded">
-                <span className="font-medium">Phòng {room.inpatientRoomId?.roomNumber}</span>
-                <span className="text-gray-600"> - {formatDateTime(room.checkInTime)}</span>
-                {room.checkOutTime && (
-                  <span className="text-gray-600"> đến {formatDateTime(room.checkOutTime)}</span>
-                )}
+      {hospitalization.roomHistory && hospitalization.roomHistory.length > 0 && (
+        <div className="mb-4 border rounded-lg p-4 bg-gray-50">
+          <p className="text-sm font-medium text-gray-700 mb-3">Lịch sử chuyển phòng:</p>
+          <div className="space-y-3">
+            {hospitalization.roomHistory.map((roomEntry, index) => (
+              <div key={index} className="bg-white rounded-lg p-3 border border-gray-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-medium text-gray-800">
+                    Phòng {roomEntry.roomNumber || roomEntry.inpatientRoomId?.roomNumber || 'N/A'}
+                    {roomEntry.roomType && (
+                      <span className="ml-2 text-xs text-gray-500">({getRoomTypeLabel(roomEntry.roomType)})</span>
+                    )}
+                  </div>
+                  {roomEntry.amount > 0 && (
+                    <div className="text-sm font-semibold text-gray-700">
+                      {formatCurrency(roomEntry.amount)}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                  <div>
+                    <span className="font-medium">Vào:</span> {roomEntry.checkInTime ? formatDateTime(roomEntry.checkInTime) : 'N/A'}
+                  </div>
+                  <div>
+                    <span className="font-medium">Ra:</span> {roomEntry.checkOutTime ? formatDateTime(roomEntry.checkOutTime) : 'Đang ở'}
+                  </div>
+                  {roomEntry.hours > 0 && (
+                    <div>
+                      <span className="font-medium">Thời gian:</span> {roomEntry.hours} giờ
+                    </div>
+                  )}
+                  {roomEntry.hourlyRate > 0 && (
+                    <div>
+                      <span className="font-medium">Giá/giờ:</span> {formatCurrency(roomEntry.hourlyRate)}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>

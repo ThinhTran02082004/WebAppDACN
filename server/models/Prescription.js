@@ -77,7 +77,7 @@ const prescriptionSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'approved', 'dispensed', 'completed', 'cancelled'],
+    enum: ['pending', 'approved', 'verified', 'dispensed', 'completed', 'cancelled'],
     default: 'pending'
   },
   notes: {
@@ -87,6 +87,15 @@ const prescriptionSchema = new mongoose.Schema({
   diagnosis: {
     type: String,
     trim: true
+  },
+  prescriptionOrder: {
+    type: Number,
+    default: 1,
+    min: 1
+  },
+  isHospitalization: {
+    type: Boolean,
+    default: false
   },
   dispensedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -105,6 +114,22 @@ const prescriptionSchema = new mongoose.Schema({
   cancellationReason: {
     type: String,
     trim: true
+  },
+  verifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  verifiedAt: {
+    type: Date
+  },
+  verificationNotes: {
+    type: String,
+    trim: true
+  },
+  hospitalId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Hospital',
+    required: true
   }
 }, {
   timestamps: true
@@ -115,6 +140,8 @@ prescriptionSchema.index({ appointmentId: 1 });
 prescriptionSchema.index({ patientId: 1, createdAt: -1 });
 prescriptionSchema.index({ doctorId: 1 });
 prescriptionSchema.index({ status: 1 });
+prescriptionSchema.index({ hospitalId: 1, status: 1 });
+prescriptionSchema.index({ hospitalId: 1, createdAt: -1 });
 
 // Pre-save middleware to calculate total amount
 prescriptionSchema.pre('save', function(next) {
@@ -132,6 +159,17 @@ prescriptionSchema.pre('save', function(next) {
 // Method to approve prescription
 prescriptionSchema.methods.approve = function() {
   this.status = 'approved';
+  return this.save();
+};
+
+// Method to verify prescription (pharmacist approval)
+prescriptionSchema.methods.verify = function(userId, notes) {
+  this.status = 'verified';
+  this.verifiedBy = userId;
+  this.verifiedAt = new Date();
+  if (notes) {
+    this.verificationNotes = notes;
+  }
   return this.save();
 };
 

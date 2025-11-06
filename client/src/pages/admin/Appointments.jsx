@@ -325,6 +325,8 @@ const Appointments = () => {
                   <option value="all">Tất cả</option>
                   <option value="pending">Chờ xác nhận</option>
                   <option value="confirmed">Đã xác nhận</option>
+                  <option value="hospitalized">Đang nằm viện</option>
+                  <option value="pending_payment">Chờ thanh toán</option>
                   <option value="completed">Đã hoàn thành</option>
                   <option value="cancelled">Đã hủy</option>
                   <option value="rescheduled">Đổi lịch</option>
@@ -440,6 +442,8 @@ const Appointments = () => {
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                           ${appointment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : ''}
                           ${appointment.status === 'confirmed' ? 'bg-blue-100 text-blue-800' : ''}
+                          ${appointment.status === 'hospitalized' ? 'bg-indigo-100 text-indigo-800' : ''}
+                          ${appointment.status === 'pending_payment' ? 'bg-orange-100 text-orange-800' : ''}
                           ${appointment.status === 'completed' ? 'bg-green-100 text-green-800' : ''}
                           ${appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' : ''}
                           ${appointment.status === 'rescheduled' ? 'bg-purple-100 text-purple-800' : ''}
@@ -448,6 +452,8 @@ const Appointments = () => {
                         `}>
                           {appointment.status === 'pending' && 'Chờ xác nhận'}
                           {appointment.status === 'confirmed' && 'Đã xác nhận'}
+                          {appointment.status === 'hospitalized' && 'Đang nằm viện'}
+                          {appointment.status === 'pending_payment' && 'Chờ thanh toán'}
                           {appointment.status === 'completed' && 'Đã hoàn thành'}
                           {appointment.status === 'cancelled' && 'Đã hủy'}
                           {appointment.status === 'rescheduled' && 'Đổi lịch'}

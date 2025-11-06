@@ -22,6 +22,7 @@ const AdminLayout = ({ children }) => {
     '/admin/dashboard',
     '/admin/users',
     '/admin/doctors',
+    '/admin/pharmacists',
     '/admin/doctor-schedules',
     '/admin/hospitals',
     '/admin/specialties',
@@ -120,6 +121,7 @@ const AdminLayout = ({ children }) => {
     { path: '/admin/dashboard', label: 'Tổng quan', icon: <FaTachometerAlt /> },
     { path: '/admin/users', label: 'Người dùng', icon: <FaUsers /> },
     { path: '/admin/doctors', label: 'Bác sĩ', icon: <FaUserMd /> },
+    { path: '/admin/pharmacists', label: 'Dược sĩ', icon: <FaPills /> },
     { path: '/admin/doctor-schedules', label: 'Lịch bác sĩ', icon: <FaClock /> },
     { path: '/admin/hospitals', label: 'Cơ sở y tế', icon: <FaHospital /> },
     { path: '/admin/specialties', label: 'Chuyên khoa', icon: <FaFileAlt /> },
@@ -142,11 +144,11 @@ const AdminLayout = ({ children }) => {
   // Group the navigation items for admin
   const groupedNavItems = {
     main: [navItems[0]].filter(Boolean), // Dashboard
-    users: navItems.length > 2 ? [navItems[1], navItems[2]].filter(Boolean) : [], // Users, Doctors
-    scheduling: navItems.length > 12 ? [navItems[3], navItems[12]].filter(Boolean) : [], // Doctor schedules, Appointments
-    facilities: navItems.length > 11 ? [navItems[4], navItems[5], navItems[6], navItems[7], navItems[8], navItems[9], navItems[10], navItems[11]].filter(Boolean) : [], // Hospitals, Specialties, Services, Rooms, Medications, Inventory, Templates, Inpatient Rooms
-    business: navItems.length > 19
-      ? [navItems[13], navItems[14], navItems[15], navItems[16], navItems[17], navItems[18], navItems[19]].filter(Boolean)
+    users: navItems.length > 3 ? [navItems[1], navItems[2], navItems[3]].filter(Boolean) : [], // Users, Doctors, Pharmacists
+    scheduling: navItems.length > 13 ? [navItems[4], navItems[13]].filter(Boolean) : [], // Doctor schedules, Appointments
+    facilities: navItems.length > 12 ? [navItems[5], navItems[6], navItems[7], navItems[8], navItems[9], navItems[10], navItems[11], navItems[12]].filter(Boolean) : [], // Hospitals, Specialties, Services, Rooms, Medications, Inventory, Templates, Inpatient Rooms
+    business: navItems.length > 20
+      ? [navItems[14], navItems[15], navItems[16], navItems[17], navItems[18], navItems[19], navItems[20]].filter(Boolean)
       : [] // Coupons, Payments, Reviews, News, Video Rooms, Doctor Meetings, Video Call History
   };
 

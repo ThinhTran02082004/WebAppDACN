@@ -19,8 +19,11 @@ import Appointments from './pages/user/Appointments.jsx';
 import Appointment from './pages/user/Appointment.jsx';
 import AppointmentDetail from './pages/user/AppointmentDetail.jsx';
 import PaymentHistory from './pages/PaymentHistory.jsx';
+import DoctorPaymentHistory from './pages/doctor/PaymentHistory.jsx';
+import PharmacistPaymentHistory from './pages/pharmacist/PaymentHistory.jsx';
 import MedicalHistory from './pages/MedicalHistory.jsx';
 import MedicalRecordDetail from './pages/MedicalRecordDetail.jsx';
+import PrescriptionDetail from './pages/PrescriptionDetail.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { SocketProvider } from './context/SocketContext.jsx';
 import { NotificationProvider } from './context/NotificationContext.jsx';
@@ -36,6 +39,7 @@ import PaymentResult from './pages/user/PaymentResult.jsx';
 import UserRoute from './components/UserRoute';
 import AdminRoute from './components/admin/AdminRoute';
 import DoctorRoute from './components/doctor/DoctorRoute';
+import PharmacistRoute from './components/pharmacist/PharmacistRoute';
 
 // Trang doctor
 import DoctorDashboard from './pages/doctor/Dashboard';
@@ -46,6 +50,13 @@ import DoctorMedicalRecords from './pages/doctor/MedicalRecords';
 import DoctorProfile from './pages/doctor/Profile';
 import DoctorReviews from './pages/doctor/Reviews';
 import DoctorAppointmentDetail from './pages/doctor/AppointmentDetail';
+
+// Trang pharmacist
+import PharmacistDashboard from './pages/pharmacist/Dashboard';
+import PharmacistPrescriptions from './pages/pharmacist/Prescriptions';
+import PharmacistPrescriptionDetail from './pages/pharmacist/PrescriptionDetail';
+import PharmacistAppointments from './pages/pharmacist/Appointments';
+import PharmacistAppointmentDetail from './pages/pharmacist/AppointmentDetail';
 
 // Trang khác
 import NotFound from './pages/user/NotFound';
@@ -68,6 +79,7 @@ import AdminRooms from './pages/admin/Rooms';
 import Users from './pages/admin/Users';
 import Hospitals from './pages/admin/Hospitals';
 import AdminDoctors from './pages/admin/Doctors';
+import Pharmacists from './pages/admin/Pharmacists';
 // Thêm các trang admin mới
 import AdminAppointments from './pages/admin/Appointments';
 import AdminAppointmentDetail from './pages/admin/AppointmentDetail';
@@ -121,6 +133,7 @@ function AppContent() {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="users" element={<Users />} />
           <Route path="doctors" element={<AdminDoctors />} />
+          <Route path="pharmacists" element={<Pharmacists />} />
           <Route path="hospitals" element={<Hospitals />} />
           <Route path="specialties" element={<AdminSpecialties />} />
           <Route path="services" element={<AdminServices />} />
@@ -155,8 +168,21 @@ function AppContent() {
           <Route path="reviews" element={<DoctorReviews />} />
           <Route path="meetings" element={<DoctorMeetingHub />} />
           <Route path="video-call-history" element={<DoctorVideoCallHistory />} />
+          <Route path="payment-history" element={<DoctorPaymentHistory />} />
           <Route path="chat" element={<DoctorChat />} />
           <Route path="chat/:conversationId" element={<DoctorChat />} />
+        </Route>
+
+        {/* Pharmacist Routes - No Navbar/Footer */}
+        <Route path="/pharmacist" element={<PharmacistRoute />}>
+          <Route path="dashboard" element={<PharmacistDashboard />} />
+          <Route path="appointments" element={<PharmacistAppointments />} />
+          <Route path="appointments/:id" element={<PharmacistAppointmentDetail />} />
+          <Route path="prescriptions" element={<PharmacistPrescriptions />} />
+          <Route path="prescriptions/:id" element={<PharmacistPrescriptionDetail />} />
+          <Route path="medication-inventory" element={<MedicationInventory />} />
+          <Route path="payment-history" element={<PharmacistPaymentHistory />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
 
         {/* Public and User Routes - With Navbar/Footer */}
@@ -212,6 +238,7 @@ function AppContent() {
                   <Route path="/appointments/:id/review/:type" element={<ReviewForm />} />
                   <Route path="/payment-history" element={<PaymentHistory />} />
                   <Route path="/medical-history" element={<MedicalHistory />} />
+                  <Route path="/prescriptions/:id" element={<PrescriptionDetail />} />
                   <Route path="/medical-record/:id" element={<MedicalRecordDetail />} />
                   <Route path="/video-call-history" element={<UserVideoCallHistory />} />
                   <Route path="/chat" element={<UserChat />} />

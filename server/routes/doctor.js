@@ -43,6 +43,12 @@ router.post('/reviews/:reviewId/reply', doctor, doctorController.replyToReview);
 // GET /api/doctors/patients - Lấy danh sách bệnh nhân đã khám
 router.get('/patients', doctor, doctorController.getDoctorPatients);
 
+// GET /api/doctors/patients/:id - Lấy thông tin bệnh nhân cụ thể
+// GET /api/doctors/patients/:id/medical-records - Lấy hồ sơ y tế của bệnh nhân
+const medicalRecordController = require('../controllers/medicalRecordController');
+router.get('/patients/:id', doctor, medicalRecordController.getPatientInfo);
+router.get('/patients/:id/medical-records', doctor, medicalRecordController.getPatientMedicalRecords);
+
 // === DYNAMIC ID ROUTES (these must be after all specific routes) ===
 
 // GET /api/doctors/:id/schedule - Lịch làm việc của bác sĩ (public)

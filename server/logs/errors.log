@@ -1431,3 +1431,230 @@ Use mongoose.model(name, schema)
     at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
     at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\videoRoomController.js:469:21
+[2025-10-30T17:37:11.519Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-30T17:37:11.636Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-30T17:42:06.550Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-30T17:42:06.664Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-30T17:46:44.364Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-30T17:46:44.477Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-30T17:57:45.230Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-30T17:57:45.342Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-30T18:00:13.570Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-30T18:00:13.683Z] [ERROR] GET /api/billing/appointment/68fda30dea54531755267648 ValidationError: Bill validation failed: billNumber: Path `billNumber` is required.
+    at Document.invalidate (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3329:32)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\document.js:3090:17
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1407:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2025-10-31T06:47:31.542Z] [ERROR] GET /api/hospitalizations/[object%20Object] CastError: Cast to ObjectId failed for value "[object Object]" (type string) at path "_id" for model "Hospitalization"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\hospitalizationController.js:505:27
+[2025-10-31T07:18:45.720Z] [ERROR] GET /api/coupons/validate?code=aaaa&serviceId=68fd980bdcfa11c6c0b3e6ca&specialtyId=68fd980bdcfa11c6c0b3e6c1&totalAmount=800000 Error: Mã giảm giá không hợp lệ hoặc không tồn tại
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:534:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[2025-10-31T07:18:56.515Z] [ERROR] GET /api/coupons/validate?code=aaaaaaaa&serviceId=68fd980bdcfa11c6c0b3e6ca&specialtyId=68fd980bdcfa11c6c0b3e6c1&totalAmount=800000 Error: Mã giảm giá không hợp lệ hoặc không tồn tại
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:534:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[2025-10-31T14:41:58.770Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-10-31T14:41:58.820Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-10-31T15:56:16.078Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-10-31T15:56:16.137Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:34:10.110Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:34:10.152Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:34:14.890Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:34:14.932Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:34:56.405Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:34:56.450Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:35:25.221Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:35:25.264Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:38:00.245Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-01T12:38:00.291Z] [ERROR] GET /api/billing/payment-history?page=1&limit=10&status=all&method=all&date=&search= CastError: Cast to ObjectId failed for value "payment-history" (type string) at path "_id" for model "Bill"
+    at SchemaObjectId.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schema\objectId.js:251:11)
+    at SchemaType.applySetters (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1255:12)
+    at SchemaType.castForQuery (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\schemaType.js:1673:17)
+    at cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4907:12)
+    at Query._castConditions (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2325:10)
+    at model.Query._findOne (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:2648:8)
+    at model.Query.exec (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\query.js:4456:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\billingController.js:500:16
+[2025-11-04T15:29:17.689Z] [ERROR] GET /api/coupons/validate?code=aaaaaaaaaa&serviceId=69076f0e17d2824ecc362b47&specialtyId=69076f0e17d2824ecc362b3d&totalAmount=700000 Error: Mã giảm giá không hợp lệ hoặc không tồn tại
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:534:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[2025-11-04T15:45:43.900Z] [ERROR] GET /api/coupons/validate?code=aaaa&serviceId=69076f0e17d2824ecc362b46&specialtyId=69076f0e17d2824ecc362b3d&totalAmount=800000 Error: Mã giảm giá không hợp lệ hoặc không tồn tại
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:534:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

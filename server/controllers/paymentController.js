@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const Payment = require('../models/Payment');
+const Bill = require('../models/Bill');
+const BillPayment = require('../models/BillPayment');
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 const Doctor = require('../models/Doctor');
@@ -7,6 +8,7 @@ const Service = require('../models/Service');
 const { validationResult } = require('express-validator');
 
 // Get all payments with filtering options (Admin only)
+// Now using BillPayment for payment history
 exports.getAllPayments = async (req, res) => {
   try {
     const { 
@@ -26,10 +28,14 @@ exports.getAllPayments = async (req, res) => {
     const query = {};
 
     // Apply filters if provided
-    if (userId && userId !== 'all') query.userId = new mongoose.Types.ObjectId(userId);
-    if (doctorId && doctorId !== 'all') query.doctorId = new mongoose.Types.ObjectId(doctorId);
-    if (serviceId && serviceId !== 'all') query.serviceId = new mongoose.Types.ObjectId(serviceId);
-    if (status && status !== 'all') query.paymentStatus = status;
+    if (userId && userId !== 'all') query.patientId = new mongoose.Types.ObjectId(userId);
+    if (status && status !== 'all') {
+      // Map payment status
+      if (status === 'completed') query.paymentStatus = 'completed';
+      else if (status === 'pending') query.paymentStatus = 'pending';
+      else if (status === 'failed') query.paymentStatus = 'failed';
+      else if (status === 'cancelled') query.paymentStatus = 'cancelled';
+    }
     if (method && method !== 'all') query.paymentMethod = method;
     
     // Date range filter
@@ -44,39 +50,63 @@ exports.getAllPayments = async (req, res) => {
     }
 
     // Count total documents for pagination
-    const total = await Payment.countDocuments(query);
+    const total = await BillPayment.countDocuments(query);
     
     // Sort options
     const sort = {};
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
     
     // Execute query with pagination
-    const payments = await Payment.find(query)
+    const payments = await BillPayment.find(query)
       .sort(sort)
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
       .populate({
-        path: 'userId',
+        path: 'patientId',
         select: 'fullName email phoneNumber avatarUrl',
       })
       .populate({
-        path: 'doctorId',
-        select: 'user title specialtyId',
+        path: 'appointmentId',
+        select: 'appointmentDate status bookingCode doctorId serviceId',
         populate: [
-          { path: 'user', select: 'fullName email phoneNumber avatarUrl' },
-          { path: 'specialtyId', select: 'name' }
+          {
+            path: 'doctorId',
+            select: 'user title specialtyId',
+            populate: [
+              { path: 'user', select: 'fullName email phoneNumber avatarUrl' },
+              { path: 'specialtyId', select: 'name' }
+            ]
+          },
+          { path: 'serviceId', select: 'name price' }
         ]
       })
-      .populate('serviceId', 'name price')
-      .populate('appointmentId', 'date status bookingCode');
+      .populate('billId', 'billNumber');
+    
+    // Transform to match old Payment format for backward compatibility
+    const transformedPayments = payments.map(payment => ({
+      _id: payment._id,
+      appointmentId: payment.appointmentId,
+      userId: payment.patientId,
+      doctorId: payment.appointmentId?.doctorId,
+      serviceId: payment.appointmentId?.serviceId,
+      amount: payment.amount,
+      originalAmount: payment.amount, // BillPayment doesn't have originalAmount, use amount
+      discount: 0, // Will be in Bill
+      paymentMethod: payment.paymentMethod,
+      paymentStatus: payment.paymentStatus,
+      transactionId: payment.transactionId,
+      paymentDetails: payment.paymentDetails,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt
+    }));
     
     res.status(200).json({
       success: true,
-      count: payments.length,
+      count: transformedPayments.length,
       total,
       totalPages: Math.ceil(total / limit),
       currentPage: parseInt(page),
-      payments
+      payments: transformedPayments
     });
   } catch (error) {
     console.error('Error fetching payments:', error);
@@ -89,6 +119,7 @@ exports.getAllPayments = async (req, res) => {
 };
 
 // Get payment details by ID (Admin only)
+// Now using BillPayment
 exports.getPaymentById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -100,22 +131,27 @@ exports.getPaymentById = async (req, res) => {
       });
     }
     
-    const payment = await Payment.findById(id)
+    const payment = await BillPayment.findById(id)
       .populate({
-        path: 'userId',
+        path: 'patientId',
         select: 'fullName email phoneNumber'
       })
       .populate({
-        path: 'doctorId',
-        select: 'user title specialtyId',
+        path: 'appointmentId',
+        select: 'appointmentDate status notes bookingCode doctorId serviceId',
         populate: [
-          { path: 'user', select: 'fullName email phoneNumber' },
-          { path: 'specialtyId', select: 'name' }
+          {
+            path: 'doctorId',
+            select: 'user title specialtyId',
+            populate: [
+              { path: 'user', select: 'fullName email phoneNumber' },
+              { path: 'specialtyId', select: 'name' }
+            ]
+          },
+          { path: 'serviceId', select: 'name price description' }
         ]
       })
-      .populate('serviceId', 'name price description')
-      .populate('appointmentId', 'date status notes bookingCode')
-      .populate('couponId', 'code discountType discountValue');
+      .populate('billId');
     
     if (!payment) {
       return res.status(404).json({
@@ -124,9 +160,38 @@ exports.getPaymentById = async (req, res) => {
       });
     }
     
+    // Get bill for coupon info if consultation payment
+    let couponId = null;
+    if (payment.billType === 'consultation' && payment.billId) {
+      const bill = await Bill.findById(payment.billId);
+      if (bill?.consultationBill?.couponId) {
+        couponId = bill.consultationBill.couponId;
+      }
+    }
+    
+    // Transform to match old Payment format
+    const transformedPayment = {
+      _id: payment._id,
+      appointmentId: payment.appointmentId,
+      userId: payment.patientId,
+      doctorId: payment.appointmentId?.doctorId,
+      serviceId: payment.appointmentId?.serviceId,
+      amount: payment.amount,
+      originalAmount: payment.amount,
+      discount: 0,
+      couponId: couponId,
+      paymentMethod: payment.paymentMethod,
+      paymentStatus: payment.paymentStatus,
+      transactionId: payment.transactionId,
+      paymentDetails: payment.paymentDetails,
+      notes: payment.notes,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt
+    };
+    
     res.status(200).json({
       success: true,
-      payment
+      payment: transformedPayment
     });
   } catch (error) {
     console.error('Error fetching payment details:', error);
@@ -154,17 +219,14 @@ exports.updatePayment = async (req, res) => {
 
     // If no request body or empty body, automatically set status to "CONFIRM"
     const isEmptyBody = !req.body || Object.keys(req.body).length === 0;
-    const { paymentStatus = isEmptyBody ? 'CONFIRM' : undefined, notes, receiptNumber } = req.body || {};
+    const { paymentStatus = isEmptyBody ? 'completed' : undefined, notes, receiptNumber } = req.body || {};
 
-    // Find the payment
-    const payment = await Payment.findById(id);
+    // Find the payment (BillPayment)
+    const payment = await BillPayment.findById(id).populate('billId');
     
     if (!payment) {
       return res.status(404).json({ success: false, message: 'Payment not found' });
     }
-
-    console.log('Payment found:', payment);
-    console.log('Associated appointmentId:', payment.appointmentId);
 
     // Only cash payments can be updated (unless the user is admin)
     if (payment.paymentMethod !== 'cash' && req.user.role !== 'admin') {
@@ -175,55 +237,68 @@ exports.updatePayment = async (req, res) => {
     }
 
     // Update payment fields
-    if (paymentStatus) payment.paymentStatus = paymentStatus;
+    if (paymentStatus) {
+      payment.paymentStatus = paymentStatus === 'confirm' ? 'completed' : paymentStatus;
+    }
     if (notes) payment.notes = notes;
     if (receiptNumber) payment.transactionId = receiptNumber;
 
-    // If payment is now COMPLETED or CONFIRM, update timestamp
-    if (paymentStatus === 'completed' || paymentStatus === 'confirm') {
-      payment.paidAt = Date.now();
-    }
-
     // Save the updated payment
     await payment.save();
-    console.log('Payment updated successfully:', payment.paymentStatus);
+
+    // Update bill status if payment is completed
+    if (payment.billId && (paymentStatus === 'completed' || paymentStatus === 'confirm')) {
+      const bill = await Bill.findById(payment.billId);
+      if (bill) {
+        // Update the corresponding bill section
+        if (payment.billType === 'consultation') {
+          bill.consultationBill.status = 'paid';
+          bill.consultationBill.paymentDate = new Date();
+        } else if (payment.billType === 'medication') {
+          // Update prescription payment if exists
+          if (payment.prescriptionId && bill.medicationBill.prescriptionPayments) {
+            const prescriptionPayment = bill.medicationBill.prescriptionPayments.find(
+              p => p.prescriptionId.toString() === payment.prescriptionId.toString()
+            );
+            if (prescriptionPayment) {
+              prescriptionPayment.status = 'paid';
+              prescriptionPayment.paymentDate = new Date();
+            }
+          }
+          // Update medication bill status if all prescriptions paid
+          const allPaid = bill.medicationBill.prescriptionPayments.every(p => p.status === 'paid');
+          if (allPaid) {
+            bill.medicationBill.status = 'paid';
+          }
+        } else if (payment.billType === 'hospitalization') {
+          bill.hospitalizationBill.status = 'paid';
+          bill.hospitalizationBill.paymentDate = new Date();
+        }
+        await bill.save();
+      }
+    }
 
     // Update the corresponding appointment's payment status
     if (payment.appointmentId) {
       try {
-        // Map payment status to appointment paymentStatus format
-        let appointmentPaymentStatus = 'pending';
-        if (paymentStatus === 'completed' || paymentStatus === 'confirm') {
-          appointmentPaymentStatus = 'completed';
-        } else if (paymentStatus === 'failed' || paymentStatus === 'cancelled') {
-          appointmentPaymentStatus = 'failed';
-        } else if (paymentStatus === 'refunded') {
-          appointmentPaymentStatus = 'refunded';
-        }
-
-        console.log('Looking for appointment with ID:', payment.appointmentId);
-        
-        // Prepare update data object
-        const updateData = { paymentStatus: appointmentPaymentStatus };
-        
-        // If payment is completed or confirmed and it needs to be confirmed, update the status
-        if (paymentStatus === 'completed' || paymentStatus === 'confirm') {
-          updateData.status = 'completed';
-        }
-        
-        // Update the appointment using findByIdAndUpdate for more reliable updates
-        const appointment = await Appointment.findByIdAndUpdate(
-          payment.appointmentId,
-          updateData,
-          { new: true }
-        );
-        
-        console.log('Appointment update result:', appointment ? 
-          `Updated - Status: ${appointment.status}, PaymentStatus: ${appointment.paymentStatus}` : 
-          'Appointment not found');
-          
-        if (!appointment) {
-          console.error('Warning: Associated appointment not found with ID:', payment.appointmentId);
+        const appointment = await Appointment.findById(payment.appointmentId);
+        if (appointment) {
+          // Get bill to check overall status
+          const bill = await Bill.findOne({ appointmentId: payment.appointmentId });
+          if (bill && bill.overallStatus === 'paid') {
+            appointment.paymentStatus = 'completed';
+            if (appointment.status === 'pending') {
+              appointment.status = 'confirmed';
+            }
+          } else if (paymentStatus === 'completed' || paymentStatus === 'confirm') {
+            appointment.paymentStatus = 'completed';
+            if (payment.paymentMethod === 'cash' && appointment.status === 'pending') {
+              appointment.status = 'completed';
+            } else if (appointment.status === 'pending') {
+              appointment.status = 'confirmed';
+            }
+          }
+          await appointment.save();
         }
       } catch (appointmentError) {
         console.error('Error updating appointment:', appointmentError);
@@ -246,6 +321,7 @@ exports.updatePayment = async (req, res) => {
 };
 
 // Create new payment record (typically called by appointment system)
+// Now creates Bill instead of Payment
 exports.createPayment = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -286,49 +362,74 @@ exports.createPayment = async (req, res) => {
       });
     }
 
-    // Check if payment already exists for this appointment
-    const existingPayment = await Payment.findOne({ appointmentId });
-    if (existingPayment) {
-      return res.status(400).json({
-        success: false,
-        message: 'Payment record already exists for this appointment'
-      });
-    }
-
+    // Check if bill already exists for this appointment
+    let bill = await Bill.findOne({ appointmentId });
+    
     // Set initial payment status based on payment method
     let initialPaymentStatus = 'pending';
     if (paymentMethod === 'cash') {
-      // Cash payments can be automatically marked as completed if needed
-      initialPaymentStatus = 'completed';
+      initialPaymentStatus = 'paid';
     }
 
-    // Create new payment record
-    const payment = new Payment({
-      appointmentId,
-      userId,
-      doctorId,
-      serviceId,
-      amount,
-      originalAmount,
-      discount: discount || 0,
-      paymentMethod,
-      paymentStatus: initialPaymentStatus,
-      transactionId,
-      couponId: couponId || null,
-      paidAt: initialPaymentStatus === 'completed' ? Date.now() : null
-    });
+    if (bill) {
+      // Update existing bill's consultationBill
+      bill.consultationBill = {
+        amount: amount,
+        originalAmount: originalAmount,
+        discount: discount || 0,
+        couponId: couponId || null,
+        status: initialPaymentStatus,
+        paymentMethod: paymentMethod,
+        paymentDate: initialPaymentStatus === 'paid' ? new Date() : null,
+        transactionId: transactionId || null
+      };
+      
+      if (!bill.doctorId) bill.doctorId = doctorId;
+      if (!bill.serviceId) bill.serviceId = serviceId;
+      
+      await bill.save();
+    } else {
+      // Create new bill
+      bill = await Bill.create({
+        appointmentId,
+        patientId: userId,
+        doctorId,
+        serviceId,
+        consultationBill: {
+          amount: amount,
+          originalAmount: originalAmount,
+          discount: discount || 0,
+          couponId: couponId || null,
+          status: initialPaymentStatus,
+          paymentMethod: paymentMethod,
+          paymentDate: initialPaymentStatus === 'paid' ? new Date() : null,
+          transactionId: transactionId || null
+        }
+      });
+    }
 
-    await payment.save();
+    // Create BillPayment record for history
+    if (initialPaymentStatus === 'paid') {
+      await BillPayment.create({
+        billId: bill._id,
+        appointmentId,
+        patientId: userId,
+        billType: 'consultation',
+        amount: amount,
+        paymentMethod: paymentMethod,
+        paymentStatus: 'completed',
+        transactionId: transactionId || null
+      });
+    }
 
     // Map payment status to appointment payment status
     let appointmentPaymentStatus = 'pending';
-    if (initialPaymentStatus === 'completed') {
+    if (initialPaymentStatus === 'paid') {
       appointmentPaymentStatus = 'completed';
     }
 
     // Ensure appointment has a booking code
     if (!appointment.bookingCode) {
-      // Generate a unique booking code
       const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       const timestamp = Date.now().toString().slice(-6);
       appointment.bookingCode = `BK-${randomCode}-${timestamp}`;
@@ -336,11 +437,10 @@ exports.createPayment = async (req, res) => {
 
     // Update appointment with payment information
     appointment.paymentStatus = appointmentPaymentStatus;
-    appointment.paymentId = payment._id.toString();
     
     // If payment is complete, update appointment status accordingly
-    if (initialPaymentStatus === 'completed' && appointment.status === 'pending') {
-      appointment.status = 'confirmed';
+    if (initialPaymentStatus === 'paid' && appointment.status === 'pending') {
+      appointment.status = paymentMethod === 'cash' ? 'completed' : 'confirmed';
     }
     
     await appointment.save();
@@ -348,7 +448,20 @@ exports.createPayment = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Payment created successfully',
-      payment,
+      payment: {
+        _id: bill._id,
+        appointmentId: bill.appointmentId,
+        userId: bill.patientId,
+        doctorId: bill.doctorId,
+        serviceId: bill.serviceId,
+        amount: bill.consultationBill.amount,
+        originalAmount: bill.consultationBill.originalAmount,
+        discount: bill.consultationBill.discount,
+        couponId: bill.consultationBill.couponId,
+        paymentMethod: bill.consultationBill.paymentMethod,
+        paymentStatus: bill.consultationBill.status === 'paid' ? 'completed' : 'pending',
+        transactionId: bill.consultationBill.transactionId
+      },
       bookingCode: appointment.bookingCode
     });
   } catch (error) {
@@ -368,16 +481,16 @@ exports.createPayment = async (req, res) => {
  */
 exports.getPaymentStats = async (req, res) => {
   try {
-    // Get counts for different payment statuses
+    // Get counts for different payment statuses from BillPayment
     const [totalCount, completedCount, pendingCount, failedCount] = await Promise.all([
-      Payment.countDocuments({}),
-      Payment.countDocuments({ paymentStatus: 'completed' }),
-      Payment.countDocuments({ paymentStatus: 'pending' }),
-      Payment.countDocuments({ paymentStatus: 'failed' })
+      BillPayment.countDocuments({}),
+      BillPayment.countDocuments({ paymentStatus: 'completed' }),
+      BillPayment.countDocuments({ paymentStatus: 'pending' }),
+      BillPayment.countDocuments({ paymentStatus: 'failed' })
     ]);
 
-    // Get total revenue
-    const totalRevenue = await Payment.aggregate([
+    // Get total revenue from completed payments
+    const totalRevenue = await BillPayment.aggregate([
       { $match: { paymentStatus: 'completed' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
@@ -415,28 +528,55 @@ exports.getUserPayments = async (req, res) => {
     const userId = req.user.id;
     const { status, page = 1, limit = 10 } = req.query;
     
-    const query = { userId };
-    if (status) query.paymentStatus = status;
+    const query = { patientId: userId };
+    if (status) {
+      if (status === 'completed') query.paymentStatus = 'completed';
+      else if (status === 'pending') query.paymentStatus = 'pending';
+      else if (status === 'failed') query.paymentStatus = 'failed';
+      else query.paymentStatus = status;
+    }
     
     // Đếm tổng số thanh toán
-    const total = await Payment.countDocuments(query);
+    const total = await BillPayment.countDocuments(query);
     
     // Lấy danh sách thanh toán
-    const payments = await Payment.find(query)
-      .populate('appointmentId', 'appointmentDate status')
-      .populate('doctorId', 'name specialtyId')
-      .populate('serviceId', 'name price')
+    const payments = await BillPayment.find(query)
+      .populate('appointmentId', 'appointmentDate status doctorId serviceId')
+      .populate({
+        path: 'appointmentId',
+        populate: [
+          { path: 'doctorId', select: 'user title specialtyId', populate: { path: 'user', select: 'fullName' } },
+          { path: 'serviceId', select: 'name price' }
+        ]
+      })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
     
+    // Transform to match old format
+    const transformedPayments = payments.map(payment => ({
+      _id: payment._id,
+      appointmentId: payment.appointmentId?._id || payment.appointmentId,
+      userId: payment.patientId,
+      doctorId: payment.appointmentId?.doctorId,
+      serviceId: payment.appointmentId?.serviceId,
+      amount: payment.amount,
+      originalAmount: payment.amount,
+      discount: 0,
+      paymentMethod: payment.paymentMethod,
+      paymentStatus: payment.paymentStatus,
+      transactionId: payment.transactionId,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt
+    }));
+    
     res.status(200).json({
       success: true,
-      count: payments.length,
+      count: transformedPayments.length,
       total,
       totalPages: Math.ceil(total / limit),
       currentPage: parseInt(page),
-      data: payments
+      data: transformedPayments
     });
   } catch (error) {
     console.error('Get user payments error:', error);
@@ -518,63 +658,58 @@ exports.confirmPayPalPayment = async (req, res) => {
       });
     }
     
-    // Tìm bản ghi thanh toán theo appointmentId
-    let payment = await Payment.findOne({ appointmentId });
+    // Get or create bill
+    let bill = await Bill.findOne({ appointmentId });
     
-    console.log(`Payment search result:`, payment ? `Found: ${payment._id}, status: ${payment.paymentStatus}` : 'Not found');
-    
-    if (!payment) {
-      // Nếu không tìm thấy payment, tạo mới
-      console.log(`Creating new payment record for appointment ${appointmentId}`);
-      payment = new Payment({
+    if (!bill) {
+      // Create new bill
+      bill = await Bill.create({
         appointmentId,
-        userId: appointment.patientId,
+        patientId: appointment.patientId,
         doctorId: appointment.doctorId,
         serviceId: appointment.serviceId,
-        amount: appointment.fee?.totalAmount || 0,
-        originalAmount: appointment.fee?.consultationFee + appointment.fee?.additionalFees || 0,
-        discount: appointment.fee?.discount || 0,
-        paymentMethod: 'paypal',
-        paymentStatus: 'completed',
-        transactionId: paymentId,
-        paymentDetails: paymentDetails,
-        paidAt: new Date()
+        consultationBill: {
+          amount: appointment.fee?.totalAmount || 0,
+          originalAmount: (appointment.fee?.consultationFee || 0) + (appointment.fee?.additionalFees || 0),
+          discount: appointment.fee?.discount || 0,
+          status: 'paid',
+          paymentMethod: 'paypal',
+          paymentDate: new Date(),
+          transactionId: paymentId,
+          paymentDetails: paymentDetails
+        }
       });
     } else {
-      // Cập nhật bản ghi payment hiện có
-      console.log(`Updating existing payment ${payment._id}`);
-      payment.paymentStatus = 'completed';
-      payment.transactionId = paymentId;
-      payment.paymentDetails = paymentDetails;
-      payment.paymentMethod = 'paypal';
-      payment.updatedAt = new Date();
-      payment.paidAt = new Date();
+      // Update existing bill
+      bill.consultationBill.status = 'paid';
+      bill.consultationBill.paymentMethod = 'paypal';
+      bill.consultationBill.paymentDate = new Date();
+      bill.consultationBill.transactionId = paymentId;
+      bill.consultationBill.paymentDetails = paymentDetails;
+      if (!bill.doctorId) bill.doctorId = appointment.doctorId;
+      if (!bill.serviceId) bill.serviceId = appointment.serviceId;
+      await bill.save();
     }
     
-    // Lưu thông tin thanh toán
-    try {
-      await payment.save();
-      console.log(`Payment saved successfully: ${payment._id}`);
-    } catch (saveError) {
-      console.error(`Error saving payment:`, saveError);
-      return res.status(500).json({
-        success: false,
-        message: 'Lỗi khi lưu thông tin thanh toán',
-        error: saveError.message
-      });
-    }
+    // Create BillPayment record
+    const billPayment = await BillPayment.create({
+      billId: bill._id,
+      appointmentId,
+      patientId: appointment.patientId,
+      billType: 'consultation',
+      amount: appointment.fee?.totalAmount || 0,
+      paymentMethod: 'paypal',
+      paymentStatus: 'completed',
+      transactionId: paymentId,
+      paymentDetails: paymentDetails
+    });
+    
+    console.log(`BillPayment created successfully: ${billPayment._id}`);
     
     // Cập nhật trạng thái thanh toán trong Appointment
     try {
       appointment.paymentStatus = 'completed';
       appointment.paymentMethod = 'paypal';
-      
-      // Store our internal payment document's ObjectId in the paymentId field
-      // This is correctly typed as an ObjectId reference to the Payment model
-      appointment.paymentId = payment._id;
-      
-      // We can store the PayPal transaction ID in a separate property if needed
-      // (check if a transactionId field exists in the schema, or use notes field)
       
       // Nếu cuộc hẹn đang ở trạng thái pending, tự động chuyển sang confirmed
       if (appointment.status === 'pending') {
@@ -595,7 +730,8 @@ exports.confirmPayPalPayment = async (req, res) => {
         paymentProcessed: true,
         warning: 'Appointment update failed: ' + appointmentError.message,
         data: {
-          payment,
+          payment: billPayment,
+          bill,
           appointment,
           redirectUrl: '/user/appointments'
         }
@@ -606,7 +742,16 @@ exports.confirmPayPalPayment = async (req, res) => {
       success: true,
       message: 'Thanh toán PayPal đã được xác nhận thành công',
       data: {
-        payment,
+        payment: {
+          _id: billPayment._id,
+          appointmentId: billPayment.appointmentId,
+          userId: billPayment.patientId,
+          amount: billPayment.amount,
+          paymentMethod: billPayment.paymentMethod,
+          paymentStatus: billPayment.paymentStatus,
+          transactionId: billPayment.transactionId
+        },
+        bill,
         appointment,
         redirectUrl: '/user/appointments' // Chuyển hướng về trang lịch hẹn
       }
@@ -637,8 +782,8 @@ exports.cancelPayPalPayment = async (req, res) => {
       });
     }
     
-    // Tìm bản ghi thanh toán
-    const payment = await Payment.findById(paymentId);
+    // Tìm bản ghi thanh toán (BillPayment)
+    const payment = await BillPayment.findById(paymentId).populate('billId');
     if (!payment) {
       return res.status(404).json({
         success: false,
@@ -657,12 +802,20 @@ exports.cancelPayPalPayment = async (req, res) => {
     // Cập nhật trạng thái thanh toán
     payment.paymentStatus = 'cancelled';
     payment.notes = 'Thanh toán PayPal đã bị hủy bởi người dùng';
-    payment.updatedAt = new Date();
-    
     await payment.save();
     
+    // Update bill if exists
+    if (payment.billId && payment.billType === 'consultation') {
+      const bill = await Bill.findById(payment.billId);
+      if (bill) {
+        bill.consultationBill.status = 'cancelled';
+        await bill.save();
+      }
+    }
+    
     // Cập nhật trạng thái thanh toán cho cuộc hẹn hoặc hủy cuộc hẹn
-    const appointment = await Appointment.findById(payment.appointmentId);
+    const appointmentId = payment.appointmentId?._id || payment.appointmentId;
+    const appointment = await Appointment.findById(appointmentId);
     if (appointment) {
       // Tùy theo yêu cầu nghiệp vụ, bạn có thể hủy cuộc hẹn hoặc chỉ đặt lại trạng thái thanh toán
       appointment.paymentStatus = 'failed';
@@ -727,11 +880,11 @@ exports.getPaymentHistory = async (req, res) => {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
     
-    // Get total count for pagination
-    const total = await Payment.countDocuments({ userId: req.user.id });
+    // Get total count for pagination (using BillPayment)
+    const total = await BillPayment.countDocuments({ patientId: req.user.id });
     
-    // Fetch paginated payments
-    const payments = await Payment.find({ userId: req.user.id })
+    // Fetch paginated payments (using BillPayment)
+    const payments = await BillPayment.find({ patientId: req.user.id })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)

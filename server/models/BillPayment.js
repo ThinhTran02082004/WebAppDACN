@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const billPaymentSchema = new mongoose.Schema({
+  paymentNumber: {
+    type: String,
+    unique: true,
+    required: true
+  },
   billId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Bill',
@@ -61,6 +66,25 @@ billPaymentSchema.index({ patientId: 1, createdAt: -1 });
 billPaymentSchema.index({ appointmentId: 1 });
 billPaymentSchema.index({ paymentStatus: 1 });
 billPaymentSchema.index({ transactionId: 1 });
+
+// Pre-validate: ensure unique paymentNumber exists
+billPaymentSchema.pre('validate', async function(next) {
+  if (!this.paymentNumber) {
+    const year = new Date().getFullYear();
+    const month = String(new Date().getMonth() + 1).padStart(2, '0');
+    const day = String(new Date().getDate()).padStart(2, '0');
+
+    const count = await this.constructor.countDocuments({
+      createdAt: {
+        $gte: new Date(year, new Date().getMonth(), new Date().getDate()),
+        $lt: new Date(year, new Date().getMonth(), new Date().getDate() + 1)
+      }
+    });
+
+    this.paymentNumber = `PAY-${year}${month}${day}-${String(count + 1).padStart(5, '0')}`;
+  }
+  next();
+});
 
 const BillPayment = mongoose.model('BillPayment', billPaymentSchema);
 

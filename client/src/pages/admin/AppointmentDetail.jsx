@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   FaUser, FaCalendarAlt, FaMapMarkerAlt, FaFileMedical, 
-  FaNotesMedical, FaArrowLeft, FaFileAlt,
+  FaNotesMedical, FaArrowLeft, FaFileAlt, FaClipboardCheck,
   FaClock, FaStethoscope, FaRegHospital, FaInfoCircle,
-  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen, FaVideo
+  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen, FaVideo, FaMoneyBillWave, FaPlus
 } from 'react-icons/fa';
-import { toast } from 'react-toastify';
+import { toast, ToastContainer } from 'react-toastify';
 import api from '../../utils/api';
 import moment from 'moment';
 import 'moment/locale/vi';
+import AdminBilling from '../../components/AdminBilling';
+import PrescriptionManager from '../../components/PrescriptionManager';
+import HospitalizationManager from '../../components/HospitalizationManager';
 
 moment.locale('vi');
 
@@ -19,6 +22,9 @@ const AdminAppointmentDetail = () => {
   const [appointment, setAppointment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [activeTab, setActiveTab] = useState('prescription'); // 'prescription', 'hospitalization', 'billing'
+  const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
 
   useEffect(() => {
     fetchAppointmentDetail();
@@ -32,35 +38,69 @@ const AdminAppointmentDetail = () => {
       if (response.data.success) {
         setAppointment(response.data.data);
       } else {
-        setError(response.data.message || 'Không thể tải thông tin lịch hẹn');
-        toast.error(response.data.message || 'Không thể tải thông tin lịch hẹn');
+        const errorMsg = response.data.message || 'Không thể tải thông tin lịch hẹn';
+        setError(errorMsg);
+        toast.error(errorMsg);
       }
     } catch (error) {
       console.error('Lỗi khi tải chi tiết lịch hẹn:', error);
-      setError('Đã xảy ra lỗi khi tải thông tin. Vui lòng thử lại sau.');
-      toast.error('Đã xảy ra lỗi khi tải thông tin lịch hẹn');
+      const errorMsg = error.response?.data?.message || 'Đã xảy ra lỗi khi tải thông tin. Vui lòng thử lại sau.';
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
   };
 
   const getStatusBadge = (status) => {
-    const statusConfig = {
-      pending: { label: 'Chờ xác nhận', color: 'bg-yellow-100 text-yellow-800' },
-      confirmed: { label: 'Đã xác nhận', color: 'bg-blue-100 text-blue-800' },
-      completed: { label: 'Hoàn thành', color: 'bg-green-100 text-green-800' },
-      cancelled: { label: 'Đã hủy', color: 'bg-red-100 text-red-800' },
-      rejected: { label: 'Từ chối', color: 'bg-red-100 text-red-800' },
-      'no-show': { label: 'Không đến', color: 'bg-gray-100 text-gray-800' },
-      rescheduled: { label: 'Đổi lịch', color: 'bg-purple-100 text-purple-800' }
+    const badges = {
+      pending: { text: 'Chờ xác nhận', className: 'bg-yellow-100 text-yellow-800 border border-yellow-200', icon: <FaInfoCircle className="mr-1.5" /> },
+      confirmed: { text: 'Đã xác nhận', className: 'bg-blue-100 text-blue-800 border border-blue-200', icon: <FaClipboardCheck className="mr-1.5" /> },
+      completed: { text: 'Hoàn thành', className: 'bg-green-100 text-green-800 border border-green-200', icon: <FaClipboardCheck className="mr-1.5" /> },
+      pending_payment: { text: 'Chờ thanh toán', className: 'bg-orange-100 text-orange-800 border border-orange-200', icon: <FaClock className="mr-1.5" /> },
+      hospitalized: { text: 'Đang nằm viện', className: 'bg-purple-100 text-purple-800 border border-purple-200', icon: <FaRegHospital className="mr-1.5" /> },
+      cancelled: { text: 'Đã hủy', className: 'bg-red-100 text-red-800 border border-red-200', icon: null },
+      rejected: { text: 'Từ chối', className: 'bg-red-100 text-red-800 border border-red-200', icon: null },
+      rescheduled: { text: 'Đổi lịch', className: 'bg-indigo-100 text-indigo-800 border border-indigo-200', icon: <FaCalendarAlt className="mr-1.5" /> },
+      'no-show': { text: 'Không đến', className: 'bg-gray-100 text-gray-800 border border-gray-200', icon: <FaInfoCircle className="mr-1.5" /> }
     };
-
-    const config = statusConfig[status] || statusConfig.pending;
+    
+    const badge = badges[status] || { text: status, className: 'bg-gray-100 text-gray-800 border border-gray-200', icon: null };
+    
     return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${config.color}`}>
-        {config.label}
-      </span>
+      <div className={`inline-flex items-center px-3 py-1 rounded-full ${badge.className} text-sm font-medium`}>
+        {badge.icon}
+        <span>{badge.text}</span>
+      </div>
     );
+  };
+
+  const handleCompleteAppointment = async () => {
+    if (isUpdating) return;
+    
+    setIsUpdating(true);
+    try {
+      const response = await api.put(`/appointments/${id}/complete`);
+      
+      if (response.data.success) {
+        toast.success('Lịch hẹn đã hoàn thành thành công');
+        await fetchAppointmentDetail();
+      } else {
+        toast.error(`Không thể hoàn thành lịch hẹn: ${response.data.message || 'Lỗi không xác định'}`);
+      }
+    } catch (error) {
+      console.error('Lỗi khi hoàn thành lịch hẹn:', error.response?.data || error.message);
+      const errorMessage = error.response?.data?.message || 'Lỗi khi hoàn thành lịch hẹn';
+      toast.error(errorMessage);
+      
+      // If there are unpaid parts, show them
+      if (error.response?.data?.unpaidParts) {
+        const unpaidParts = error.response.data.unpaidParts;
+        toast.info(`Còn thiếu thanh toán: ${unpaidParts.join(', ')}`);
+      }
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   if (loading) {
@@ -91,6 +131,7 @@ const AdminAppointmentDetail = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} />
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center">
@@ -219,41 +260,247 @@ const AdminAppointmentDetail = () => {
             </div>
           </div>
 
-          {/* Medical Record (if completed) */}
-          {appointment.status === 'completed' && appointment.medicalRecord && (
-            <div className="bg-white rounded-xl shadow-md overflow-hidden">
+          {/* Medical Information */}
+          {(appointment.symptoms || appointment.medicalHistory || (appointment.prescriptions && appointment.prescriptions.length > 0 && appointment.prescriptions[0]?.diagnosis)) && (
+            <div className="bg-white rounded-xl shadow-md overflow-hidden mb-6">
               <div className="px-6 py-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
                 <h2 className="text-lg font-semibold flex items-center">
-                  <FaFileMedical className="mr-2" /> Hồ sơ khám bệnh
+                  <FaFileMedical className="mr-2" /> Thông tin bệnh lý
                 </h2>
               </div>
               <div className="p-6 space-y-4">
-                {appointment.medicalRecord.diagnosis && (
+                {appointment.symptoms && (
+                  <div>
+                    <label className="text-sm text-gray-500 font-medium">Triệu chứng</label>
+                    <p className="text-gray-900 mt-1">{appointment.symptoms}</p>
+                  </div>
+                )}
+                {appointment.medicalHistory && (
+                  <div>
+                    <label className="text-sm text-gray-500 font-medium">Tiền sử bệnh</label>
+                    <p className="text-gray-900 mt-1">{appointment.medicalHistory}</p>
+                  </div>
+                )}
+                {appointment.prescriptions && appointment.prescriptions.length > 0 && appointment.prescriptions[0]?.diagnosis && (
                   <div>
                     <label className="text-sm text-gray-500 font-medium">Chẩn đoán</label>
-                    <p className="text-gray-900 mt-1">{appointment.medicalRecord.diagnosis}</p>
+                    <p className="text-gray-900 mt-1">{appointment.prescriptions[0].diagnosis}</p>
                   </div>
                 )}
-                {appointment.medicalRecord.treatment && (
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="bg-white rounded-xl shadow-md overflow-hidden mb-6">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold">Thao tác</h2>
+            </div>
+            <div className="p-6 flex flex-wrap gap-3">
+              {(appointment.status === 'confirmed' || appointment.status === 'pending_payment' || appointment.status === 'hospitalized') && (
+                <>
+                  {appointment.status === 'confirmed' && (
+                    <button
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm text-sm"
+                      onClick={() => { setActiveTab('prescription'); setShowPrescriptionForm(true); }}
+                    >
+                      <FaNotesMedical className="mr-1.5" /> Kê Đơn Thuốc
+                    </button>
+                  )}
+                  {(appointment.status === 'confirmed' || appointment.status === 'pending_payment') && (
+                    <button 
+                      className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-sm disabled:opacity-70 text-sm"
+                      onClick={handleCompleteAppointment}
+                      disabled={isUpdating}
+                    >
+                      <FaClipboardCheck className="mr-1.5" /> Hoàn Thành Khám
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Tabs Section */}
+          {(appointment.status === 'confirmed' || appointment.status === 'completed' || appointment.status === 'hospitalized' || appointment.status === 'pending_payment') && (
+            <div className="bg-white rounded-xl shadow-md overflow-hidden mb-6">
+              {/* Tab Headers */}
+              <div className="flex border-b overflow-x-auto">
+                <button
+                  onClick={() => setActiveTab('prescription')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                    activeTab === 'prescription'
+                      ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
+                      : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <FaNotesMedical className="inline mr-2" />
+                  Đơn Thuốc
+                </button>
+                <button
+                  onClick={() => setActiveTab('hospitalization')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                    activeTab === 'hospitalization'
+                      ? 'border-b-2 border-purple-600 text-purple-600 bg-purple-50'
+                      : 'text-gray-600 hover:text-purple-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <FaRegHospital className="inline mr-2" />
+                  Nằm Viện
+                </button>
+                <button
+                  onClick={() => setActiveTab('billing')}
+                  className={`flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                    activeTab === 'billing'
+                      ? 'border-b-2 border-green-600 text-green-600 bg-green-50'
+                      : 'text-gray-600 hover:text-green-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <FaFileMedical className="inline mr-2" />
+                  Thanh Toán
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="p-6">
+                {activeTab === 'prescription' && (
                   <div>
-                    <label className="text-sm text-gray-500 font-medium">Điều trị</label>
-                    <p className="text-gray-900 mt-1">{appointment.medicalRecord.treatment}</p>
+                    {showPrescriptionForm ? (
+                      <PrescriptionManager
+                        appointmentId={appointment._id}
+                        patientId={appointment.patientId?._id}
+                        onPrescriptionCreated={() => {
+                          setShowPrescriptionForm(false);
+                          toast.success('Đơn thuốc đã được tạo thành công');
+                          fetchAppointmentDetail();
+                        }}
+                      />
+                    ) : (
+                      <>
+                        {Array.isArray(appointment.prescriptions) && appointment.prescriptions.length > 0 ? (
+                          <div className="space-y-3">
+                            {appointment.prescriptions
+                              .sort((a, b) => (a.prescriptionOrder || 1) - (b.prescriptionOrder || 1))
+                              .map((p) => (
+                              <div key={p._id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                                <div className="flex justify-between items-center mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="font-semibold">
+                                      Đơn thuốc {p.prescriptionOrder ? `đợt ${p.prescriptionOrder}` : ''}
+                                    </div>
+                                    {p.isHospitalization && (
+                                      <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-semibold">
+                                        Nội trú
+                                      </span>
+                                    )}
+                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                      p.status === 'dispensed' ? 'bg-green-100 text-green-800' :
+                                      p.status === 'verified' ? 'bg-emerald-100 text-emerald-800' :
+                                      p.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {p.status === 'pending' ? 'Chờ xử lý' :
+                                       p.status === 'approved' ? 'Đã kê đơn' :
+                                       p.status === 'verified' ? 'Đã phê duyệt' :
+                                       p.status === 'dispensed' ? 'Đã cấp thuốc' :
+                                       p.status === 'completed' ? 'Hoàn thành' : p.status}
+                                    </span>
+                                  </div>
+                                  <div className="text-sm text-gray-500">{new Date(p.createdAt).toLocaleString('vi-VN')}</div>
+                                </div>
+                                {p.diagnosis && (
+                                  <div className="text-sm text-gray-600 mb-2 pb-2 border-b">
+                                    <span className="font-medium">Chẩn đoán:</span> <span className="text-gray-800">{p.diagnosis}</span>
+                                  </div>
+                                )}
+                                <div className="text-sm mb-2">
+                                  <div className="font-medium text-gray-700 mb-1">Danh sách thuốc:</div>
+                                  <div className="space-y-2">
+                                    {p.medications?.map((m, i) => (
+                                      <div key={i} className="bg-gray-50 rounded p-3">
+                                        <div className="font-medium text-gray-800 mb-1">
+                                          {m.medicationId?.name || m.medicationName}
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-600">
+                                          <div><span className="font-medium">Số lượng:</span> {m.quantity} {m.medicationId?.unitTypeDisplay || 'đơn vị'}</div>
+                                          <div><span className="font-medium">Liều lượng:</span> {m.dosage || '—'}</div>
+                                          <div><span className="font-medium">Cách dùng:</span> {m.usage || '—'}</div>
+                                          <div><span className="font-medium">Thời gian:</span> {m.duration || '—'}</div>
+                                        </div>
+                                        {m.totalPrice > 0 && (
+                                          <div className="mt-1 text-xs text-gray-700">
+                                            <span className="font-medium">Tổng tiền:</span> {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(m.totalPrice)}
+                                          </div>
+                                        )}
+                                        {m.notes && (
+                                          <div className="mt-1 text-xs text-gray-500 italic">{m.notes}</div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                {p.totalAmount > 0 && (
+                                  <div className="text-sm font-semibold text-gray-800 mt-2 pt-2 border-t">
+                                    Tổng tiền: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(p.totalAmount)}
+                                  </div>
+                                )}
+                                {p.notes && (
+                                  <div className="text-sm text-gray-600 mt-2 pt-2 border-t">
+                                    <span className="font-medium">Ghi chú:</span> {p.notes}
+                                  </div>
+                                )}
+                                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                                  <span>Ngày kê đơn: {new Date(p.createdAt).toLocaleDateString('vi-VN')}</span>
+                                  <Link 
+                                    to={`/prescriptions/${p._id}`}
+                                    className="text-blue-600 hover:underline"
+                                  >
+                                    Xem chi tiết →
+                                  </Link>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <FaNotesMedical className="mx-auto text-5xl text-gray-300 mb-4" />
+                            <p className="text-gray-500 mb-4">Chưa có đơn thuốc nào được kê</p>
+                            {appointment.status === 'confirmed' && (
+                              <button
+                                onClick={() => setShowPrescriptionForm(true)}
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                              >
+                                <FaPlus className="inline mr-2" />
+                                Kê Đơn Thuốc Mới
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
-                {appointment.medicalRecord.prescription && appointment.medicalRecord.prescription.length > 0 && (
-                  <div>
-                    <label className="text-sm text-gray-500 font-medium">Đơn thuốc</label>
-                    <div className="mt-2 space-y-2">
-                      {appointment.medicalRecord.prescription.map((med, index) => (
-                        <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                          <p className="font-medium text-gray-900">{med.medicine}</p>
-                          {med.dosage && <p className="text-sm text-gray-600">Liều lượng: {med.dosage}</p>}
-                          {med.usage && <p className="text-sm text-gray-600">Cách dùng: {med.usage}</p>}
-                          {med.duration && <p className="text-sm text-gray-600">Thời gian: {med.duration}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+
+                {activeTab === 'hospitalization' && (
+                  <HospitalizationManager
+                    appointmentId={appointment._id}
+                    patientId={appointment.patientId?._id}
+                    onUpdate={() => {
+                      fetchAppointmentDetail();
+                      toast.success('Cập nhật thông tin nằm viện thành công');
+                    }}
+                  />
+                )}
+
+                {activeTab === 'billing' && (
+                  <AdminBilling
+                    appointmentId={appointment._id}
+                    initialBill={appointment.bill}
+                    onPaymentComplete={() => {
+                      fetchAppointmentDetail();
+                      toast.success('Thanh toán thành công');
+                    }}
+                  />
                 )}
               </div>
             </div>

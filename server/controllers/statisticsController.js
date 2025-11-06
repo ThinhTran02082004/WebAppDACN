@@ -2,7 +2,7 @@ const asyncHandler = require('../utils/catchAsync');
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 const Doctor = require('../models/Doctor');
-const Payment = require('../models/Payment');
+const BillPayment = require('../models/BillPayment');
 const ErrorResponse = require('../utils/errorResponse');
 const Review = require('../models/Review');
 const MedicalRecord = require('../models/MedicalRecord');
@@ -31,7 +31,7 @@ exports.getRevenueStatistics = asyncHandler(async (req, res, next) => {
     // Tỉ lệ phần trăm doanh thu hệ thống giữ lại từ mỗi thanh toán
     const SYSTEM_REVENUE_PERCENTAGE = 20; // 20% doanh thu
 
-    let query = { paymentStatus: 'completed' };
+    let query = { paymentStatus: 'completed' }; // BillPayment uses paymentStatus
     let groupByFormat;
 
     // Xử lý khoảng thời gian
@@ -54,7 +54,7 @@ exports.getRevenueStatistics = asyncHandler(async (req, res, next) => {
     // Truy vấn thống kê
     let revenueStats = [];
     try {
-      revenueStats = await Payment.aggregate([
+      revenueStats = await BillPayment.aggregate([
         { $match: query },
         {
           $group: {
@@ -79,7 +79,7 @@ exports.getRevenueStatistics = asyncHandler(async (req, res, next) => {
     // Tính tổng doanh thu
     let totalRevenue = [];
     try {
-      totalRevenue = await Payment.aggregate([
+      totalRevenue = await BillPayment.aggregate([
         { $match: query },
         {
           $group: {
@@ -482,7 +482,7 @@ exports.getDashboardStatistics = async (req, res) => {
           return 0;
         }),
         // Thanh toán
-        Payment.aggregate([
+        BillPayment.aggregate([
           {
             $match: { 
               $or: [

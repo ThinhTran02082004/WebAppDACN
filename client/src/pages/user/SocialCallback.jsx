@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Spin, Alert } from 'antd';
 import { toastSuccess, toastError, toastInfo, toastGoogleSuccess, toastFacebookSuccess } from '../../utils/toast';
+import { navigateByRole } from '../../utils/roleUtils';
 import api from '../../utils/api';
 
 const SocialCallback = () => {
@@ -12,6 +13,7 @@ const SocialCallback = () => {
   const [error, setError] = useState(null);
   const processedRef = useRef(false);
   const toastShownRef = useRef(false);
+  const redirectingRef = useRef(false); // ✅ Thêm flag để theo dõi quá trình redirect
 
   // Hiển thị thông báo đang xử lý ngay khi component mount
   useEffect(() => {
@@ -23,7 +25,7 @@ const SocialCallback = () => {
 
   useEffect(() => {
     // Tránh xử lý nhiều lần
-    if (processedRef.current) {
+    if (processedRef.current || redirectingRef.current) {
       return;
     }
 
@@ -66,10 +68,14 @@ const SocialCallback = () => {
                 return;
               }
               
-              // Lấy đường dẫn redirect từ session storage hoặc về trang chủ
-              const redirectTo = sessionStorage.getItem('auth_redirect') || '/';
+              // Lấy đường dẫn redirect từ session storage hoặc redirect theo role
+              const redirectTo = sessionStorage.getItem('auth_redirect');
               sessionStorage.removeItem('auth_redirect');
-              window.location.href = redirectTo;
+              if (redirectTo) {
+                window.location.href = redirectTo;
+              } else {
+                navigateByRole(userData, navigate);
+              }
             }, 3000);
             
             return;
@@ -97,18 +103,20 @@ const SocialCallback = () => {
 
         // Log the user in (store token, set logged in state)
         console.log('Đăng nhập thành công với dữ liệu:', userData);
+        console.log('needPassword:', userData.needPassword); // ✅ Debug log
         
         // Set authentication in context (không hiển thị thông báo từ hàm login)
         await login(userData, true, false);
         
+        // ✅ Đánh dấu đang trong quá trình redirect
+        redirectingRef.current = true;
+        
         // Xác định loại đăng nhập từ authProvider hoặc từ dữ liệu
-        // userData.authProvider có thể là 'google', 'facebook', hoặc 'local'
         const isGoogleLogin = userData.authProvider === 'google' || userData.googleId;
         const isFacebookLogin = userData.authProvider === 'facebook' || userData.facebookId;
         
         // Hiển thị thông báo dựa vào loại đăng nhập
         if (isGoogleLogin) {
-          // Thêm logging để debug
           console.log('Hiển thị thông báo đăng nhập Google thành công');
           toastGoogleSuccess(`Đăng nhập Google thành công! Xin chào, ${userData.fullName}`);
         } else if (isFacebookLogin) {
@@ -117,40 +125,47 @@ const SocialCallback = () => {
           toastSuccess(`Đăng nhập thành công! Xin chào, ${userData.fullName}`);
         }
         
-        // Chuyển hướng sau một chút để đảm bảo toast hiển thị
+        // ✅ Kiểm tra needPassword NGAY LẬP TỨC (không cần setTimeout)
+        if (userData.needPassword) {
+          console.log('User cần đặt mật khẩu, chuyển hướng đến /set-social-password');
+          navigate('/set-social-password', { replace: true });
+          return;
+        }
+        
+        // Chuyển hướng sau một chút để đảm bảo toast hiển thị (chỉ cho trường hợp không cần password)
         setTimeout(() => {
-          // Nếu người dùng cần đặt mật khẩu, chuyển hướng đến trang đặt mật khẩu
-          if (userData.needPassword) {
-            console.log('Chuyển hướng đến trang đặt mật khẩu cho tài khoản mạng xã hội');
-            navigate('/set-social-password');
-            return;
-          }
-          
-          // Lấy đường dẫn redirect từ session storage hoặc về trang chủ
-          const redirectTo = sessionStorage.getItem('auth_redirect') || '/';
+          // Lấy đường dẫn redirect từ session storage hoặc redirect theo role
+          const redirectTo = sessionStorage.getItem('auth_redirect');
           sessionStorage.removeItem('auth_redirect');
-          window.location.href = redirectTo;
-        }, 3000);
+          if (redirectTo) {
+            window.location.href = redirectTo;
+          } else {
+            navigateByRole(userData, navigate);
+          }
+          redirectingRef.current = false; // ✅ Reset flag sau khi redirect
+        }, 1500);
       } catch (error) {
         console.error('Lỗi xử lý callback mạng xã hội:', error);
         setError('Đã xảy ra lỗi khi xử lý đăng nhập. Vui lòng thử lại.');
         toastError('Đăng nhập không thành công. Vui lòng thử lại.');
+        redirectingRef.current = false; // ✅ Reset flag nếu có lỗi
       }
     };
 
-    // Chỉ xử lý nếu có query param và chưa đăng nhập
-    if ((searchParams.get('data') || searchParams.get('code')) && !processedRef.current) {
+    // ✅ Chỉ xử lý nếu có query param, chưa xử lý, và chưa redirect
+    if ((searchParams.get('data') || searchParams.get('code')) && !processedRef.current && !redirectingRef.current) {
       processCallback();
-    } else if (isAuthenticated) {
-      // Nếu đã đăng nhập, chuyển hướng về trang chủ
-      navigate('/');
+    } 
+    // ✅ CHỈ redirect về trang chủ nếu đã đăng nhập VÀ không đang trong quá trình xử lý callback
+    else if (isAuthenticated && !searchParams.get('data') && !searchParams.get('code') && !redirectingRef.current) {
+      navigate('/', { replace: true });
     }
 
     // Cleanup
     return () => {
-      processedRef.current = true;
+      // Không reset processedRef ở đây để tránh xử lý lại
     };
-  }, [searchParams, navigate, login, isAuthenticated]);
+  }, [searchParams, navigate, login, isAuthenticated]); // ✅ Giữ isAuthenticated nhưng thêm logic kiểm tra
 
   return (
     <div style={{ 

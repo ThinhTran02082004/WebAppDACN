@@ -5,16 +5,42 @@ const mongoose = require('mongoose');
 
 // Import stock (admin only)
 exports.importStock = asyncHandler(async (req, res) => {
-  const { medicationId, quantity, unitPrice, supplier, batchNumber, expiryDate, notes } = req.body;
+  const { medicationId, quantity, unitPrice, supplier, batchNumber, expiryDate, notes, hospitalId } = req.body;
   const userId = req.user.id;
   const userRole = req.user.roleType || req.user.role;
 
-  // Check if user is admin
-  if (userRole !== 'admin') {
+  // Check if user is admin or pharmacist
+  if (userRole !== 'admin' && userRole !== 'pharmacist') {
     return res.status(403).json({
       success: false,
-      message: 'Chỉ admin mới có quyền nhập hàng'
+      message: 'Chỉ admin hoặc dược sĩ mới có quyền nhập hàng'
     });
+  }
+
+  // Pharmacist can only import for their hospital
+  if (userRole === 'pharmacist') {
+    const User = require('../models/User');
+    const pharmacist = await User.findById(userId);
+    if (!pharmacist || !pharmacist.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dược sĩ chưa được gán vào chi nhánh'
+      });
+    }
+    // Validate medication belongs to pharmacist's hospital
+    const medication = await Medication.findById(medicationId);
+    if (!medication) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy thuốc'
+      });
+    }
+    if (medication.hospitalId.toString() !== pharmacist.hospitalId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn chỉ có thể nhập thuốc cho chi nhánh của mình'
+      });
+    }
   }
 
   if (!medicationId || !quantity || quantity <= 0) {
@@ -34,6 +60,15 @@ exports.importStock = asyncHandler(async (req, res) => {
       throw new Error('Không tìm thấy thuốc');
     }
 
+    // For admin: validate hospitalId if provided
+    if (userRole === 'admin' && hospitalId) {
+      // Validate medication belongs to the specified hospital
+      const medicationHospitalId = medication.hospitalId?._id || medication.hospitalId;
+      if (medicationHospitalId.toString() !== hospitalId.toString()) {
+        throw new Error(`Thuốc "${medication.name}" không thuộc chi nhánh được chọn. Vui lòng chọn thuốc thuộc chi nhánh này.`);
+      }
+    }
+
     const previousStock = medication.stockQuantity;
     const newStock = previousStock + quantity;
 
@@ -50,6 +85,7 @@ exports.importStock = asyncHandler(async (req, res) => {
     // Create inventory record
     const inventory = await MedicationInventory.create([{
       medicationId,
+      hospitalId: medication.hospitalId,
       transactionType: 'import',
       quantity,
       previousStock,
@@ -108,11 +144,31 @@ exports.adjustStock = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const userRole = req.user.roleType || req.user.role;
 
-  if (userRole !== 'admin') {
+  // Admin and pharmacist can adjust stock (pharmacist only for their hospital)
+  if (userRole !== 'admin' && userRole !== 'pharmacist') {
     return res.status(403).json({
       success: false,
-      message: 'Chỉ admin mới có quyền điều chỉnh tồn kho'
+      message: 'Chỉ admin hoặc dược sĩ mới có quyền điều chỉnh tồn kho'
     });
+  }
+
+  // Pharmacist can only adjust for their hospital
+  if (userRole === 'pharmacist') {
+    const User = require('../models/User');
+    const pharmacist = await User.findById(userId);
+    if (!pharmacist || !pharmacist.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dược sĩ chưa được gán vào chi nhánh'
+      });
+    }
+    const medication = await Medication.findById(medicationId);
+    if (medication && medication.hospitalId.toString() !== pharmacist.hospitalId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn chỉ có thể điều chỉnh tồn kho thuốc của chi nhánh mình'
+      });
+    }
   }
 
   if (!medicationId || newStock === undefined || newStock < 0) {
@@ -141,6 +197,7 @@ exports.adjustStock = asyncHandler(async (req, res) => {
     // Create inventory record
     const inventory = await MedicationInventory.create([{
       medicationId,
+      hospitalId: medication.hospitalId,
       transactionType: 'adjust',
       quantity: Math.abs(quantity),
       previousStock,
@@ -190,9 +247,26 @@ exports.adjustStock = asyncHandler(async (req, res) => {
 
 // Get inventory history
 exports.getInventoryHistory = asyncHandler(async (req, res) => {
-  const { medicationId, transactionType, startDate, endDate, page = 1, limit = 50 } = req.query;
+  const { medicationId, transactionType, startDate, endDate, hospitalId, page = 1, limit = 50 } = req.query;
+  const userRole = req.user?.roleType || req.user?.role;
 
   const query = {};
+
+  // Filter by hospitalId for pharmacist
+  if (userRole === 'pharmacist') {
+    const User = require('../models/User');
+    const pharmacist = await User.findById(req.user.id);
+    if (!pharmacist || !pharmacist.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dược sĩ chưa được gán vào chi nhánh'
+      });
+    }
+    query.hospitalId = pharmacist.hospitalId;
+  } else if (userRole === 'admin' && hospitalId) {
+    // Admin can optionally filter by hospitalId
+    query.hospitalId = hospitalId;
+  }
 
   if (medicationId) {
     query.medicationId = medicationId;
@@ -217,6 +291,7 @@ exports.getInventoryHistory = asyncHandler(async (req, res) => {
   const history = await MedicationInventory.find(query)
     .populate('medicationId', 'name unitTypeDisplay category')
     .populate('performedBy', 'fullName email')
+    .populate('hospitalId', 'name address')
     .sort({ createdAt: -1 })
     .limit(limit * 1)
     .skip(skip);
@@ -237,16 +312,34 @@ exports.getInventoryHistory = asyncHandler(async (req, res) => {
 
 // Get stock summary
 exports.getStockSummary = asyncHandler(async (req, res) => {
-  const { category, lowStock } = req.query;
+  const { category, lowStock, hospitalId } = req.query;
+  const userRole = req.user?.roleType || req.user?.role;
 
   const query = { isActive: true };
+
+  // Filter by hospitalId for pharmacist
+  if (userRole === 'pharmacist') {
+    const User = require('../models/User');
+    const pharmacist = await User.findById(req.user.id);
+    if (!pharmacist || !pharmacist.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dược sĩ chưa được gán vào chi nhánh'
+      });
+    }
+    query.hospitalId = pharmacist.hospitalId;
+  } else if (userRole === 'admin' && hospitalId) {
+    // Admin can optionally filter by hospitalId
+    query.hospitalId = hospitalId;
+  }
 
   if (category) {
     query.category = category;
   }
 
   const medications = await Medication.find(query)
-    .select('name category stockQuantity lowStockThreshold unitTypeDisplay unitPrice')
+    .select('name category stockQuantity lowStockThreshold unitTypeDisplay unitPrice hospitalId')
+    .populate('hospitalId', 'name address')
     .sort({ name: 1 });
 
   let summary = medications.map(med => ({
@@ -289,8 +382,9 @@ exports.getStockSummary = asyncHandler(async (req, res) => {
 // Get medication stock details with history
 exports.getMedicationStockDetails = asyncHandler(async (req, res) => {
   const { medicationId } = req.params;
+  const userRole = req.user?.roleType || req.user?.role;
 
-  const medication = await Medication.findById(medicationId);
+  const medication = await Medication.findById(medicationId).populate('hospitalId', 'name address');
 
   if (!medication) {
     return res.status(404).json({
@@ -299,15 +393,47 @@ exports.getMedicationStockDetails = asyncHandler(async (req, res) => {
     });
   }
 
+  let pharmacist = null;
+  // Validate pharmacist can only view medications from their hospital
+  if (userRole === 'pharmacist') {
+    const User = require('../models/User');
+    pharmacist = await User.findById(req.user.id);
+    if (!pharmacist || !pharmacist.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dược sĩ chưa được gán vào chi nhánh'
+      });
+    }
+    if (medication.hospitalId.toString() !== pharmacist.hospitalId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn chỉ có thể xem thông tin thuốc của chi nhánh mình'
+      });
+    }
+  }
+
+  // Build query for recent transactions with hospitalId filter for pharmacist
+  const transactionQuery = { medicationId };
+  if (userRole === 'pharmacist' && pharmacist?.hospitalId) {
+    transactionQuery.hospitalId = pharmacist.hospitalId;
+  }
+
   // Get recent transactions
-  const recentTransactions = await MedicationInventory.find({ medicationId })
+  const recentTransactions = await MedicationInventory.find(transactionQuery)
     .populate('performedBy', 'fullName')
+    .populate('hospitalId', 'name address')
     .sort({ createdAt: -1 })
     .limit(20);
 
+  // Build aggregate match query
+  const aggregateMatch = { medicationId: mongoose.Types.ObjectId(medicationId) };
+  if (userRole === 'pharmacist' && pharmacist?.hospitalId) {
+    aggregateMatch.hospitalId = pharmacist.hospitalId;
+  }
+
   // Calculate statistics
   const stats = await MedicationInventory.aggregate([
-    { $match: { medicationId: mongoose.Types.ObjectId(medicationId) } },
+    { $match: aggregateMatch },
     {
       $group: {
         _id: '$transactionType',
@@ -338,11 +464,33 @@ exports.getMedicationStockDetails = asyncHandler(async (req, res) => {
 
 // Get low stock alerts
 exports.getLowStockAlerts = asyncHandler(async (req, res) => {
-  const lowStockMedications = await Medication.find({
+  const userRole = req.user?.roleType || req.user?.role;
+  const query = {
     isActive: true,
     $expr: { $lte: ['$stockQuantity', '$lowStockThreshold'] }
-  })
-    .select('name category stockQuantity lowStockThreshold unitTypeDisplay unitPrice')
+  };
+
+  // Filter by hospitalId for pharmacist
+  if (userRole === 'pharmacist') {
+    const User = require('../models/User');
+    const pharmacist = await User.findById(req.user.id);
+    if (!pharmacist || !pharmacist.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dược sĩ chưa được gán vào chi nhánh'
+      });
+    }
+    query.hospitalId = pharmacist.hospitalId;
+  }
+
+  // Optional: Admin can filter by hospitalId if provided
+  if (userRole === 'admin' && req.query.hospitalId) {
+    query.hospitalId = req.query.hospitalId;
+  }
+
+  const lowStockMedications = await Medication.find(query)
+    .select('name category stockQuantity lowStockThreshold unitTypeDisplay unitPrice hospitalId')
+    .populate('hospitalId', 'name address')
     .sort({ stockQuantity: 1 });
 
   const alerts = lowStockMedications.map(med => ({
@@ -352,6 +500,7 @@ exports.getLowStockAlerts = asyncHandler(async (req, res) => {
     stockQuantity: med.stockQuantity,
     lowStockThreshold: med.lowStockThreshold,
     unitTypeDisplay: med.unitTypeDisplay,
+    hospitalId: med.hospitalId,
     severity: med.stockQuantity === 0 ? 'critical' : 'warning',
     message: med.stockQuantity === 0 
       ? 'Thuốc đã hết hàng' 

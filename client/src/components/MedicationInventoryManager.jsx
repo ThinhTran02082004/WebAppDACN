@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { toast } from 'react-toastify';
 import { FaPlus, FaHistory, FaExclamationTriangle, FaSync } from 'react-icons/fa';
 import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
+import api from '../utils/api';
 
 const MedicationInventoryManager = () => {
   const { socket } = useSocket();
+  const { user } = useAuth();
   const [medications, setMedications] = useState([]);
   const [history, setHistory] = useState([]);
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
+  const [hospitals, setHospitals] = useState([]);
+  const [selectedHospitalId, setSelectedHospitalId] = useState('all'); // 'all' or specific hospitalId
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('inventory'); // 'inventory', 'import', 'history', 'alerts'
   const [filter, setFilter] = useState({
@@ -27,6 +31,10 @@ const MedicationInventoryManager = () => {
   });
 
   useEffect(() => {
+    // Fetch hospitals if admin
+    if (user && (user.role === 'admin' || user.roleType === 'admin')) {
+      fetchHospitals();
+    }
     fetchMedications();
     fetchLowStockAlerts();
 
@@ -38,7 +46,24 @@ const MedicationInventoryManager = () => {
         socket.off('stock_updated', handleStockUpdate);
       };
     }
-  }, [socket]);
+  }, [socket, selectedHospitalId]);
+
+  const fetchHospitals = async () => {
+    try {
+      const res = await api.get('/admin/hospitals', { params: { limit: 100 } });
+      if (res.data.success) {
+        let hospitalsData = [];
+        if (res.data.data && res.data.data.hospitals && Array.isArray(res.data.data.hospitals)) {
+          hospitalsData = res.data.data.hospitals;
+        } else if (Array.isArray(res.data.data)) {
+          hospitalsData = res.data.data;
+        }
+        setHospitals(hospitalsData);
+      }
+    } catch (error) {
+      console.error('Error fetching hospitals:', error);
+    }
+  };
 
   const handleStockUpdate = (data) => {
     console.log('Stock updated:', data);
@@ -62,13 +87,19 @@ const MedicationInventoryManager = () => {
   const fetchMedications = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/medications`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setMedications(response.data.data);
+      const params = { limit: 1000 };
+      // For admin, add hospitalId filter if selected
+      if (user && (user.role === 'admin' || user.roleType === 'admin') && selectedHospitalId !== 'all') {
+        params.hospitalId = selectedHospitalId;
+      }
+      const response = await api.get('/medications', { params });
+      // API returns { data: { docs: [...] } }
+      const medicationsList = response.data.data?.docs || response.data.docs || response.data.data || [];
+      setMedications(Array.isArray(medicationsList) ? medicationsList : []);
     } catch (error) {
       toast.error('Không thể tải danh sách thuốc');
+      console.error('Error fetching medications:', error);
+      setMedications([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -76,23 +107,27 @@ const MedicationInventoryManager = () => {
 
   const fetchHistory = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/medication-inventory/history`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { limit: 50 }
-      });
+      const params = { limit: 50 };
+      // For admin, add hospitalId filter if selected
+      if (user && (user.role === 'admin' || user.roleType === 'admin') && selectedHospitalId !== 'all') {
+        params.hospitalId = selectedHospitalId;
+      }
+      const response = await api.get('/medication-inventory/history', { params });
       setHistory(response.data.data);
     } catch (error) {
       toast.error('Không thể tải lịch sử xuất nhập');
+      console.error('Error fetching history:', error);
     }
   };
 
   const fetchLowStockAlerts = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/medication-inventory/low-stock-alerts`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const params = {};
+      // For admin, add hospitalId filter if selected
+      if (user && (user.role === 'admin' || user.roleType === 'admin') && selectedHospitalId !== 'all') {
+        params.hospitalId = selectedHospitalId;
+      }
+      const response = await api.get('/medication-inventory/alerts', { params });
       setLowStockAlerts(response.data.data);
     } catch (error) {
       console.error('Error fetching alerts:', error);
@@ -109,14 +144,7 @@ const MedicationInventoryManager = () => {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/medication-inventory/import`,
-        importForm,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
+      await api.post('/medication-inventory/import', importForm);
       toast.success('Nhập hàng thành công');
       
       // Reset form
@@ -152,14 +180,23 @@ const MedicationInventoryManager = () => {
     }
   };
 
-  const filteredMedications = medications.filter(med => {
+  const filteredMedications = (Array.isArray(medications) ? medications : []).filter(med => {
     const matchSearch = !filter.search || 
       med.name.toLowerCase().includes(filter.search.toLowerCase()) ||
       med.genericName?.toLowerCase().includes(filter.search.toLowerCase());
     
     const matchCategory = !filter.category || med.category === filter.category;
     
-    return matchSearch && matchCategory;
+    // Additional hospital filter for client-side (if admin selected 'all' but medications still come filtered)
+    // This is a backup filter, primary filtering happens in fetchMedications
+    const matchHospital = selectedHospitalId === 'all' || 
+      !selectedHospitalId || 
+      (med.hospitalId && (
+        (typeof med.hospitalId === 'string' && med.hospitalId === selectedHospitalId) ||
+        (typeof med.hospitalId === 'object' && med.hospitalId._id === selectedHospitalId)
+      ));
+    
+    return matchSearch && matchCategory && matchHospital;
   });
 
   const formatCurrency = (amount) => {
@@ -186,13 +223,35 @@ const MedicationInventoryManager = () => {
         <div className="p-6 border-b">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold text-gray-800">Quản Lý Kho Thuốc</h2>
-            <button
-              onClick={fetchMedications}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2"
-            >
-              <FaSync className={loading ? 'animate-spin' : ''} />
-              Làm mới
-            </button>
+            <div className="flex items-center gap-4">
+              {/* Hospital selection for admin */}
+              {user && (user.role === 'admin' || user.roleType === 'admin') && (
+                <select
+                  value={selectedHospitalId}
+                  onChange={(e) => {
+                    setSelectedHospitalId(e.target.value);
+                  }}
+                  className="px-4 py-2 border rounded-lg bg-white"
+                >
+                  <option value="all">Tất cả chi nhánh</option>
+                  {hospitals.map((hospital) => (
+                    <option key={hospital._id} value={hospital._id}>
+                      {hospital.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                onClick={() => {
+                  fetchMedications();
+                  fetchLowStockAlerts();
+                }}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2"
+              >
+                <FaSync className={loading ? 'animate-spin' : ''} />
+                Làm mới
+              </button>
+            </div>
           </div>
         </div>
 
@@ -301,6 +360,7 @@ const MedicationInventoryManager = () => {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên thuốc</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Danh mục</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chi nhánh</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Đơn giá</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tồn kho</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng thái</th>
@@ -309,6 +369,9 @@ const MedicationInventoryManager = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredMedications.map((med) => {
                       const status = getStockStatus(med);
+                      const hospitalName = med.hospitalId 
+                        ? (typeof med.hospitalId === 'object' ? med.hospitalId.name : 'N/A')
+                        : 'N/A';
                       return (
                         <tr key={med._id} className="hover:bg-gray-50">
                           <td className="px-6 py-4">
@@ -320,6 +383,12 @@ const MedicationInventoryManager = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{med.category}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            <div className="font-medium">{hospitalName}</div>
+                            {med.hospitalId && typeof med.hospitalId === 'object' && med.hospitalId.address && (
+                              <div className="text-xs text-gray-500">{med.hospitalId.address}</div>
+                            )}
+                          </td>
                           <td className="px-6 py-4 text-sm font-semibold text-gray-900">
                             {formatCurrency(med.unitPrice)}
                           </td>
@@ -360,11 +429,16 @@ const MedicationInventoryManager = () => {
                     required
                   >
                     <option value="">Chọn thuốc cần nhập</option>
-                    {medications.map((med) => (
-                      <option key={med._id} value={med._id}>
-                        {med.name} (Tồn: {med.stockQuantity} {med.unitTypeDisplay})
-                      </option>
-                    ))}
+                    {filteredMedications.map((med) => {
+                      const hospitalName = med.hospitalId 
+                        ? (typeof med.hospitalId === 'object' ? med.hospitalId.name : 'N/A')
+                        : 'N/A';
+                      return (
+                        <option key={med._id} value={med._id}>
+                          {med.name} (Tồn: {med.stockQuantity} {med.unitTypeDisplay}) - {hospitalName}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -457,6 +531,7 @@ const MedicationInventoryManager = () => {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thời gian</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thuốc</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chi nhánh</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Loại</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Số lượng</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tồn kho</th>
@@ -464,36 +539,47 @@ const MedicationInventoryManager = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {history.map((item) => (
-                      <tr key={item._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {formatDateTime(item.createdAt)}
-                        </td>
-                        <td className="px-6 py-4 text-sm font-medium">{item.medicationId?.name}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            item.transactionType === 'import' ? 'bg-green-100 text-green-800' :
-                            item.transactionType === 'export' ? 'bg-red-100 text-red-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {item.transactionType === 'import' ? 'Nhập' :
-                             item.transactionType === 'export' ? 'Xuất' :
-                             item.transactionType === 'prescription' ? 'Kê đơn' : 'Điều chỉnh'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          <span className={item.transactionType === 'import' ? 'text-green-600' : 'text-red-600'}>
-                            {item.transactionType === 'import' ? '+' : '-'}{item.quantity}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          {item.previousStock} → {item.newStock}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {item.performedBy?.fullName || 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
+                    {history.map((item) => {
+                      const hospitalName = item.hospitalId 
+                        ? (typeof item.hospitalId === 'object' ? item.hospitalId.name : 'N/A')
+                        : 'N/A';
+                      return (
+                        <tr key={item._id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {formatDateTime(item.createdAt)}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium">{item.medicationId?.name}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            <div className="font-medium">{hospitalName}</div>
+                            {item.hospitalId && typeof item.hospitalId === 'object' && item.hospitalId.address && (
+                              <div className="text-xs text-gray-500">{item.hospitalId.address}</div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              item.transactionType === 'import' ? 'bg-green-100 text-green-800' :
+                              item.transactionType === 'export' ? 'bg-red-100 text-red-800' :
+                              'bg-blue-100 text-blue-800'
+                            }`}>
+                              {item.transactionType === 'import' ? 'Nhập' :
+                               item.transactionType === 'export' ? 'Xuất' :
+                               item.transactionType === 'prescription' ? 'Kê đơn' : 'Điều chỉnh'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            <span className={item.transactionType === 'import' ? 'text-green-600' : 'text-red-600'}>
+                              {item.transactionType === 'import' ? '+' : '-'}{item.quantity}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm">
+                            {item.previousStock} → {item.newStock}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {item.performedBy?.fullName || 'N/A'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -508,20 +594,28 @@ const MedicationInventoryManager = () => {
                 <div className="text-center py-8 text-gray-500">Không có cảnh báo nào</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {lowStockAlerts.map((alert) => (
-                    <div key={alert._id} className="border border-yellow-300 rounded-lg p-4 bg-yellow-50">
-                      <div className="flex items-start justify-between mb-2">
-                        <h4 className="font-semibold text-gray-900">{alert.name}</h4>
-                        <FaExclamationTriangle className="text-yellow-600" />
+                  {lowStockAlerts.map((alert) => {
+                    const hospitalName = alert.hospitalId 
+                      ? (typeof alert.hospitalId === 'object' ? alert.hospitalId.name : 'N/A')
+                      : 'N/A';
+                    return (
+                      <div key={alert._id} className="border border-yellow-300 rounded-lg p-4 bg-yellow-50">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900">{alert.name}</h4>
+                            <p className="text-xs text-gray-600 mt-1">Chi nhánh: {hospitalName}</p>
+                          </div>
+                          <FaExclamationTriangle className="text-yellow-600" />
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">
+                          Tồn kho: <strong className="text-red-600">{alert.stockQuantity}</strong> {alert.unitTypeDisplay}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Ngưỡng cảnh báo: {alert.lowStockThreshold} {alert.unitTypeDisplay}
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-600 mb-2">
-                        Tồn kho: <strong className="text-red-600">{alert.stockQuantity}</strong> {alert.unitTypeDisplay}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Ngưỡng cảnh báo: {alert.lowStockThreshold} {alert.unitTypeDisplay}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

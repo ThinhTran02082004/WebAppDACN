@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'react-toastify';
 import { FaMoneyBillWave, FaCheck, FaClock, FaPills, FaBed, FaStethoscope } from 'react-icons/fa';
 
@@ -20,117 +20,66 @@ const BillingManager = ({ appointmentId, onPaymentComplete }) => {
 
   const fetchBill = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/billing/appointment/${appointmentId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await api.get(`/billing/appointment/${appointmentId}`);
       setBill(response.data.data);
     } catch (error) {
       console.error('Error fetching bill:', error);
+      toast.error('Không thể tải thông tin hóa đơn');
     }
   };
 
-  const handlePayConsultation = async () => {
-    if (!window.confirm('Xác nhận thanh toán phí khám?')) return;
+
+  const handleConfirmCashPayment = async (billType) => {
+    const billTypeLabels = {
+      consultation: 'phí khám',
+      medication: 'tiền thuốc',
+      hospitalization: 'phí nội trú'
+    };
+
+    if (!window.confirm(`Xác nhận bệnh nhân đã thanh toán ${billTypeLabels[billType]} bằng tiền mặt?`)) return;
 
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const response = await api.post('/billing/confirm-cash-payment', {
+        appointmentId: bill.appointmentId?._id || bill.appointmentId,
+        billType
+      });
 
-      const paymentData = {
-        billId: bill._id,
-        paymentMethod: paymentMethods.consultation,
-        transactionId: `CONS-${Date.now()}`,
-        paymentDetails: {
-          method: paymentMethods.consultation,
-          timestamp: new Date().toISOString()
-        }
-      };
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/billing/pay-consultation`,
-        paymentData,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      toast.success('Thanh toán phí khám thành công');
-      setBill(response.data.data);
-
-      if (onPaymentComplete) onPaymentComplete();
-
+      if (response.data.success) {
+        toast.success(`Xác nhận thanh toán ${billTypeLabels[billType]} thành công`);
+        setBill(response.data.data.bill);
+        if (onPaymentComplete) onPaymentComplete();
+      } else {
+        toast.error(response.data.message || 'Xác nhận thất bại');
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Thanh toán thất bại');
+      toast.error(error.response?.data?.message || 'Xác nhận thất bại');
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePayMedication = async () => {
-    if (!window.confirm('Xác nhận thanh toán tiền thuốc?')) return;
+  const handleConfirmPrescriptionCashPayment = async (prescriptionId) => {
+    if (!window.confirm('Xác nhận bệnh nhân đã thanh toán đơn thuốc này bằng tiền mặt?')) return;
 
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const response = await api.post('/billing/pay-prescription', {
+        prescriptionId,
+        paymentMethod: 'cash',
+        transactionId: `PRES-CASH-${Date.now()}`,
+        paymentDetails: { method: 'cash', timestamp: new Date().toISOString() }
+      });
 
-      const paymentData = {
-        billId: bill._id,
-        paymentMethod: paymentMethods.medication,
-        transactionId: `MED-${Date.now()}`,
-        paymentDetails: {
-          method: paymentMethods.medication,
-          timestamp: new Date().toISOString()
-        }
-      };
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/billing/pay-medication`,
-        paymentData,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      toast.success('Thanh toán tiền thuốc thành công');
-      setBill(response.data.data);
-
-      if (onPaymentComplete) onPaymentComplete();
-
+      if (response.data.success) {
+        toast.success('Xác nhận thanh toán đơn thuốc thành công');
+        setBill(response.data.data.bill);
+        if (onPaymentComplete) onPaymentComplete();
+      } else {
+        toast.error(response.data.message || 'Xác nhận thất bại');
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Thanh toán thất bại');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePayHospitalization = async () => {
-    if (!window.confirm('Xác nhận thanh toán phí nội trú?')) return;
-
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-
-      const paymentData = {
-        billId: bill._id,
-        paymentMethod: paymentMethods.hospitalization,
-        transactionId: `HOSP-${Date.now()}`,
-        paymentDetails: {
-          method: paymentMethods.hospitalization,
-          timestamp: new Date().toISOString()
-        }
-      };
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/billing/pay-hospitalization`,
-        paymentData,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      toast.success('Thanh toán phí nội trú thành công');
-      setBill(response.data.data);
-
-      if (onPaymentComplete) onPaymentComplete();
-
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Thanh toán thất bại');
+      toast.error(error.response?.data?.message || 'Xác nhận thất bại');
     } finally {
       setLoading(false);
     }
@@ -247,85 +196,106 @@ const BillingManager = ({ appointmentId, onPaymentComplete }) => {
                 </div>
                 
                 {bill.consultationBill.status === 'pending' && (
-                  <div className="flex flex-col gap-2">
-                    <select
-                      value={paymentMethods.consultation}
-                      onChange={(e) => setPaymentMethods({ ...paymentMethods, consultation: e.target.value })}
-                      className="px-4 py-2 border rounded-lg"
-                    >
-                      <option value="cash">Tiền mặt</option>
-                      <option value="momo">MoMo</option>
-                      <option value="paypal">PayPal</option>
-                    </select>
-                    <button
-                      onClick={handlePayConsultation}
-                      disabled={loading}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
-                    >
-                      <FaMoneyBillWave />
-                      Thanh Toán
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => handleConfirmCashPayment('consultation')}
+                    disabled={loading}
+                    className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
+                  >
+                    <FaCheck />
+                    Xác nhận thanh toán tiền mặt
+                  </button>
                 )}
               </div>
             </div>
           </div>
         )}
 
-        {/* Medication Bill */}
-        {bill.medicationBill.amount > 0 && (
+        {/* Medication Bill - Đơn Thuốc */}
+        {bill.medicationBill.amount > 0 && bill.medicationBill.prescriptionIds && bill.medicationBill.prescriptionIds.length > 0 && (
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-green-50 px-6 py-3 border-b flex justify-between items-center">
               <h3 className="font-semibold text-lg flex items-center gap-2">
                 <FaPills className="text-green-600" />
-                Tiền Thuốc
+                Đơn Thuốc
               </h3>
               {getStatusBadge(bill.medicationBill.status)}
             </div>
             <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <p className="text-3xl font-bold text-green-600">
-                    {formatCurrency(bill.medicationBill.amount)}
-                  </p>
-                  {bill.medicationBill.prescriptionIds && bill.medicationBill.prescriptionIds.length > 0 && (
-                    <p className="text-sm text-gray-600 mt-1">
-                      Số đơn thuốc: {bill.medicationBill.prescriptionIds.length}
-                    </p>
-                  )}
-                  {bill.medicationBill.status === 'paid' && bill.medicationBill.paymentDate && (
-                    <p className="text-sm text-gray-600">
-                      Đã thanh toán: {new Date(bill.medicationBill.paymentDate).toLocaleString('vi-VN')}
-                    </p>
-                  )}
-                  {bill.medicationBill.status === 'paid' && bill.medicationBill.paymentMethod && (
-                    <p className="text-sm text-gray-600">
-                      Phương thức: {getPaymentMethodLabel(bill.medicationBill.paymentMethod)}
-                    </p>
-                  )}
-                </div>
-                
-                {bill.medicationBill.status === 'pending' && (
-                  <div className="flex flex-col gap-2">
-                    <select
-                      value={paymentMethods.medication}
-                      onChange={(e) => setPaymentMethods({ ...paymentMethods, medication: e.target.value })}
-                      className="px-4 py-2 border rounded-lg"
-                    >
-                      <option value="cash">Tiền mặt</option>
-                      <option value="momo">MoMo</option>
-                      <option value="paypal">PayPal</option>
-                    </select>
-                    <button
-                      onClick={handlePayMedication}
-                      disabled={loading}
-                      className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
-                    >
-                      <FaMoneyBillWave />
-                      Thanh Toán
-                    </button>
-                  </div>
-                )}
+              {/* Tổng tiền thuốc */}
+              <div className="mb-4 pb-4 border-b">
+                <p className="text-sm text-gray-600 mb-1">Tổng tiền thuốc</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(bill.medicationBill.amount)}</p>
+                <p className="text-xs text-gray-500 mt-1">Số đơn thuốc: {bill.medicationBill.prescriptionIds.length}</p>
+              </div>
+
+              {/* Danh sách từng prescription */}
+              <div className="space-y-4">
+                {bill.medicationBill.prescriptionIds.map((prescription, idx) => {
+                  const prescriptionPayment = bill.medicationBill.prescriptionPayments?.find(
+                    p => (p.prescriptionId?._id?.toString() || p.prescriptionId?.toString()) === prescription._id.toString()
+                  );
+                  const isPaid = prescriptionPayment?.status === 'paid' || prescription.status === 'dispensed';
+
+                  return (
+                    <div key={prescription._id || idx} className="bg-white border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-semibold">
+                            Đợt {prescription.prescriptionOrder || idx + 1}
+                          </span>
+                          {prescription.isHospitalization && (
+                            <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-semibold">
+                              Nội trú
+                            </span>
+                          )}
+                          {isPaid ? (
+                            <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold flex items-center gap-1">
+                              <FaCheck /> Đã thanh toán
+                            </span>
+                          ) : (
+                            <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-semibold flex items-center gap-1">
+                              <FaClock /> Chưa thanh toán
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-green-600">
+                            {formatCurrency(prescription.totalAmount)}
+                          </p>
+                          {isPaid && prescriptionPayment?.paymentDate && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Đã thanh toán: {new Date(prescriptionPayment.paymentDate).toLocaleString('vi-VN')}
+                            </p>
+                          )}
+                          {isPaid && prescriptionPayment?.paymentMethod && (
+                            <p className="text-xs text-gray-500">
+                              Phương thức: {getPaymentMethodLabel(prescriptionPayment.paymentMethod)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {prescription.diagnosis && (
+                        <div className="mb-3 pb-3 border-b border-gray-100">
+                          <p className="text-sm text-gray-600">
+                            <span className="font-medium">Chẩn đoán:</span> {prescription.diagnosis}
+                          </p>
+                        </div>
+                      )}
+
+                      {!isPaid && (
+                        <button
+                          onClick={() => handleConfirmPrescriptionCashPayment(prescription._id)}
+                          disabled={loading}
+                          className="w-full mt-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 flex items-center justify-center gap-2 text-sm font-medium"
+                        >
+                          <FaCheck />
+                          Xác nhận thanh toán tiền mặt
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -360,25 +330,14 @@ const BillingManager = ({ appointmentId, onPaymentComplete }) => {
                 </div>
                 
                 {bill.hospitalizationBill.status === 'pending' && (
-                  <div className="flex flex-col gap-2">
-                    <select
-                      value={paymentMethods.hospitalization}
-                      onChange={(e) => setPaymentMethods({ ...paymentMethods, hospitalization: e.target.value })}
-                      className="px-4 py-2 border rounded-lg"
-                    >
-                      <option value="cash">Tiền mặt</option>
-                      <option value="momo">MoMo</option>
-                      <option value="paypal">PayPal</option>
-                    </select>
-                    <button
-                      onClick={handlePayHospitalization}
-                      disabled={loading}
-                      className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 flex items-center gap-2"
-                    >
-                      <FaMoneyBillWave />
-                      Thanh Toán
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => handleConfirmCashPayment('hospitalization')}
+                    disabled={loading}
+                    className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
+                  >
+                    <FaCheck />
+                    Xác nhận thanh toán tiền mặt
+                  </button>
                 )}
               </div>
             </div>
@@ -402,10 +361,9 @@ const BillingManager = ({ appointmentId, onPaymentComplete }) => {
         </div>
 
         {/* Payment Note */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-gray-700">
-            <strong>Lưu ý:</strong> Bạn có thể thanh toán từng phần riêng biệt theo nhu cầu. 
-            Mỗi phần có thể chọn phương thức thanh toán khác nhau (Tiền mặt, MoMo, PayPal).
+            <strong>Lưu ý:</strong> Đây là thông tin thanh toán của bệnh nhân. Bạn có thể xác nhận khi bệnh nhân đã thanh toán tiền mặt bằng cách nhấn nút "Xác nhận thanh toán tiền mặt" cho từng phần.
           </p>
         </div>
       </div>

@@ -56,7 +56,7 @@ const appointmentSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'completed', 'cancelled', 'rescheduled', 'no-show', 'rejected', 'hospitalized'],
+    enum: ['pending', 'confirmed', 'completed', 'cancelled', 'rescheduled', 'no-show', 'rejected', 'hospitalized', 'pending_payment'],
     default: 'pending'
   },
   hospitalizationId: {

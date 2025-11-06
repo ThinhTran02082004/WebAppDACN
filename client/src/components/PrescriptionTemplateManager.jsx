@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { toast } from 'react-toastify';
 import { FaPlus, FaEdit, FaTrash, FaCopy, FaEye, FaTimes } from 'react-icons/fa';
+import api from '../utils/api';
 
 const PrescriptionTemplateManager = ({ onSelectTemplate }) => {
   const [templates, setTemplates] = useState([]);
@@ -40,18 +40,15 @@ const PrescriptionTemplateManager = ({ onSelectTemplate }) => {
   const fetchTemplates = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
       const params = {};
       if (filter.category) params.category = filter.category;
       if (filter.createdByRole) params.createdByRole = filter.createdByRole;
 
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/prescription-templates`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params
-      });
+      const response = await api.get('/prescription-templates', { params });
       setTemplates(response.data.data);
     } catch (error) {
       toast.error('Không thể tải danh sách đơn thuốc mẫu');
+      console.error('Error fetching templates:', error);
     } finally {
       setLoading(false);
     }
@@ -59,13 +56,15 @@ const PrescriptionTemplateManager = ({ onSelectTemplate }) => {
 
   const fetchMedications = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/medications`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await api.get('/medications', {
+        params: { limit: 1000 } // Get all medications
       });
-      setMedications(response.data.data);
+      // API returns { data: { docs: [...] } }
+      const medicationsList = response.data.data?.docs || response.data.docs || response.data.data || [];
+      setMedications(Array.isArray(medicationsList) ? medicationsList : []);
     } catch (error) {
       console.error('Error fetching medications:', error);
+      setMedications([]);
     }
   };
 
@@ -114,13 +113,7 @@ const PrescriptionTemplateManager = ({ onSelectTemplate }) => {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/prescription-templates`,
-        formData,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
+      await api.post('/prescription-templates', formData);
       toast.success('Tạo đơn thuốc mẫu thành công');
       setShowForm(false);
       resetForm();
@@ -134,12 +127,7 @@ const PrescriptionTemplateManager = ({ onSelectTemplate }) => {
     if (!window.confirm('Bạn có chắc chắn muốn xóa đơn thuốc mẫu này?')) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(
-        `${import.meta.env.VITE_API_URL}/prescription-templates/${id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
+      await api.delete(`/prescription-templates/${id}`);
       toast.success('Xóa đơn thuốc mẫu thành công');
       fetchTemplates();
     } catch (error) {
@@ -149,13 +137,7 @@ const PrescriptionTemplateManager = ({ onSelectTemplate }) => {
 
   const handleCloneTemplate = async (id) => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/prescription-templates/${id}/clone`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
+      await api.post(`/prescription-templates/${id}/clone`);
       toast.success('Sao chép đơn thuốc mẫu thành công');
       fetchTemplates();
     } catch (error) {

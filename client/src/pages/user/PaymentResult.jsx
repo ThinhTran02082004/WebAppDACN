@@ -43,8 +43,15 @@ const PaymentResult = () => {
               });
               
               // Show success or error toast
-              if (response.data.paymentStatus === 'completed') {
-                toast.success('Thanh toán thành công!');
+              const isCompleted = response.data.paymentStatus === 'completed';
+              if (isCompleted) {
+                toast.success('Thanh toán thành công! Đang chuyển đến chi tiết lịch hẹn...');
+                // Auto redirect to appointment detail after showing success message
+                if (response.data.appointmentId) {
+                  setTimeout(() => {
+                    navigate(`/appointments/${response.data.appointmentId}`);
+                  }, 2000); // Redirect after 2 seconds
+                }
               } else {
                 toast.error('Thanh toán thất bại. Vui lòng thử lại!');
               }
@@ -102,16 +109,22 @@ const PaymentResult = () => {
     fetchPaymentResult();
   }, [location.search]);
 
-  // Redirect to appointments page after 5 seconds
+  // Redirect to appointment detail page after successful payment, or appointments list after 5 seconds
   useEffect(() => {
     if (!loading) {
       const timer = setTimeout(() => {
-        navigate('/appointments');
-      }, 5000);
+        // If payment successful and has appointmentId, redirect to appointment detail
+        if (result.success && result.appointmentId) {
+          navigate(`/appointments/${result.appointmentId}`);
+        } else {
+          // Otherwise redirect to appointments list
+          navigate('/appointments');
+        }
+      }, 3000); // Reduced to 3 seconds for better UX
       
       return () => clearTimeout(timer);
     }
-  }, [loading, navigate]);
+  }, [loading, navigate, result.success, result.appointmentId]);
 
   if (loading) {
     return (
@@ -146,33 +159,47 @@ const PaymentResult = () => {
           <p className="text-gray-600 mb-6">{result.message}</p>
           
           <div className="text-sm text-gray-500 mb-6">
-            Bạn sẽ được chuyển hướng đến trang lịch hẹn sau 5 giây...
+            {result.success && result.appointmentId 
+              ? 'Bạn sẽ được chuyển hướng đến chi tiết lịch hẹn sau 3 giây...'
+              : 'Bạn sẽ được chuyển hướng đến trang lịch hẹn sau 3 giây...'
+            }
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link
-              to="/appointments"
-              className="bg-primary hover:bg-primary-dark text-white font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
-            >
-              Xem lịch hẹn
-            </Link>
-            
-            {result.appointmentId && (
-              <Link
-                to={`/appointments/${result.appointmentId}`}
-                className="bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
-              >
-                Chi tiết cuộc hẹn
-              </Link>
-            )}
-            
-            {!result.success && (
-              <Link
-                to="/"
-                className="bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
-              >
-                Trang chủ
-              </Link>
+            {result.success && result.appointmentId ? (
+              // If payment successful, prioritize appointment detail link
+              <>
+                <Link
+                  to={`/appointments/${result.appointmentId}`}
+                  className="bg-primary hover:bg-primary-dark text-white font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
+                >
+                  Xem chi tiết lịch hẹn
+                </Link>
+                <Link
+                  to="/appointments"
+                  className="bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
+                >
+                  Danh sách lịch hẹn
+                </Link>
+              </>
+            ) : (
+              // If payment failed or no appointmentId, show appointments list
+              <>
+                <Link
+                  to="/appointments"
+                  className="bg-primary hover:bg-primary-dark text-white font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
+                >
+                  Xem lịch hẹn
+                </Link>
+                {!result.success && (
+                  <Link
+                    to="/"
+                    className="bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
+                  >
+                    Trang chủ
+                  </Link>
+                )}
+              </>
             )}
           </div>
         </div>

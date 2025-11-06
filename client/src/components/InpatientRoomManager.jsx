@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { toast } from 'react-toastify';
-import { FaPlus, FaEdit, FaTrash, FaBed, FaCheck, FaTimes } from 'react-icons/fa';
+import { FaPlus, FaEdit, FaBed, FaCheck, FaTimes } from 'react-icons/fa';
 import { useSocket } from '../context/SocketContext';
+import api from '../utils/api';
 
 const InpatientRoomManager = () => {
   const { socket } = useSocket();
   const [rooms, setRooms] = useState([]);
+  const [hospitals, setHospitals] = useState([]);
   const [statistics, setStatistics] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -14,7 +15,7 @@ const InpatientRoomManager = () => {
   const [filter, setFilter] = useState({
     type: '',
     floor: '',
-    available: ''
+    status: ''
   });
 
   const [formData, setFormData] = useState({
@@ -26,7 +27,10 @@ const InpatientRoomManager = () => {
     capacity: 1,
     amenities: [],
     equipment: [],
-    description: ''
+    description: '',
+    hospitalId: '',
+    status: 'available',
+    isActive: true
   });
 
   const [newAmenity, setNewAmenity] = useState('');
@@ -35,6 +39,7 @@ const InpatientRoomManager = () => {
   useEffect(() => {
     fetchRooms();
     fetchStatistics();
+    fetchHospitals();
 
     // Listen for real-time room updates
     if (socket) {
@@ -56,7 +61,12 @@ const InpatientRoomManager = () => {
     // Update local state
     setRooms(prev => prev.map(room =>
       room._id === data.roomId
-        ? { ...room, status: data.status, currentOccupancy: data.currentOccupancy }
+        ? { 
+            ...room, 
+            status: data.status, 
+            isActive: data.isActive !== undefined ? data.isActive : room.isActive,
+            currentOccupancy: data.currentOccupancy 
+          }
         : room
     ));
 
@@ -66,19 +76,16 @@ const InpatientRoomManager = () => {
   const fetchRooms = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
       const params = {};
       if (filter.type) params.type = filter.type;
       if (filter.floor) params.floor = filter.floor;
-      if (filter.available) params.available = filter.available;
+      if (filter.status) params.status = filter.status;
 
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/inpatient-rooms`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params
-      });
+      const response = await api.get('/inpatient-rooms', { params });
       setRooms(response.data.data);
     } catch (error) {
       toast.error('Không thể tải danh sách phòng');
+      console.error('Error fetching rooms:', error);
     } finally {
       setLoading(false);
     }
@@ -86,37 +93,46 @@ const InpatientRoomManager = () => {
 
   const fetchStatistics = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/inpatient-rooms/statistics`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/inpatient-rooms/statistics');
       setStatistics(response.data.data);
     } catch (error) {
       console.error('Error fetching statistics:', error);
     }
   };
 
+  const fetchHospitals = async () => {
+    try {
+      const response = await api.get('/hospitals', { params: { limit: 1000 } });
+      // Prefer the correct key from server response: { data: { hospitals, total, ... } }
+      const list =
+        response?.data?.data?.hospitals ??
+        response?.data?.data?.docs ??
+        response?.data?.hospitals ??
+        [];
+      setHospitals(Array.isArray(list) ? list : []);
+    } catch (error) {
+      console.error('Error fetching hospitals:', error);
+      setHospitals([]);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Require hospital selection when multiple hospitals exist
+    if (hospitals.length > 1 && !formData.hospitalId) {
+      toast.error('Vui lòng chọn bệnh viện trước khi lưu phòng');
+      return;
+    }
+
     try {
-      const token = localStorage.getItem('token');
-      
       if (editingRoom) {
         // Update room
-        await axios.put(
-          `${import.meta.env.VITE_API_URL}/inpatient-rooms/${editingRoom._id}`,
-          formData,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        await api.put(`/inpatient-rooms/${editingRoom._id}`, formData);
         toast.success('Cập nhật phòng thành công');
       } else {
         // Create room
-        await axios.post(
-          `${import.meta.env.VITE_API_URL}/inpatient-rooms`,
-          formData,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        await api.post('/inpatient-rooms', formData);
         toast.success('Tạo phòng thành công');
       }
 
@@ -142,7 +158,10 @@ const InpatientRoomManager = () => {
       capacity: room.capacity,
       amenities: room.amenities || [],
       equipment: room.equipment || [],
-      description: room.description || ''
+      description: room.description || '',
+      hospitalId: room.hospitalId?._id || room.hospitalId || '',
+      status: room.status || 'available',
+      isActive: room.isActive !== undefined ? room.isActive : true
     });
     setShowForm(true);
   };
@@ -151,10 +170,7 @@ const InpatientRoomManager = () => {
     if (!window.confirm('Bạn có chắc chắn muốn xóa phòng này?')) return;
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`${import.meta.env.VITE_API_URL}/inpatient-rooms/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/inpatient-rooms/${id}`);
       toast.success('Xóa phòng thành công');
       fetchRooms();
       fetchStatistics();
@@ -173,7 +189,10 @@ const InpatientRoomManager = () => {
       capacity: 1,
       amenities: [],
       equipment: [],
-      description: ''
+      description: '',
+      hospitalId: hospitals.length === 1 ? hospitals[0]._id : '',
+      status: 'available',
+      isActive: true
     });
   };
 
@@ -216,13 +235,40 @@ const InpatientRoomManager = () => {
   };
 
   const getStatusBadge = (room) => {
-    if (!room.isAvailable) {
-      return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Đầy</span>;
+    // Kiểm tra isActive trước
+    if (!room.isActive) {
+      return <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full font-semibold">Vô hiệu hóa</span>;
     }
-    if (room.currentOccupancy > 0) {
-      return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">Đang sử dụng</span>;
+
+    // Kiểm tra status từ model
+    const statusMap = {
+      'available': { label: 'Khả dụng', class: 'bg-green-100 text-green-800' },
+      'occupied': { label: 'Đã đầy', class: 'bg-red-100 text-red-800' },
+      'maintenance': { label: 'Bảo trì', class: 'bg-orange-100 text-orange-800' },
+      'cleaning': { label: 'Vệ sinh', class: 'bg-blue-100 text-blue-800' }
+    };
+
+    const statusInfo = statusMap[room.status] || { label: room.status || 'Không xác định', class: 'bg-gray-100 text-gray-800' };
+
+    // Nếu available và có occupancy, hiển thị thêm thông tin
+    if (room.status === 'available' && room.currentOccupancy > 0) {
+      return (
+        <div className="flex flex-col gap-1">
+          <span className={`px-2 py-1 ${statusInfo.class} text-xs rounded-full font-semibold`}>
+            {statusInfo.label}
+          </span>
+          <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+            Đang sử dụng ({room.currentOccupancy}/{room.capacity})
+          </span>
+        </div>
+      );
     }
-    return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Trống</span>;
+
+    return (
+      <span className={`px-2 py-1 ${statusInfo.class} text-xs rounded-full font-semibold`}>
+        {statusInfo.label}
+      </span>
+    );
   };
 
   return (
@@ -285,13 +331,15 @@ const InpatientRoomManager = () => {
             />
 
             <select
-              value={filter.available}
-              onChange={(e) => setFilter({ ...filter, available: e.target.value })}
+              value={filter.status}
+              onChange={(e) => setFilter({ ...filter, status: e.target.value })}
               className="px-4 py-2 border rounded-lg"
             >
               <option value="">Tất cả trạng thái</option>
-              <option value="true">Còn trống</option>
-              <option value="false">Đã đầy</option>
+              <option value="available">Khả dụng</option>
+              <option value="occupied">Đã đầy</option>
+              <option value="maintenance">Bảo trì</option>
+              <option value="cleaning">Vệ sinh</option>
             </select>
           </div>
         </div>
@@ -303,6 +351,24 @@ const InpatientRoomManager = () => {
               {editingRoom ? 'Cập Nhật Phòng' : 'Thêm Phòng Mới'}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Hospital Selector - always visible */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bệnh viện *</label>
+                <select
+                  value={formData.hospitalId}
+                  onChange={(e) => setFormData({ ...formData, hospitalId: e.target.value })}
+                  className="w-full px-4 py-2 border rounded-lg"
+                  required
+                >
+                  <option value="" disabled>{hospitals.length ? '-- Chọn bệnh viện --' : 'Đang tải danh sách bệnh viện...'}</option>
+                  {hospitals.map(hospital => (
+                    <option key={hospital._id} value={hospital._id}>
+                      {hospital.name} {hospital.address ? `- ${hospital.address}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Số phòng *</label>
@@ -385,6 +451,41 @@ const InpatientRoomManager = () => {
                   className="w-full px-4 py-2 border rounded-lg"
                   rows="2"
                 />
+              </div>
+
+              {/* Status and Active Status */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái *</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg"
+                    required
+                  >
+                    <option value="available">Khả dụng</option>
+                    <option value="occupied">Đã đầy</option>
+                    <option value="maintenance">Bảo trì</option>
+                    <option value="cleaning">Vệ sinh</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái hoạt động</label>
+                  <div className="flex items-center gap-3 mt-2">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.isActive}
+                        onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">
+                        {formData.isActive ? 'Đang hoạt động' : 'Vô hiệu hóa'}
+                      </span>
+                    </label>
+                  </div>
+                </div>
               </div>
 
               {/* Amenities */}
@@ -503,6 +604,16 @@ const InpatientRoomManager = () => {
                     <p className="text-sm">
                       <span className="font-medium">Sức chứa:</span> {room.currentOccupancy}/{room.capacity} người
                     </p>
+                    <p className="text-sm">
+                      <span className="font-medium">Trạng thái:</span> {
+                        room.status === 'available' ? 'Khả dụng' :
+                        room.status === 'occupied' ? 'Đã đầy' :
+                        room.status === 'maintenance' ? 'Bảo trì' :
+                        room.status === 'cleaning' ? 'Vệ sinh' :
+                        room.status || 'Không xác định'
+                      }
+                      {!room.isActive && ' (Vô hiệu hóa)'}
+                    </p>
                     <p className="text-lg font-bold text-green-600">
                       {formatCurrency(room.hourlyRate)}/giờ
                     </p>
@@ -528,17 +639,11 @@ const InpatientRoomManager = () => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleEdit(room)}
-                      className="flex-1 px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded flex items-center justify-center gap-2"
+                      className="w-full px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded flex items-center justify-center gap-2"
                     >
                       <FaEdit /> Sửa
                     </button>
-                    <button
-                      onClick={() => handleDelete(room._id)}
-                      className="flex-1 px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded flex items-center justify-center gap-2"
-                      disabled={room.currentOccupancy > 0}
-                    >
-                      <FaTrash /> Xóa
-                    </button>
+                    {/* Nút xóa đã bị ẩn theo yêu cầu */}
                   </div>
                 </div>
               ))}

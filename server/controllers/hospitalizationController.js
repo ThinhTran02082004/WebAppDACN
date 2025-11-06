@@ -44,6 +44,24 @@ exports.assignInpatientRoom = asyncHandler(async (req, res) => {
       throw new Error('Không tìm thấy phòng');
     }
 
+    // Check detailed availability reasons
+    if (!room.isActive) {
+      throw new Error('Phòng đang bị vô hiệu hóa (isActive: false). Vui lòng chọn phòng khác.');
+    }
+
+    if (room.status !== 'available') {
+      const statusMessages = {
+        'occupied': 'Phòng đã đầy',
+        'maintenance': 'Phòng đang bảo trì',
+        'cleaning': 'Phòng đang được vệ sinh'
+      };
+      throw new Error(`Phòng không khả dụng: ${statusMessages[room.status] || room.status}. Vui lòng chọn phòng khác.`);
+    }
+
+    if (room.currentOccupancy >= room.capacity) {
+      throw new Error('Phòng đã đầy. Vui lòng chọn phòng khác.');
+    }
+
     if (!room.canAccommodate(1)) {
       throw new Error('Phòng không khả dụng hoặc đã đầy');
     }
@@ -159,6 +177,40 @@ exports.transferRoom = asyncHandler(async (req, res) => {
     // Update hospitalization
     await hospitalization.transferRoom(newRoomId, newRoom.hourlyRate);
 
+    // Calculate current cost from roomHistory and update Bill
+    const currentHours = hospitalization.roomHistory.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+    const currentAmount = hospitalization.roomHistory.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    
+    // Update Bill with current hospitalization cost (even if not discharged yet)
+    const Bill = require('../models/Bill');
+    const appointment = await Appointment.findById(hospitalization.appointmentId).session(session);
+    if (appointment) {
+      let bill = await Bill.findOne({ appointmentId: appointment._id }).session(session);
+      
+      if (!bill) {
+        // Create bill if not exists
+        bill = await Bill.create([{
+          appointmentId: appointment._id,
+          patientId: appointment.patientId,
+          consultationBill: {
+            amount: appointment.fee?.totalAmount || 0,
+            status: 'pending'
+          },
+          hospitalizationBill: {
+            hospitalizationId: hospitalization._id,
+            amount: currentAmount,
+            status: 'pending'
+          }
+        }], { session });
+        bill = bill[0];
+      } else {
+        // Update hospitalization bill amount
+        bill.hospitalizationBill.hospitalizationId = hospitalization._id;
+        bill.hospitalizationBill.amount = currentAmount;
+        await bill.save({ session });
+      }
+    }
+
     await session.commitTransaction();
 
     // Emit real-time updates
@@ -179,14 +231,14 @@ exports.transferRoom = asyncHandler(async (req, res) => {
       });
     }
 
-    const updatedHospitalization = await Hospitalization.findById(hospitalizationId)
+    const updatedHospitalizationPopulated = await Hospitalization.findById(hospitalizationId)
       .populate('inpatientRoomId', 'roomNumber type floor hourlyRate')
       .populate('roomHistory.inpatientRoomId', 'roomNumber type');
 
     res.json({
       success: true,
       message: 'Chuyển phòng thành công',
-      data: updatedHospitalization
+      data: updatedHospitalizationPopulated
     });
 
   } catch (error) {
@@ -237,14 +289,60 @@ exports.dischargePatient = asyncHandler(async (req, res) => {
       await room.release(1);
     }
 
+    // Close current room history entry before discharge
+    if (hospitalization.roomHistory.length > 0) {
+      const currentEntry = hospitalization.roomHistory[hospitalization.roomHistory.length - 1];
+      if (!currentEntry.checkOutTime) {
+        currentEntry.checkOutTime = new Date();
+        const checkInTime = new Date(currentEntry.checkInTime);
+        const diffMs = currentEntry.checkOutTime - checkInTime;
+        currentEntry.hours = Math.ceil(diffMs / (1000 * 60 * 60));
+        currentEntry.amount = currentEntry.hours * currentEntry.hourlyRate;
+      }
+    }
+    
+    // Calculate total cost from roomHistory
+    hospitalization.totalHours = hospitalization.roomHistory.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+    hospitalization.totalAmount = hospitalization.roomHistory.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+    
     // Discharge patient
     await hospitalization.discharge(doctor._id, reason);
 
-    // Update appointment
+    // Update appointment status (không set completed, chỉ remove hospitalized)
     const appointment = await Appointment.findById(hospitalization.appointmentId).session(session);
     if (appointment) {
-      appointment.status = 'completed';
+      // Chỉ cập nhật status nếu đang hospitalized
+      if (appointment.status === 'hospitalized') {
+        appointment.status = 'pending_payment'; // Chờ thanh toán, không complete ngay
+      }
       await appointment.save({ session });
+    }
+    
+    // Update Bill with hospitalization cost
+    const Bill = require('../models/Bill');
+    let bill = await Bill.findOne({ appointmentId: hospitalization.appointmentId }).session(session);
+    
+    if (!bill) {
+      // Tạo bill nếu chưa có
+      bill = await Bill.create([{
+        appointmentId: hospitalization.appointmentId,
+        patientId: appointment.patientId,
+        consultationBill: {
+          amount: appointment.fee?.totalAmount || 0,
+          status: 'pending'
+        },
+        hospitalizationBill: {
+          hospitalizationId: hospitalization._id,
+          amount: hospitalization.totalAmount,
+          status: 'pending'
+        }
+      }], { session });
+      bill = bill[0];
+    } else {
+      // Cập nhật hospitalization bill amount
+      bill.hospitalizationBill.hospitalizationId = hospitalization._id;
+      bill.hospitalizationBill.amount = hospitalization.totalAmount;
+      await bill.save({ session });
     }
 
     await session.commitTransaction();
@@ -304,6 +402,7 @@ exports.getAvailableRooms = asyncHandler(async (req, res) => {
 
   const query = {
     isActive: true,
+    status: 'available', // Chỉ lấy phòng có status available
     $expr: { $lt: ['$currentOccupancy', '$capacity'] }
   };
 

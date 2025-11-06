@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
@@ -7,13 +7,18 @@ import { FaCheckCircle, FaExclamationCircle, FaSpinner } from 'react-icons/fa';
 const VerifyEmail = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { updateUserData } = useAuth();
-  const [status, setStatus] = useState('loading'); // loading, success, error
+  const { updateUserData, login } = useAuth();
+  const [status, setStatus] = useState('loading');
   const [message, setMessage] = useState('');
+  const hasVerifiedRef = useRef(false); // ✅ Prevent double verification
   
   useEffect(() => {
     const verifyEmailToken = async () => {
-      // Extract token from URL query params
+      // ✅ Prevent multiple verifications
+      if (hasVerifiedRef.current) {
+        return;
+      }
+      
       const searchParams = new URLSearchParams(location.search);
       const token = searchParams.get('token');
       
@@ -26,6 +31,7 @@ const VerifyEmail = () => {
       }
       
       try {
+        hasVerifiedRef.current = true; // ✅ Set flag before making request
         console.log('Sending verification request...');
         const response = await api.post('/auth/verify-email', { token });
         console.log('Verification response:', response.data);
@@ -34,21 +40,30 @@ const VerifyEmail = () => {
           setStatus('success');
           setMessage(response.data.message || 'Email của bạn đã được xác thực thành công!');
           
-          // Update user data if available
-          if (response.data.user) {
-            console.log('Updating user data:', response.data.user);
+          // ✅ Fix: Use login() with token instead of updateUserData()
+          if (response.data.token && response.data.user) {
+            console.log('Saving user data with token:', response.data.user);
+            // Use login() to properly save token and user data
+            login({
+              ...response.data.user,
+              token: response.data.token
+            }, false, false); // rememberMe=false, showNotification=false
+          } else if (response.data.user) {
+            console.log('Updating user data without token:', response.data.user);
             updateUserData(response.data.user);
           }
           
-          // Redirect to home after 3 seconds
+          // Redirect to login after 3 seconds
           setTimeout(() => {
-            navigate('/');
+            navigate('/login');
           }, 3000);
         } else {
           setStatus('error');
           setMessage(response.data.message || 'Không thể xác thực email. Vui lòng thử lại.');
+          hasVerifiedRef.current = false; // ✅ Reset on error
         }
       } catch (error) {
+        hasVerifiedRef.current = false; // ✅ Reset on error
         console.error('Email verification error:', error);
         
         setStatus('error');
@@ -66,7 +81,9 @@ const VerifyEmail = () => {
     };
     
     verifyEmailToken();
-  }, [location.search, navigate, updateUserData]);
+  }, [location.search, navigate, login, updateUserData]); // ✅ Keep dependencies but use useRef to prevent duplicate calls
+  
+  // ... rest of the component remains the same
   
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

@@ -37,6 +37,10 @@ router.put('/users/:id/unlock', userController.unlockUserAccount);
 router.put('/doctors/:id/lock', doctorController.lockDoctorAccount);
 router.put('/doctors/:id/unlock', doctorController.unlockDoctorAccount);
 
+// Pharmacist routes
+router.post('/pharmacists', userController.createPharmacist);
+router.get('/pharmacists', userController.getAllUsers); // Reuse getAllUsers with filter
+
 // Doctor routes
 router.post('/doctors', doctorController.createDoctor);
 router.put('/doctors/:id', doctorController.updateDoctor);

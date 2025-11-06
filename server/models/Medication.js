@@ -72,6 +72,11 @@ const medicationSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  hospitalId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Hospital',
+    required: true
   }
 }, {
   timestamps: true
@@ -79,6 +84,8 @@ const medicationSchema = new mongoose.Schema({
 
 // Thêm index để tìm kiếm nhanh hơn
 medicationSchema.index({ name: 'text', category: 1 });
+medicationSchema.index({ hospitalId: 1 });
+medicationSchema.index({ hospitalId: 1, name: 1 });
 
 // Thêm phương thức static để giảm số lượng thuốc
 medicationSchema.statics.reduceStock = async function(medicationId, quantity) {

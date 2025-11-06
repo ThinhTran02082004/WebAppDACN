@@ -35,7 +35,7 @@ const userSchema = new mongoose.Schema({
   },
   roleType: {
     type: String,
-    enum: ['user', 'doctor', 'admin'],
+    enum: ['user', 'doctor', 'admin', 'pharmacist'],
     default: 'user'
   },
   registrationDate: { // ngay tao tai khoan
@@ -109,6 +109,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['local', 'google', 'facebook'],
     default: 'local'
+  },
+  hospitalId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Hospital'
   }
 }, {
   timestamps: true
@@ -190,6 +194,7 @@ userSchema.methods.generateOTP = function() {
 
 // Indexes for efficient querying
 userSchema.index({ verificationToken: 1 });
+userSchema.index({ hospitalId: 1, roleType: 1 });
 
 const User = mongoose.model('User', userSchema);
 

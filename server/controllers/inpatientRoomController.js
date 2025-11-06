@@ -76,6 +76,24 @@ exports.createRoom = asyncHandler(async (req, res) => {
     });
   }
 
+  // Get hospitalId: from request body or from first hospital in system
+  let roomHospitalId = hospitalId;
+  
+  if (!roomHospitalId) {
+    // If no hospitalId provided, get the first hospital
+    const Hospital = require('../models/Hospital');
+    const firstHospital = await Hospital.findOne().sort({ createdAt: 1 });
+    
+    if (!firstHospital) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng tạo bệnh viện trước khi tạo phòng nội trú'
+      });
+    }
+    
+    roomHospitalId = firstHospital._id;
+  }
+
   try {
     const room = await InpatientRoom.create({
       roomNumber,
@@ -87,7 +105,7 @@ exports.createRoom = asyncHandler(async (req, res) => {
       amenities: amenities || [],
       equipment: equipment || [],
       description,
-      hospitalId,
+      hospitalId: roomHospitalId,
       status: 'available',
       currentOccupancy: 0
     });
@@ -99,7 +117,19 @@ exports.createRoom = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating room:', error);
-    res.status(400).json({
+    // Handle duplicate key error (e.g., unique index on hospitalId + roomNumber)
+    if (error && (error.code === 11000 || error.name === 'MongoServerError')) {
+      const duplicateKey = error?.keyValue?.roomNumber || error?.keyValue?.hospitalId;
+      return res.status(409).json({
+        success: false,
+        message:
+          duplicateKey
+            ? `Số phòng "${duplicateKey}" đã tồn tại trong bệnh viện này. Vui lòng chọn số phòng khác.`
+            : 'Số phòng đã tồn tại trong bệnh viện này. Vui lòng chọn số phòng khác.'
+      });
+    }
+
+    return res.status(400).json({
       success: false,
       message: error.message || 'Không thể tạo phòng nội trú'
     });
@@ -119,7 +149,8 @@ exports.updateRoom = asyncHandler(async (req, res) => {
     amenities,
     equipment,
     description,
-    status
+    status,
+    isActive
   } = req.body;
 
   const userRole = req.user.roleType || req.user.role;
@@ -160,6 +191,7 @@ exports.updateRoom = asyncHandler(async (req, res) => {
   if (equipment !== undefined) room.equipment = equipment;
   if (description !== undefined) room.description = description;
   if (status) room.status = status;
+  if (isActive !== undefined) room.isActive = isActive;
 
   await room.save();
 
@@ -169,6 +201,7 @@ exports.updateRoom = asyncHandler(async (req, res) => {
       roomId: room._id,
       roomNumber: room.roomNumber,
       status: room.status,
+      isActive: room.isActive,
       currentOccupancy: room.currentOccupancy,
       capacity: room.capacity
     });

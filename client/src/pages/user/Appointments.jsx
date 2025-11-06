@@ -13,48 +13,6 @@ import CancelAppointmentModal from '../../components/shared/CancelAppointmentMod
 import { Tab } from 'react-bootstrap';
 import { Tabs as BoostrapTabs } from 'react-bootstrap';
 
-// Add CSS for PayPal buttons
-const paypalStyles = `
-  .paypal-button-container {
-    min-height: 40px;
-    margin-top: 10px;
-  }
-
-  .paypal-button {
-    height: 40px !important;
-    width: 100% !important;
-  }
-`;
-
-// Add MoMo button styles
-const momoStyles = `
-  .momo-button {
-    background-color: #ae2070;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 10px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    width: 100%;
-    margin-top: 8px;
-    transition: background-color 0.3s;
-  }
-  
-  .momo-button:hover {
-    background-color: #8e1a5c;
-  }
-  
-  .momo-icon {
-    margin-right: 8px;
-    width: 24px;
-    height: 24px;
-  }
-`;
-
 const Appointments = () => {
   const { user } = useAuth();
   const location = useLocation();
@@ -95,65 +53,9 @@ const Appointments = () => {
     fetchAppointments();
   }, [location, currentPage, limit, activeTab, upcomingFilter]);
 
-  useEffect(() => {
-    // Fix PayPal SDK loading to prevent 404 error
-    if (!document.querySelector('script[src*="paypal"]')) {
-      const script = document.createElement('script');
-      // Use a fallback client ID that is verified to work
-      const clientId = import.meta.env.VITE_PAYPAL_CLIENT_ID || 'sb';
-      script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
-      script.async = true;
-      script.onload = () => {
-        console.log('PayPal SDK loaded successfully');
-        // Initialize PayPal buttons for existing appointments once SDK is loaded
-        if (appointments.length > 0) {
-          setTimeout(() => {
-            appointments.forEach(appointment => {
-              if ((appointment.paymentStatus === 'unpaid' || !appointment.paymentStatus || appointment.paymentStatus === 'pending') && 
-                  (appointment.status === 'confirmed' || appointment.status === 'pending' || appointment.status === 'rescheduled') &&
-                  appointment.totalAmount) {
-                handlePayPalPayment(appointment._id, { totalAmount: appointment.totalAmount });
-              }
-            });
-          }, 1000);
-        }
-      };
-      script.onerror = (err) => console.error('PayPal SDK loading error:', err);
-      document.body.appendChild(script);
-      
-      // Add styles for PayPal buttons
-      const style = document.createElement('style');
-      style.textContent = paypalStyles + momoStyles;
-      document.head.appendChild(style);
-    }
-  }, []);
+  // Bỏ SDK PayPal khỏi danh sách lịch hẹn: thanh toán được chuyển về trang chi tiết
 
-  // Function to handle MoMo payment
-  const handleMomoPayment = async (appointmentId, { totalAmount }) => {
-    try {
-      setProcessingMomoPayment(true);
-      
-      // Call backend to create MoMo payment URL
-      const response = await api.post('/payments/momo/create', {
-        appointmentId,
-        amount: totalAmount,
-        orderInfo: `Thanh toán lịch hẹn khám bệnh #${appointmentId.substring(0, 8)}`,
-        redirectUrl: `${window.location.origin}/payment/result`, // Frontend URL to handle redirect after payment
-      });
-      
-      if (response.data.success && response.data.payUrl) {
-        // Open the MoMo payment URL in a new tab
-        window.open(response.data.payUrl, '_blank');
-      } else {
-        toast.error('Không thể khởi tạo thanh toán MoMo. Vui lòng thử lại sau.');
-      }
-    } catch (error) {
-      console.error('Error creating MoMo payment:', error);
-      toast.error('Đã xảy ra lỗi khi xử lý thanh toán qua MoMo.');
-    } finally {
-      setProcessingMomoPayment(false);
-    }
-  };
+  // Không khởi tạo thanh toán từ danh sách; thao tác thanh toán ở màn chi tiết
 
   const fetchAppointments = async () => {
     try {
@@ -245,19 +147,7 @@ const Appointments = () => {
     }
   };
 
-  // Add a useEffect to initialize PayPal after appointments have loaded and DOM has updated
-  useEffect(() => {
-    // Initialize PayPal buttons after appointments have loaded
-    if (!loading && appointments.length > 0) {
-      appointments.forEach(appointment => {
-        if ((appointment.paymentStatus === 'unpaid' || !appointment.paymentStatus || appointment.paymentStatus === 'pending') && 
-            (appointment.status === 'confirmed' || appointment.status === 'pending' || appointment.status === 'rescheduled') &&
-            appointment.totalAmount) {
-          handlePayPalPayment(appointment._id, { totalAmount: appointment.totalAmount });
-        }
-      });
-    }
-  }, [loading, appointments, activeTab]);
+  // Không render PayPal buttons tại danh sách
 
   // Helper function to extract doctor name
   const getDoctorName = (appointment) => {
@@ -405,6 +295,24 @@ const Appointments = () => {
             <FaClock className="status-icon" /> Chờ xác nhận
           </div>
         );
+      case 'hospitalized':
+        return (
+          <div className="status-badge status-hospitalized">
+            <FaHospital className="status-icon" /> Đang nằm viện
+          </div>
+        );
+      case 'pending_payment':
+        return (
+          <div className="status-badge status-pending-payment">
+            <FaMoneyBillWave className="status-icon" /> Chờ thanh toán
+          </div>
+        );
+      case 'rejected':
+        return (
+          <div className="status-badge status-rejected">
+            <FaTimesCircle className="status-icon" /> Đã từ chối
+          </div>
+        );
       default:
         return (
           <div className="status-badge status-unknown">
@@ -536,11 +444,69 @@ const Appointments = () => {
     navigate(`/appointments/${id}`);
   };
 
+  // Function to get payment status from bill
+  const getBillPaymentStatus = (appointment) => {
+    if (!appointment.bill) {
+      return {
+        status: 'pending',
+        label: 'Chưa thanh toán',
+        badgeClass: 'bg-gray-100 text-gray-800',
+        details: []
+      };
+    }
+
+    const bill = appointment.bill;
+    const consultationPaid = bill.consultationStatus === 'paid';
+    const medicationPaid = bill.medicationStatus === 'paid';
+    const hospitalizationPaid = bill.hospitalizationStatus === 'paid';
+    const allPaid = consultationPaid && 
+                    (bill.medicationAmount === 0 || medicationPaid) &&
+                    (bill.hospitalizationAmount === 0 || hospitalizationPaid);
+
+    if (allPaid) {
+      return {
+        status: 'completed',
+        label: 'Đã thanh toán đủ',
+        badgeClass: 'bg-green-100 text-green-800',
+        details: []
+      };
+    }
+
+    const paidCount = (consultationPaid ? 1 : 0) + 
+                      (bill.medicationAmount > 0 && medicationPaid ? 1 : 0) +
+                      (bill.hospitalizationAmount > 0 && hospitalizationPaid ? 1 : 0);
+    const totalCount = 1 + 
+                       (bill.medicationAmount > 0 ? 1 : 0) +
+                       (bill.hospitalizationAmount > 0 ? 1 : 0);
+
+    if (paidCount === 0) {
+      return {
+        status: 'pending',
+        label: 'Chưa thanh toán',
+        badgeClass: 'bg-yellow-100 text-yellow-800',
+        details: []
+      };
+    }
+
+    return {
+      status: 'partial',
+      label: `Đã thanh toán một phần (${paidCount}/${totalCount})`,
+      badgeClass: 'bg-blue-100 text-blue-800',
+      details: [
+        { label: 'Phí khám', paid: consultationPaid },
+        ...(bill.medicationAmount > 0 ? [{ label: 'Tiền thuốc', paid: medicationPaid }] : []),
+        ...(bill.hospitalizationAmount > 0 ? [{ label: 'Phí nội trú', paid: hospitalizationPaid }] : [])
+      ]
+    };
+  };
+
   // Updated function to handle all payment statuses consistently
   const getPaymentStatusLabel = (appointment) => {
-    const { paymentStatus, paymentMethod } = appointment;
+    // Use bill status if available, otherwise fall back to old paymentStatus
+    const billStatus = getBillPaymentStatus(appointment);
     
-    if (paymentStatus === 'completed') {
+    if (billStatus.status === 'completed') {
+      const { paymentMethod } = appointment;
       // Payment method specific styling
       const methodStyles = {
         paypal: {
@@ -592,181 +558,37 @@ const Appointments = () => {
           )}
         </div>
       );
-    } else if (paymentStatus === 'pending') {
+    } else if (billStatus.status === 'partial') {
       return (
-        <div className="payment-badge payment-pending">
-          <div className="bg-yellow-50 text-yellow-700 px-2 py-1 rounded text-xs font-medium flex items-center">
-            <FaClock className="payment-icon mr-1" /> Chờ thanh toán
+        <div className="payment-badge payment-partial">
+          <div className={`${billStatus.badgeClass} px-2 py-1 rounded text-xs font-medium flex items-center`}>
+            <FaClock className="payment-icon mr-1" /> {billStatus.label}
           </div>
+          {billStatus.details.length > 0 && (
+            <div className="mt-1 text-xs text-gray-600">
+              {billStatus.details.map((detail, idx) => (
+                <span key={idx} className="mr-2">
+                  {detail.label}: {detail.paid ? '✓' : '⏳'}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       );
     } else {
       return (
         <div className="payment-badge payment-unpaid">
-          <div className="bg-gray-50 text-gray-700 px-2 py-1 rounded text-xs font-medium flex items-center">
-            <FaMoneyBillWave className="payment-icon mr-1" /> Chưa thanh toán
+          <div className={`${billStatus.badgeClass} px-2 py-1 rounded text-xs font-medium flex items-center`}>
+            <FaMoneyBillWave className="payment-icon mr-1" /> {billStatus.label}
           </div>
         </div>
       );
     }
   };
 
-  // Improve the PayPal payment handler to be more robust
-  const handlePayPalPayment = (appointmentId, fee) => {
-    // If PayPal SDK is not loaded, log and exit
-    if (!window.paypal) {
-      console.log(`PayPal SDK not loaded yet for appointment ${appointmentId}, will try again when SDK loads`);
-      return null;
-    }
-    
-    // Verify fee information
-    if (!fee || !fee.totalAmount) {
-      console.error('No fee information available for appointment', appointmentId);
-      return null;
-    }
-    
-    // Get the container
-    const container = document.getElementById(`paypal-button-${appointmentId}`);
-    
-    if (!container) {
-      console.error(`Container for PayPal button not found: paypal-button-${appointmentId}`);
-      return null;
-    }
-    
-    // Clear existing buttons before rendering new ones
-    while (container.firstChild) {
-      container.removeChild(container.firstChild);
-    }
-    
-    try {
-      // Convert VND to USD (approximate rate, adjust as needed)
-        const usdAmount = (fee.totalAmount / 24000).toFixed(2);
-        
-      console.log(`Rendering PayPal button for appointment ${appointmentId} with amount: ${usdAmount} USD (${fee.totalAmount} VND)`);
-        
-        window.paypal
-          .Buttons({
-            style: {
-              layout: 'horizontal',
-              color: 'blue',
-              shape: 'rect',
-            label: 'pay',
-            height: 40
-            },
-            createOrder: (data, actions) => {
-              return actions.order.create({
-                purchase_units: [
-                  {
-                  description: `Thanh toán lịch hẹn khám bệnh #${appointmentId.substring(0, 8)}`,
-                    amount: {
-                      currency_code: 'USD',
-                      value: usdAmount,
-                    },
-                  },
-                ],
-              });
-            },
-            onApprove: async (data, actions) => {
-              try {
-                setProcessingPayment(true);
-                toast.info('Đang xử lý thanh toán, vui lòng đợi...');
-                
-                console.log('PayPal payment approved, capturing order:', data);
-                const order = await actions.order.capture();
-                console.log('PayPal payment successful, order details:', order);
-                
-                // Update payment status on the server
-                try {
-                  console.log('Sending payment confirmation to server with data:', {
-                    appointmentId,
-                    paymentId: order.id,
-                  });
-                  
-                  const paymentResponse = await api.post('/payments/paypal/confirmed', {
-                    appointmentId,
-                    paymentId: order.id,
-                    paymentDetails: order
-                  });
-                  
-                  console.log('Server payment confirmation response:', paymentResponse.data);
-                  
-                  if (paymentResponse.data.success) {
-                    toast.success('Thanh toán thành công!'); // paypal 
-                    
-                    // After successful payment, reload the page
-                    setTimeout(() => {
-                      window.location.reload();
-                    }, 1000);
-                  } else {
-                    console.error('Server rejected payment:', paymentResponse.data);
-                    toast.error(paymentResponse.data.message || 'Đã xảy ra lỗi khi xử lý thanh toán');
-                  }
-                } catch (apiError) {
-                  console.error('API error during payment confirmation:', apiError);
-                  
-                  // If the server response indicates payment might still be successful
-                  // despite the error (e.g., server timeout after processing)
-                  const errorResponse = apiError.response?.data;
-                  if (errorResponse && errorResponse.paymentProcessed) {
-                    toast.warning('Thanh toán đã được xử lý nhưng có lỗi. Vui lòng kiểm tra trạng thái sau.');
-                    setTimeout(() => {
-                      window.location.reload();
-                    }, 2000);
-                  } else {
-                    toast.error('Không thể xác nhận thanh toán với máy chủ. Vui lòng liên hệ hỗ trợ.');
-                  }
-                }
-              } catch (error) {
-                console.error('Error processing payment:', error);
-                toast.error('Đã xảy ra lỗi khi xử lý thanh toán. Vui lòng thử lại hoặc chọn phương thức khác.');
-              } finally {
-                setProcessingPayment(false);
-              }
-            },
-            onError: (err) => {
-              console.error('PayPal button error:', err);
-              toast.error('Đã xảy ra lỗi với cổng thanh toán PayPal. Vui lòng thử lại sau.');
-              setProcessingPayment(false);
-            },
-            onCancel: () => {
-              console.log('PayPal payment cancelled by user');
-              toast.info('Bạn đã hủy thanh toán.');
-              setProcessingPayment(false);
-            }
-          })
-          .render(container)
-          .catch(err => {
-            console.error('PayPal render error:', err);
-            toast.error('Không thể khởi tạo nút thanh toán PayPal');
-            setProcessingPayment(false);
-          });
-        
-      return true;
-      } catch (error) {
-        console.error('Error setting up PayPal button:', error);
-      return false;
-    }
-  };
+  // Bỏ handler PayPal tại danh sách
 
-  // Add a manual payment trigger function for MoMo
-  const manualInitiateMomoPayment = (appointmentId, totalAmount) => {
-    handleMomoPayment(appointmentId, { totalAmount });
-  };
-
-  // Add a manual payment trigger function
-  const manualInitiatePayment = (appointmentId, totalAmount) => {
-    if (!window.paypal) {
-      toast.info('Đang tải hệ thống thanh toán. Vui lòng thử lại sau vài giây.');
-      return;
-    }
-    
-    // Try to render PayPal button
-    const success = handlePayPalPayment(appointmentId, { totalAmount });
-    
-    if (!success) {
-      toast.error('Không thể khởi tạo cổng thanh toán. Vui lòng thử lại sau.');
-    }
-  };
+  // Không còn trigger thanh toán từ danh sách
 
   const renderAppointmentCard = (appointment) => {
     const statusColors = {
@@ -774,8 +596,11 @@ const Appointments = () => {
       confirmed: 'bg-green-100 text-green-800',
       completed: 'bg-blue-100 text-blue-800',
       cancelled: 'bg-red-100 text-red-800',
+      rejected: 'bg-red-100 text-red-800',
       rescheduled: 'bg-purple-100 text-purple-800',
-      'no-show': 'bg-gray-100 text-gray-800'
+      'no-show': 'bg-gray-100 text-gray-800',
+      hospitalized: 'bg-indigo-100 text-indigo-800',
+      pending_payment: 'bg-orange-100 text-orange-800'
     };
 
     const statusText = {
@@ -783,8 +608,11 @@ const Appointments = () => {
       confirmed: 'Đã xác nhận',
       completed: 'Đã hoàn thành',
       cancelled: 'Đã hủy',
+      rejected: 'Đã từ chối',
       rescheduled: 'Đã đổi lịch',
-      'no-show': 'Không đến khám'
+      'no-show': 'Không đến khám',
+      hospitalized: 'Đang nằm viện',
+      pending_payment: 'Chờ thanh toán'
     };
 
     // Get the service name from either service object or serviceId object
@@ -806,8 +634,9 @@ const Appointments = () => {
     const startTime = appointment.startTime || (appointment.timeSlot?.startTime) || '';
     const endTime = appointment.endTime || (appointment.timeSlot?.endTime) || '';
 
-    // Get total amount
-    const totalAmount = appointment.totalAmount || 
+    // Get total amount from Bill
+    const totalAmount = appointment.bill?.totalAmount || 
+                        appointment.totalAmount || 
                         (appointment.fee?.totalAmount) || null;
 
     return (
@@ -927,56 +756,7 @@ const Appointments = () => {
                   {getPaymentStatusLabel(appointment)}
                 </div>
                 
-                {/* Display payment buttons only if not paid */}
-                {(appointment.paymentStatus === 'unpaid' || !appointment.paymentStatus || appointment.paymentStatus === 'pending') && 
-                  (appointment.status === 'confirmed' || appointment.status === 'pending' || appointment.status === 'rescheduled') && (
-                  <div className="mt-2">
-                    {/* PayPal button */}
-                    <button 
-                      onClick={() => manualInitiatePayment(appointment._id, totalAmount)}
-                      className="w-full bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center mb-2"
-                      disabled={processingPayment || processingMomoPayment}
-                    >
-                      {processingPayment ? (
-                        <>
-                          <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          Đang xử lý...
-                        </>
-                      ) : (
-                        <>
-                          <FaPaypal className="mr-2" /> Thanh toán qua PayPal
-                        </>
-                      )}
-                    </button>
-                    <div 
-                      id={`paypal-button-${appointment._id}`} 
-                      className="paypal-button-container"
-                    ></div>
-                    
-                    {/* MoMo button */}
-                    <button
-                      onClick={() => manualInitiateMomoPayment(appointment._id, totalAmount)}
-                      className="momo-button mt-2"
-                      disabled={processingPayment || processingMomoPayment}
-                    >
-                      {processingMomoPayment ? (
-                        <>
-                          <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          Đang xử lý...
-                        </>
-                      ) : (
-                        <>
-                          <img 
-                            src="https://upload.wikimedia.org/wikipedia/vi/f/fe/MoMo_Logo.png" 
-                            alt="MoMo Logo" 
-                            className="momo-icon" 
-                          />
-                          Thanh toán qua MoMo
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
+                {/* Bỏ nút thanh toán tại danh sách; người dùng thanh toán trong trang chi tiết */}
               </div>
             )}
             

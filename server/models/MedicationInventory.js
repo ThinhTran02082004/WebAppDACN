@@ -63,6 +63,11 @@ const medicationInventorySchema = new mongoose.Schema({
   },
   expiryDate: {
     type: Date
+  },
+  hospitalId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Hospital',
+    required: true
   }
 }, {
   timestamps: true
@@ -74,6 +79,8 @@ medicationInventorySchema.index({ transactionType: 1 });
 medicationInventorySchema.index({ performedBy: 1 });
 medicationInventorySchema.index({ createdAt: -1 });
 medicationInventorySchema.index({ referenceId: 1, referenceType: 1 });
+medicationInventorySchema.index({ hospitalId: 1, createdAt: -1 });
+medicationInventorySchema.index({ hospitalId: 1, medicationId: 1 });
 
 // Virtual for transaction amount (positive for import, negative for export)
 medicationInventorySchema.virtual('transactionAmount').get(function() {

@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 
 const MedicalHistory = () => {
   const [medicalRecords, setMedicalRecords] = useState([]);
@@ -24,7 +25,7 @@ const MedicalHistory = () => {
     
     try {
       setLoading(true);
-      const response = await api.get(`/medical-records/history?page=${currentPage}&limit=${pageSize}`);
+      const response = await api.get(`/prescriptions/user/history?page=${currentPage}&limit=${pageSize}${activeTab !== 'all' ? `&status=${activeTab}` : ''}`);
       
       if (response.data && response.data.records) {
         setMedicalRecords(response.data.records);
@@ -38,7 +39,9 @@ const MedicalHistory = () => {
       setLoading(false);
     } catch (err) {
       console.error("Failed to fetch medical history:", err);
-      setError("Không thể tải lịch sử khám bệnh. Vui lòng thử lại sau.");
+      const errorMsg = err.response?.data?.message || "Không thể tải lịch sử khám bệnh. Vui lòng thử lại sau.";
+      setError(errorMsg);
+      toast.error(errorMsg);
       setLoading(false);
     }
   };
@@ -54,26 +57,22 @@ const MedicalHistory = () => {
     setCurrentPage(1); // Reset to first page when changing page size
   };
 
-  const filteredRecords = medicalRecords.filter(record => {
-    if (activeTab === 'all') return true;
-    return record.status.toLowerCase() === activeTab;
-  });
+  // Filter is now handled by backend, but we can add client-side filtering if needed
+  const filteredRecords = medicalRecords;
 
   const getStatusBadge = (status) => {
     if (!status) return 'bg-gray-100 text-gray-800';
     
     switch (status.toLowerCase()) {
-      case 'completed':
-      case 'hoàn thành':
-        return 'bg-green-100 text-green-800';
-      case 'scheduled':
-      case 'đã đặt lịch':
-        return 'bg-blue-100 text-blue-800';
-      case 'in_progress':
-      case 'đang khám':
+      case 'pending':
         return 'bg-yellow-100 text-yellow-800';
+      case 'approved':
+        return 'bg-blue-100 text-blue-800';
+      case 'dispensed':
+        return 'bg-green-100 text-green-800';
+      case 'completed':
+        return 'bg-green-100 text-green-800';
       case 'cancelled':
-      case 'đã hủy':
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -84,12 +83,16 @@ const MedicalHistory = () => {
     if (!status) return 'Không xác định';
     
     switch (status.toLowerCase()) {
+      case 'pending':
+        return 'Chờ xử lý';
+      case 'approved':
+        return 'Đã kê đơn';
+      case 'verified':
+        return 'Đã phê duyệt';
+      case 'dispensed':
+        return 'Đã cấp thuốc';
       case 'completed':
         return 'Hoàn thành';
-      case 'scheduled':
-        return 'Đã đặt lịch';
-      case 'in_progress':
-        return 'Đang khám';
       case 'cancelled':
         return 'Đã hủy';
       default:
@@ -184,8 +187,8 @@ const MedicalHistory = () => {
       <div className="container mx-auto px-4">
         <div className="bg-white rounded-lg shadow-md overflow-hidden max-w-6xl mx-auto">
           <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
-            <h1 className="text-2xl font-bold text-gray-800">Lịch sử khám bệnh</h1>
-            <p className="text-sm text-gray-500 mt-1">Xem tất cả lịch sử khám bệnh của bạn</p>
+            <h1 className="text-2xl font-bold text-gray-800">Lịch sử đơn thuốc</h1>
+            <p className="text-sm text-gray-500 mt-1">Xem tất cả lịch sử đơn thuốc của bạn</p>
           </div>
 
           {/* Filter tabs */}
@@ -206,55 +209,29 @@ const MedicalHistory = () => {
               </button>
               <button
                 className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'completed'
+                  activeTab === 'approved'
                     ? 'border-primary text-primary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
                 onClick={() => {
-                  setActiveTab('completed');
+                  setActiveTab('approved');
                   setCurrentPage(1);
                 }}
               >
-                Hoàn thành
+                Đã kê đơn
               </button>
               <button
                 className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'scheduled'
+                  activeTab === 'dispensed'
                     ? 'border-primary text-primary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
                 onClick={() => {
-                  setActiveTab('scheduled');
+                  setActiveTab('dispensed');
                   setCurrentPage(1);
                 }}
               >
-                Đã đặt lịch
-              </button>
-              <button
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'in_progress'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-                onClick={() => {
-                  setActiveTab('in_progress');
-                  setCurrentPage(1);
-                }}
-              >
-                Đang khám
-              </button>
-              <button
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'cancelled'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-                onClick={() => {
-                  setActiveTab('cancelled');
-                  setCurrentPage(1);
-                }}
-              >
-                Đã hủy
+                Đã cấp thuốc
               </button>
             </div>
           </div>
@@ -264,14 +241,13 @@ const MedicalHistory = () => {
               <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <h3 className="mt-4 text-lg font-medium text-gray-900">Không có lịch sử khám bệnh</h3>
+              <h3 className="mt-4 text-lg font-medium text-gray-900">Không có lịch sử đơn thuốc</h3>
               <p className="mt-1 text-gray-500">
                 {activeTab === 'all' 
-                  ? 'Bạn chưa có lịch sử khám bệnh nào.' 
-                  : `Không có lịch sử khám bệnh nào ở trạng thái "${
-                      activeTab === 'completed' ? 'Hoàn thành' : 
-                      activeTab === 'scheduled' ? 'Đã đặt lịch' :
-                      activeTab === 'in_progress' ? 'Đang khám' : 'Đã hủy'
+                  ? 'Bạn chưa có lịch sử đơn thuốc nào.' 
+                  : `Không có đơn thuốc nào ở trạng thái "${
+                      activeTab === 'approved' ? 'Đã kê đơn' : 
+                      activeTab === 'dispensed' ? 'Đã cấp thuốc' : 'Chờ xử lý'
                     }".`}
               </p>
               <Link 
@@ -288,9 +264,6 @@ const MedicalHistory = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Dịch vụ
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Ngày khám
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -303,6 +276,9 @@ const MedicalHistory = () => {
                         Chẩn đoán
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Số đơn thuốc
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Trạng thái
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -311,65 +287,61 @@ const MedicalHistory = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredRecords.map((record) => (
-                      <tr key={record._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {record.serviceName || 'Khám bệnh'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {format(new Date(record.appointmentDate || (record.appointmentId && record.appointmentId.appointmentDate) || record.createdAt), 'dd/MM/yyyy')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {record.doctor ? (
-                              <>
-                                {record.doctor.avatarUrl ? (
-                                  <img 
-                                    className="h-8 w-8 rounded-full mr-2" 
-                                    src={record.doctor.avatarUrl.startsWith('http') 
-                                      ? record.doctor.avatarUrl 
-                                      : `${import.meta.env.VITE_API_URL}${record.doctor.avatarUrl}`} 
-                                    alt={record.doctor.fullName || 'Doctor'} 
-                                  />
-                                ) : (
-                                  <div className="h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center mr-2">
-                                    {record.doctor.fullName?.charAt(0) || 'D'}
-                                  </div>
-                                )}
-                                <div className="text-sm text-gray-900">{record.doctor.fullName || 'Chưa xác định'}</div>
-                              </>
+                    {filteredRecords.map((record) => {
+                      // Get diagnosis from first prescription
+                      const firstPrescription = record.prescriptions && record.prescriptions[0];
+                      const diagnosis = firstPrescription?.diagnosis || 'Chưa có chẩn đoán';
+                      // Get overall status (if all dispensed then dispensed, if any approved then approved, else pending)
+                      const overallStatus = record.prescriptions?.every(p => p.status === 'dispensed') 
+                        ? 'dispensed'
+                        : record.prescriptions?.some(p => p.status === 'approved' || p.status === 'verified' || p.status === 'dispensed')
+                        ? 'approved'
+                        : 'pending';
+                      
+                      return (
+                        <tr key={record.appointmentId?._id || record.appointmentId} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {format(new Date(record.appointmentDate || record.createdAt), 'dd/MM/yyyy')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center mr-2">
+                                {record.doctor?.charAt(0) || 'D'}
+                              </div>
+                              <div className="text-sm text-gray-900">{record.doctor || 'Chưa xác định'}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {record.specialty || 'Chưa xác định'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <div className="max-w-xs truncate">
+                              {diagnosis}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {record.prescriptions?.length || 0} đơn
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(overallStatus)}`}>
+                              {formatStatus(overallStatus)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {record.appointmentId ? (
+                              <Link 
+                                to={`/appointments/${record.appointmentId}`} 
+                                className="text-primary hover:text-primary-dark"
+                              >
+                                Xem chi tiết
+                              </Link>
                             ) : (
-                              <div className="text-sm text-gray-900">Chưa xác định</div>
+                              <span className="text-gray-400">Không có dữ liệu</span>
                             )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {(record.specialty && record.specialty.name) || record.specialtyName || 'Chưa xác định'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <div className="max-w-xs truncate">
-                            {record.diagnosis || 'Chưa có chẩn đoán'}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(record.status)}`}>
-                            {formatStatus(record.status)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          {record._id ? (
-                            <Link 
-                              to={`/medical-record/${record._id}`} 
-                              className="text-primary hover:text-primary-dark"
-                            >
-                              Xem chi tiết
-                            </Link>
-                          ) : (
-                            <span className="text-gray-400">Không có dữ liệu</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

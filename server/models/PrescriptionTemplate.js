@@ -12,7 +12,20 @@ const prescriptionTemplateSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['respiratory', 'digestive', 'cardiovascular', 'neurological', 'dermatology', 'endocrine', 'infection', 'pain-management', 'other'],
+    // Accept broader set of categories; keep backward compatible aliases
+    enum: [
+      'respiratory',
+      'digestive',
+      'cardiovascular',
+      'neurological',
+      'dermatology',
+      'endocrine',
+      'infection',
+      'pain-management',
+      'common',         // alias accepted by frontend
+      'general',        // alias for common/general illnesses
+      'other'
+    ],
     required: [true, 'Danh mục là bắt buộc']
   },
   diseaseType: {

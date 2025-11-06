@@ -150,7 +150,8 @@ const sendVerificationEmail = async (email, verificationToken, fullName) => {
 
   try {
     // Tạo link xác thực
-    const verificationUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+    const verificationUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;//https://gkplh9lm-3000.asse.devtunnels.ms
+    
     
     const mailOptions = {
       from: `"Hệ thống Bệnh viện" <${process.env.EMAIL_USER}>`,

@@ -101,4 +101,50 @@ exports.adminOrDoctor = (req, res, next) => {
   next();
 };
 
+/**
+ * Middleware to check if user is a pharmacist
+ */
+exports.pharmacistOnly = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: 'Bạn chưa đăng nhập'
+    });
+  }
+
+  const userRole = req.user.role || req.user.roleType;
+  
+  if (userRole !== 'pharmacist') {
+    return res.status(403).json({
+      success: false,
+      message: 'Chỉ dược sĩ mới có quyền truy cập'
+    });
+  }
+
+  next();
+};
+
+/**
+ * Middleware to check if user is either admin or pharmacist
+ */
+exports.pharmacistOrAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: 'Bạn chưa đăng nhập'
+    });
+  }
+
+  const userRole = req.user.role || req.user.roleType;
+  
+  if (userRole !== 'admin' && userRole !== 'pharmacist') {
+    return res.status(403).json({
+      success: false,
+      message: 'Chỉ admin hoặc dược sĩ mới có quyền truy cập'
+    });
+  }
+
+  next();
+};
+
 

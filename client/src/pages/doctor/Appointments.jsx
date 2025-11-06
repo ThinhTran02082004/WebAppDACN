@@ -66,7 +66,7 @@ const Appointments = () => {
       fetchMedications();
       fetchMedicationCategories();
     }
-  }, [showCompletionModal]);
+  }, [showCompletionModal, selectedAppointment]);
   
   useEffect(() => {
     if (medications.length > 0) {
@@ -569,11 +569,18 @@ const Appointments = () => {
   const fetchMedications = async () => {
     setLoadingMedications(true);
     try {
-      const response = await api.get('/medications/medications', {
-        params: {
-          limit: 100 // Get a large batch for local filtering
+      // Get hospitalId from selectedAppointment if available
+      const params = { limit: 100 };
+      if (selectedAppointment?.hospitalId) {
+        const hospitalId = typeof selectedAppointment.hospitalId === 'object' 
+          ? selectedAppointment.hospitalId._id 
+          : selectedAppointment.hospitalId;
+        if (hospitalId) {
+          params.hospitalId = hospitalId;
         }
-      });
+      }
+      
+      const response = await api.get('/medications', { params });
       
       if (response.data.success) {
         setMedications(response.data.data.docs || []);

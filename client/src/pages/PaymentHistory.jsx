@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 
 const PaymentHistory = () => {
   const [payments, setPayments] = useState([]);
@@ -24,10 +25,10 @@ const PaymentHistory = () => {
     
     try {
       setLoading(true);
-      const response = await api.get(`/payments/history?page=${currentPage}&limit=${pageSize}`);
+      const response = await api.get(`/billing/payment-history?page=${currentPage}&limit=${pageSize}${activeTab !== 'all' ? `&billType=${activeTab}` : ''}`);
       
-      if (response.data && response.data.payments) {
-        setPayments(response.data.payments);
+      if (response.data && response.data.data) {
+        setPayments(response.data.data);
         setTotalItems(response.data.pagination.total);
         setTotalPages(response.data.pagination.totalPages);
       } else {
@@ -38,7 +39,9 @@ const PaymentHistory = () => {
       setLoading(false);
     } catch (err) {
       console.error("Failed to fetch payment history:", err);
-      setError("Không thể tải lịch sử thanh toán. Vui lòng thử lại sau.");
+      const errorMsg = err.response?.data?.message || "Không thể tải lịch sử thanh toán. Vui lòng thử lại sau.";
+      setError(errorMsg);
+      toast.error(errorMsg);
       setLoading(false);
     }
   };
@@ -54,11 +57,8 @@ const PaymentHistory = () => {
     setCurrentPage(1); // Reset to first page when changing page size
   };
 
-  // Filter payments based on active tab
-  const filteredPayments = payments.filter(payment => {
-    if (activeTab === 'all') return true;
-    return payment.status?.toLowerCase() === activeTab;
-  });
+  // Filter is handled by backend, but we can add client-side filtering if needed
+  const filteredPayments = payments;
 
   // Function to determine status badge color
   const getStatusBadge = (status) => {
@@ -198,42 +198,42 @@ const PaymentHistory = () => {
               </button>
               <button
                 className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'completed'
+                  activeTab === 'consultation'
                     ? 'border-primary text-primary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
                 onClick={() => {
-                  setActiveTab('completed');
+                  setActiveTab('consultation');
                   setCurrentPage(1);
                 }}
               >
-                Thành công
+                Phí khám
               </button>
               <button
                 className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'pending'
+                  activeTab === 'medication'
                     ? 'border-primary text-primary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
                 onClick={() => {
-                  setActiveTab('pending');
+                  setActiveTab('medication');
                   setCurrentPage(1);
                 }}
               >
-                Đang xử lý
+                Tiền thuốc
               </button>
               <button
                 className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                  activeTab === 'failed'
+                  activeTab === 'hospitalization'
                     ? 'border-primary text-primary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
                 onClick={() => {
-                  setActiveTab('failed');
+                  setActiveTab('hospitalization');
                   setCurrentPage(1);
                 }}
               >
-                Thất bại
+                Phí nội trú
               </button>
             </div>
           </div>
@@ -247,10 +247,10 @@ const PaymentHistory = () => {
               <p className="mt-1 text-gray-500">
                 {activeTab === 'all' 
                   ? 'Bạn chưa thực hiện giao dịch thanh toán nào.' 
-                  : `Không có lịch sử thanh toán nào ở trạng thái "${
-                      activeTab === 'completed' ? 'Thành công' : 
-                      activeTab === 'pending' ? 'Đang xử lý' :
-                      'Thất bại'
+                  : `Không có lịch sử thanh toán nào cho "${
+                      activeTab === 'consultation' ? 'Phí khám' : 
+                      activeTab === 'medication' ? 'Tiền thuốc' :
+                      'Phí nội trú'
                     }".`}
               </p>
             </div>
@@ -261,13 +261,13 @@ const PaymentHistory = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Mã giao dịch
+                        Mã thanh toán
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Ngày thanh toán
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Dịch vụ
+                        Loại
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Số tiền
@@ -284,49 +284,78 @@ const PaymentHistory = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredPayments.map((payment) => (
-                      <tr key={payment._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {payment.transactionId || payment._id}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {format(new Date(payment.createdAt), 'dd/MM/yyyy HH:mm')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {payment.serviceName || 'Khám bệnh'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {formatCurrency(payment.amount)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {payment.paymentMethod === 'credit_card' ? 'Thẻ tín dụng' : 
-                           payment.paymentMethod === 'bank_transfer' ? 'Chuyển khoản' : 
-                           payment.paymentMethod === 'cash' ? 'Tiền mặt' : 
-                           payment.paymentMethod === 'momo' ? 'MoMo' :
-                           payment.paymentMethod}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(payment.status)}`}>
-                            {payment.status === 'completed' ? 'Thành công' :
-                             payment.status === 'pending' ? 'Đang xử lý' :
-                             payment.status === 'failed' ? 'Thất bại' :
-                             payment.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          {payment.appointmentId ? (
-                            <Link 
-                              to={`/appointments/${typeof payment.appointmentId === 'object' ? payment.appointmentId._id : payment.appointmentId}`} 
-                              className="text-primary hover:text-primary-dark"
-                            >
-                              Xem chi tiết lịch hẹn
-                            </Link>
-                          ) : (
-                            <span className="text-gray-400">Không có chi tiết</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredPayments.map((payment) => {
+                      const getBillTypeLabel = (billType) => {
+                        switch (billType) {
+                          case 'consultation':
+                            return 'Phí khám';
+                          case 'medication':
+                            return 'Tiền thuốc';
+                          case 'hospitalization':
+                            return 'Phí nội trú';
+                          default:
+                            return billType;
+                        }
+                      };
+
+                      const getBillTypeBadge = (billType) => {
+                        switch (billType) {
+                          case 'consultation':
+                            return 'bg-blue-100 text-blue-800';
+                          case 'medication':
+                            return 'bg-green-100 text-green-800';
+                          case 'hospitalization':
+                            return 'bg-purple-100 text-purple-800';
+                          default:
+                            return 'bg-gray-100 text-gray-800';
+                        }
+                      };
+
+                      return (
+                        <tr key={payment._id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {payment.paymentNumber || payment.transactionId || payment._id.substring(0, 8)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {format(new Date(payment.createdAt), 'dd/MM/yyyy HH:mm')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getBillTypeBadge(payment.billType)}`}>
+                              {getBillTypeLabel(payment.billType)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {formatCurrency(payment.amount)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {payment.paymentMethod === 'cash' ? 'Tiền mặt' : 
+                             payment.paymentMethod === 'momo' ? 'MoMo' :
+                             payment.paymentMethod === 'paypal' ? 'PayPal' :
+                             payment.paymentMethod}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(payment.paymentStatus)}`}>
+                              {payment.paymentStatus === 'completed' ? 'Thành công' :
+                               payment.paymentStatus === 'pending' ? 'Đang xử lý' :
+                               payment.paymentStatus === 'failed' ? 'Thất bại' :
+                               payment.paymentStatus}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            {payment.appointmentId ? (
+                              <Link 
+                                to={`/appointments/${typeof payment.appointmentId === 'object' ? payment.appointmentId._id : payment.appointmentId}`} 
+                                className="text-primary hover:text-primary-dark"
+                              >
+                                Xem chi tiết lịch hẹn
+                              </Link>
+                            ) : (
+                              <span className="text-gray-400">Không có chi tiết</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

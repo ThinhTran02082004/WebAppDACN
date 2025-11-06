@@ -19,6 +19,7 @@ const Medications = () => {
   const [selectedMedication, setSelectedMedication] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [categories, setCategories] = useState([]);
+  const [hospitals, setHospitals] = useState([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [medicationToDelete, setMedicationToDelete] = useState(null);
   
@@ -36,12 +37,14 @@ const Medications = () => {
     unitType: 'pill',
     unitTypeDisplay: 'viên',
     stockQuantity: 0,
-    lowStockThreshold: 10
+    lowStockThreshold: 10,
+    hospitalId: ''
   });
 
   useEffect(() => {
     fetchMedications();
     fetchCategories();
+    fetchHospitals();
   }, [currentPage, categoryFilter]);
 
   const fetchCategories = async () => {
@@ -60,11 +63,26 @@ const Medications = () => {
     }
   };
 
+  const fetchHospitals = async () => {
+    try {
+      const response = await api.get('/hospitals');
+      if (response.data && response.data.success) {
+        const hospitalsData = Array.isArray(response.data.data) 
+          ? response.data.data 
+          : response.data.data?.hospitals || [];
+        setHospitals(hospitalsData.filter(h => h.isActive !== false));
+      }
+    } catch (error) {
+      console.error('Error fetching hospitals:', error);
+      toast.error('Không thể tải danh sách chi nhánh');
+    }
+  };
+
   const fetchMedications = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get('/medications/medications', {
+      const response = await api.get('/medications', {
         params: {
           page: currentPage,
           limit: 10,
@@ -116,7 +134,8 @@ const Medications = () => {
         unitType: medication.unitType || 'pill',
         unitTypeDisplay: medication.unitTypeDisplay || 'viên',
         stockQuantity: medication.stockQuantity || 0,
-        lowStockThreshold: medication.lowStockThreshold || 10
+        lowStockThreshold: medication.lowStockThreshold || 10,
+        hospitalId: medication.hospitalId?._id || medication.hospitalId || ''
       });
     } else {
       setSelectedMedication(null);
@@ -133,7 +152,8 @@ const Medications = () => {
         unitType: 'pill',
         unitTypeDisplay: 'viên',
         stockQuantity: 0,
-        lowStockThreshold: 10
+        lowStockThreshold: 10,
+        hospitalId: ''
       });
     }
     setShowModal(true);
@@ -151,8 +171,8 @@ const Medications = () => {
     e.preventDefault();
     
     // Basic validation
-    if (!formData.name.trim() || !formData.category) {
-      toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
+    if (!formData.name.trim() || !formData.category || !formData.hospitalId) {
+      toast.error('Vui lòng điền đầy đủ thông tin bắt buộc (tên, danh mục và chi nhánh)');
       return;
     }
     
@@ -330,6 +350,9 @@ const Medications = () => {
                   Danh mục
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Chi nhánh
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Tồn kho
                 </th>
                 <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -350,6 +373,11 @@ const Medications = () => {
                     <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
                       {getCategoryName(medication.category)}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <div className="text-gray-900">
+                      {medication.hospitalId?.name || medication.hospitalId?.name || 'N/A'}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center">
@@ -480,6 +508,29 @@ const Medications = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+                
+                <div>
+                  <label htmlFor="hospitalId" className="block text-sm font-medium text-gray-700 mb-1">Chi nhánh *</label>
+                  <select
+                    id="hospitalId"
+                    name="hospitalId"
+                    value={formData.hospitalId}
+                    onChange={handleInputChange}
+                    required
+                    disabled={!!selectedMedication}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="">-- Chọn chi nhánh --</option>
+                    {hospitals.map(hospital => (
+                      <option key={hospital._id} value={hospital._id}>
+                        {hospital.name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedMedication && (
+                    <p className="mt-1 text-xs text-gray-500">Không thể thay đổi chi nhánh của thuốc đã tạo</p>
+                  )}
                 </div>
                 
                 <div>

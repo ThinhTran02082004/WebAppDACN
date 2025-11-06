@@ -84,4 +84,12 @@ router.put('/:id/complete', authorize('doctor'), appointmentController.completeA
 // PUT /api/appointments/:id/no-show – Bác sĩ đánh dấu bệnh nhân không đến khám
 router.put('/:id/no-show', authorize('doctor'), appointmentController.markAsNoShow);
 
+// === ROUTES DÀNH CHO DƯỢC SĨ ===
+
+// GET /api/appointments/pharmacist - Lấy danh sách lịch hẹn cho dược sĩ (có đơn thuốc)
+router.get('/pharmacist', authorize('pharmacist', 'admin'), appointmentController.getPharmacistAppointments);
+
+// GET /api/appointments/pharmacist/:id - Chi tiết lịch hẹn cho dược sĩ
+router.get('/pharmacist/:id', authorize('pharmacist', 'admin'), appointmentController.getPharmacistAppointmentDetail);
+
 module.exports = router; 

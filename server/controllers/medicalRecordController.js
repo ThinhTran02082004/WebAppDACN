@@ -2,6 +2,7 @@ const MedicalRecord = require('../models/MedicalRecord');
 const User = require('../models/User');
 const Doctor = require('../models/Doctor');
 const Appointment = require('../models/Appointment');
+const Prescription = require('../models/Prescription');
 const mongoose = require('mongoose');
 
 // GET /api/patients/:id/medical-records - Lấy hồ sơ bệnh án của bệnh nhân
@@ -53,8 +54,16 @@ exports.getPatientMedicalRecords = async (req, res) => {
           ]
         })
         .populate({
+          path: 'prescriptionId',
+          select: 'prescriptionOrder status totalAmount isHospitalization diagnosis notes createdAt updatedAt',
+          populate: {
+            path: 'medications.medicationId',
+            select: 'name category unit'
+          }
+        })
+        .populate({
           path: 'appointmentId',
-          select: 'appointmentDate timeSlot bookingCode status hospitalId specialtyId serviceId roomId',
+          select: 'appointmentDate timeSlot bookingCode status hospitalId specialtyId serviceId roomId symptoms diagnosis treatment notes',
           populate: [
             {
               path: 'hospitalId',
@@ -108,8 +117,16 @@ exports.getPatientMedicalRecords = async (req, res) => {
           ]
         })
         .populate({
+          path: 'prescriptionId',
+          select: 'prescriptionOrder status totalAmount isHospitalization diagnosis notes createdAt updatedAt',
+          populate: {
+            path: 'medications.medicationId',
+            select: 'name category unit'
+          }
+        })
+        .populate({
           path: 'appointmentId',
-          select: 'appointmentDate timeSlot bookingCode status hospitalId specialtyId serviceId roomId',
+          select: 'appointmentDate timeSlot bookingCode status hospitalId specialtyId serviceId roomId symptoms diagnosis treatment notes',
           populate: [
             {
               path: 'hospitalId',
@@ -159,8 +176,16 @@ exports.getPatientMedicalRecords = async (req, res) => {
           ]
         })
         .populate({
+          path: 'prescriptionId',
+          select: 'prescriptionOrder status totalAmount isHospitalization diagnosis notes createdAt updatedAt',
+          populate: {
+            path: 'medications.medicationId',
+            select: 'name category unit'
+          }
+        })
+        .populate({
           path: 'appointmentId',
-          select: 'appointmentDate timeSlot bookingCode status hospitalId specialtyId serviceId roomId',
+          select: 'appointmentDate timeSlot bookingCode status hospitalId specialtyId serviceId roomId symptoms diagnosis treatment notes',
           populate: [
             {
               path: 'hospitalId',
@@ -183,11 +208,177 @@ exports.getPatientMedicalRecords = async (req, res) => {
         .sort({ createdAt: -1 });
     }
     
+    // Lấy appointments đã completed/confirmed có prescriptions để hiển thị như medical records
+    const appointmentsQuery = {
+      patientId: id,
+      status: { $in: ['completed', 'confirmed'] }
+    };
+    
+    if (user.roleType === 'doctor') {
+      const doctor = await Doctor.findOne({ user: userId });
+      if (doctor) {
+        appointmentsQuery.doctorId = doctor._id;
+      }
+    }
+    
+    const appointments = await Appointment.find(appointmentsQuery)
+      .populate({
+        path: 'doctorId',
+        select: 'title specialtyId hospitalId',
+        populate: [
+          {
+            path: 'user',
+            select: 'fullName email phoneNumber avatarUrl'
+          },
+          {
+            path: 'specialtyId',
+            select: 'name'
+          },
+          {
+            path: 'hospitalId',
+            select: 'name address'
+          }
+        ]
+      })
+      .populate({
+        path: 'hospitalId',
+        select: 'name address'
+      })
+      .populate({
+        path: 'specialtyId',
+        select: 'name'
+      })
+      .populate({
+        path: 'serviceId',
+        select: 'name price'
+      })
+      .sort({ appointmentDate: -1, createdAt: -1 });
+    
+    // Lấy prescriptions cho các appointments
+    const appointmentIds = appointments.map(apt => apt._id);
+    const prescriptions = await Prescription.find({
+      appointmentId: { $in: appointmentIds },
+      status: { $ne: 'cancelled' }
+    })
+      .populate({
+        path: 'medications.medicationId',
+        select: 'name category unit'
+      })
+      .sort({ createdAt: -1 });
+    
+    // Lấy prescription IDs đã có MedicalRecord
+    const prescriptionIdsWithRecords = new Set(
+      medicalRecords
+        .filter(record => record.prescriptionId)
+        .map(record => record.prescriptionId._id?.toString() || record.prescriptionId.toString())
+    );
+    
+    // Tạo map prescriptions theo appointmentId để tìm những prescription chưa có MedicalRecord
+    const prescriptionsByAppointment = {};
+    prescriptions.forEach(pres => {
+      const aptId = pres.appointmentId.toString();
+      if (!prescriptionsByAppointment[aptId]) {
+        prescriptionsByAppointment[aptId] = [];
+      }
+      prescriptionsByAppointment[aptId].push(pres);
+    });
+    
+    // Tạo "fake" records cho prescriptions chưa có MedicalRecord (backward compatibility)
+    const prescriptionBasedRecords = [];
+    
+    for (const apt of appointments) {
+      const aptPrescriptions = prescriptionsByAppointment[apt._id.toString()] || [];
+      
+      if (aptPrescriptions.length === 0) continue;
+      
+      for (const pres of aptPrescriptions) {
+        // Bỏ qua nếu đã có MedicalRecord
+        if (prescriptionIdsWithRecords.has(pres._id.toString())) {
+          continue;
+        }
+        
+        // Format prescription data cho prescription này
+        const prescriptionData = pres.medications.map(med => ({
+          medicine: med.medicationName,
+          dosage: med.dosage,
+          usage: med.usage,
+          duration: med.duration,
+          notes: med.notes || '',
+          quantity: med.quantity,
+          medicationId: med.medicationId?._id || med.medicationId,
+          frequency: med.dosage
+        }));
+        
+        prescriptionBasedRecords.push({
+          _id: `pres_${pres._id}`, // Unique ID từ prescription ID
+          patientId: apt.patientId,
+          doctorId: apt.doctorId,
+          appointmentId: {
+            _id: apt._id,
+            appointmentDate: apt.appointmentDate,
+            appointmentTime: apt.appointmentTime,
+            timeSlot: apt.timeSlot,
+            bookingCode: apt.bookingCode,
+            status: apt.status,
+            hospitalId: apt.hospitalId,
+            specialtyId: apt.specialtyId,
+            serviceId: apt.serviceId,
+            roomId: apt.roomId,
+            symptoms: apt.symptoms,
+            diagnosis: apt.diagnosis,
+            treatment: apt.treatment,
+            notes: apt.notes
+          },
+          diagnosis: pres.diagnosis || apt.diagnosis || '',
+          symptoms: apt.symptoms || '',
+          treatment: apt.treatment || '',
+          prescription: prescriptionData,
+          notes: pres.notes || apt.notes || '',
+          specialty: apt.specialtyId,
+          specialtyName: apt.specialtyName || apt.specialtyId?.name || '',
+          status: 'completed',
+          isActive: true,
+          isFromPrescription: true, // Flag để biết đây là record từ prescription (chưa có MedicalRecord)
+          prescriptionId: pres._id, // ID của prescription
+          prescriptionOrder: pres.prescriptionOrder || 1, // Thứ tự đơn thuốc
+          prescriptionStatus: pres.status, // Trạng thái đơn thuốc
+          prescriptionTotalAmount: pres.totalAmount, // Tổng tiền đơn thuốc
+          isHospitalization: pres.isHospitalization || false, // Có phải đơn nội trú không
+          createdAt: pres.createdAt || apt.appointmentDate || apt.createdAt,
+          updatedAt: pres.updatedAt || apt.updatedAt,
+          prescription: pres // Thông tin prescription đầy đủ
+        });
+      }
+    }
+    
+    // Format medical records để thêm thông tin từ prescription nếu có
+    const formattedMedicalRecords = medicalRecords.map(record => {
+      const recordObj = record.toObject ? record.toObject() : record;
+      
+      // Nếu có prescriptionId được populate, thêm thông tin từ prescription
+      if (recordObj.prescriptionId && recordObj.prescriptionId._id) {
+        recordObj.prescriptionOrder = recordObj.prescriptionId.prescriptionOrder || 1;
+        recordObj.prescriptionStatus = recordObj.prescriptionId.status;
+        recordObj.prescriptionTotalAmount = recordObj.prescriptionId.totalAmount;
+        recordObj.isHospitalization = recordObj.prescriptionId.isHospitalization || false;
+        recordObj.isFromPrescription = true; // Record này có link với prescription
+      }
+      
+      return recordObj;
+    });
+    
+    // Merge medical records và prescription-based records, sắp xếp theo ngày (mới nhất trước)
+    const allRecords = [...formattedMedicalRecords, ...prescriptionBasedRecords].sort((a, b) => {
+      const dateA = a.appointmentId?.appointmentDate || a.createdAt || new Date(0);
+      const dateB = b.appointmentId?.appointmentDate || b.createdAt || new Date(0);
+      return new Date(dateB) - new Date(dateA);
+    });
+    
     return res.status(200).json({
       success: true,
-      count: medicalRecords.length,
+      count: allRecords.length,
       patient: patient,
-      data: medicalRecords
+      data: allRecords
     });
   } catch (error) {
     console.error('Get patient medical records error:', error);
