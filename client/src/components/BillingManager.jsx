@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { toast } from 'react-toastify';
-import { FaMoneyBillWave, FaCheck, FaClock, FaPills, FaBed, FaStethoscope } from 'react-icons/fa';
+import { FaMoneyBillWave, FaCheck, FaClock, FaPills, FaBed, FaStethoscope, FaInfoCircle } from 'react-icons/fa';
 
 const BillingManager = ({ appointmentId, onPaymentComplete }) => {
   const [bill, setBill] = useState(null);
@@ -179,7 +179,28 @@ const BillingManager = ({ appointmentId, onPaymentComplete }) => {
             </div>
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
-                <div>
+                <div className="flex-1">
+                  {/* Hiển thị thông tin giảm giá nếu có */}
+                  {bill.consultationBill.originalAmount > 0 && bill.consultationBill.originalAmount !== bill.consultationBill.amount && (
+                    <div className="mb-3 space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Giá gốc:</span>
+                        <span className="text-gray-500 line-through">{formatCurrency(bill.consultationBill.originalAmount)}</span>
+                      </div>
+                      {bill.consultationBill.discount > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-green-600 font-medium">Giảm giá:</span>
+                          <span className="text-green-600 font-medium">-{formatCurrency(bill.consultationBill.discount)}</span>
+                        </div>
+                      )}
+                      {bill.consultationBill.couponId && (
+                        <div className="text-xs text-blue-600 mt-1">
+                          <FaInfoCircle className="inline mr-1" />
+                          Đã áp dụng mã giảm giá
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <p className="text-3xl font-bold text-blue-600">
                     {formatCurrency(bill.consultationBill.amount)}
                   </p>

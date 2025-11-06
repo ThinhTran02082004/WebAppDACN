@@ -212,10 +212,11 @@ billSchema.pre('validate', async function(next) {
 
 // Pre-save: compute totals and statuses before persisting
 billSchema.pre('save', async function(next) {
-  // Calculate totals - use originalAmount if available for consultation, otherwise use amount
-  const consultationAmount = this.consultationBill.originalAmount > 0 
-    ? this.consultationBill.originalAmount 
-    : (this.consultationBill.amount || 0);
+  // Calculate totals - use amount (after discount) for consultation, fallback to originalAmount for backward compatibility
+  // Priority: amount (discounted) > originalAmount > 0
+  const consultationAmount = (this.consultationBill.amount !== undefined && this.consultationBill.amount !== null && this.consultationBill.amount > 0)
+    ? this.consultationBill.amount 
+    : (this.consultationBill.originalAmount || 0);
   
   this.totalAmount = 
     consultationAmount +

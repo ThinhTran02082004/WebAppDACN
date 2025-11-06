@@ -135,7 +135,7 @@ exports.createAppointment = async (req, res) => {
     }
     
     // Validate payment method
-    const validPaymentMethods = ['cash', 'paypal'];
+    const validPaymentMethods = ['cash', 'paypal', 'momo'];
     if (!validPaymentMethods.includes(paymentMethod)) {
       return res.status(400).json({
         success: false,
@@ -555,9 +555,10 @@ exports.createAppointment = async (req, res) => {
     }
     
     let discount = 0;
+    let coupon = null; // Khai báo coupon bên ngoài để có thể sử dụng sau
     // Apply coupon if provided
     if (couponCode) {
-      const coupon = await Coupon.findOne({ 
+      coupon = await Coupon.findOne({ 
         code: couponCode.toUpperCase().trim()
       });
       
@@ -786,60 +787,66 @@ exports.createAppointment = async (req, res) => {
     // Unlock the time slot after it has been successfully booked
     unlockTimeSlot(scheduleId, timeSlot.startTime, req.user.id);
     
-    // Tạo bản ghi thanh toán tương ứng
-    let payment;
+    // Tạo bản ghi thanh toán tương ứng sử dụng Bill và BillPayment
     let redirectUrl = null;
     
+    // Create Bill instead of Payment
+    const Bill = require('../models/Bill');
+    const BillPayment = require('../models/BillPayment');
+    let bill = await Bill.findOne({ appointmentId: appointment._id });
+    
+    if (!bill) {
+      bill = await Bill.create({
+        appointmentId: appointment._id,
+        patientId: req.user.id,
+        doctorId,
+        serviceId: serviceId || null,
+        consultationBill: {
+          amount: totalAmount,
+          originalAmount: consultationFee + additionalFees,
+          discount: discount || 0,
+          couponId: coupon?._id || null,
+          status: paymentMethod === 'cash' ? 'paid' : 'pending',
+          paymentMethod: paymentMethod,
+          paymentDate: paymentMethod === 'cash' ? new Date() : null
+        }
+      });
+      console.log(`Created Bill for appointment: ${bill._id}, discount: ${discount}, couponId: ${coupon?._id || 'none'}`);
+    } else {
+      // Update existing bill
+      bill.consultationBill = {
+        amount: totalAmount,
+        originalAmount: consultationFee + additionalFees,
+        discount: discount || 0,
+        couponId: coupon?._id || null,
+        status: paymentMethod === 'cash' ? 'paid' : 'pending',
+        paymentMethod: paymentMethod,
+        paymentDate: paymentMethod === 'cash' ? new Date() : null
+      };
+      await bill.save();
+      console.log(`Updated Bill for appointment: ${bill._id}, discount: ${discount}, couponId: ${coupon?._id || 'none'}`);
+    }
+    
+    // Create BillPayment for history
     if (paymentMethod === 'cash') {
-      // Tạo bản ghi thanh toán tiền mặt
-      const Payment = require('../models/Payment');
-      payment = new Payment({
+      // Cash payment - create completed BillPayment immediately
+      await BillPayment.create({
+        billId: bill._id,
         appointmentId: appointment._id,
-        userId: req.user.id,
-        doctorId,
-        serviceId: serviceId || null,
+        patientId: req.user.id,
+        billType: 'consultation',
         amount: totalAmount,
-        originalAmount: consultationFee + additionalFees,
-        discount: discount || 0,
         paymentMethod: 'cash',
-        paymentStatus: 'pending',
-        notes: 'Thanh toán tiền mặt khi đến khám'
+        paymentStatus: 'completed',
+        transactionId: `CASH-${Date.now()}`,
+        notes: 'Thanh toán tiền mặt khi đặt lịch'
       });
-      
-      await payment.save();
-      
-      // Cập nhật ID thanh toán vào cuộc hẹn
-      await Appointment.findByIdAndUpdate(
-        appointment._id,
-        { $set: { paymentId: payment._id } }
-      );
-    } else if (paymentMethod === 'paypal') {
-      // Tạo bản ghi thanh toán PayPal
-      const Payment = require('../models/Payment');
-      payment = new Payment({
-        appointmentId: appointment._id,
-        userId: req.user.id,
-        doctorId,
-        serviceId: serviceId || null,
-        amount: totalAmount,
-        originalAmount: consultationFee + additionalFees,
-        discount: discount || 0,
-        paymentMethod: 'paypal',
-        paymentStatus: 'pending',
-        notes: 'Thanh toán qua PayPal'
-      });
-      
-      await payment.save();
-      
-      // Cập nhật ID thanh toán vào cuộc hẹn
-      await Appointment.findByIdAndUpdate(
-        appointment._id,
-        { $set: { paymentId: payment._id } }
-      );
-      
-      // Tạo URL redirect đến PayPal
-      const PaymentController = require('./paymentController');
-      redirectUrl = await PaymentController.createPayPalPayment(payment, req.headers.origin);
+      console.log(`Created BillPayment for cash payment`);
+    } else if (paymentMethod === 'paypal' || paymentMethod === 'momo') {
+      // Online payments - will create BillPayment when payment is initiated
+      // Bill is already created with pending status, so payment handlers can update it
+      // No need to create BillPayment here, it will be created in paypalController/momoController
+      // User will pay after appointment is created
     }
     
     // Send confirmation email to patient
@@ -976,41 +983,31 @@ exports.createAppointment = async (req, res) => {
     }
     
     // Return response based on payment method
-    if (paymentMethod === 'paypal' && redirectUrl) {
-      res.status(201).json({
-        success: true,
-        message: 'Đặt lịch thành công. Vui lòng thanh toán qua PayPal',
-        data: {
-          appointment,
-          payment,
-          room: room ? {
-            name: room.name,
-            number: room.number,
-            floor: room.floor,
-            block: room.block
-          } : null,
-          redirectUrl
-        }
-      });
-    } else {
-      res.status(201).json({
-        success: true,
-        message: room 
+    res.status(201).json({
+      success: true,
+      message: paymentMethod === 'paypal' || paymentMethod === 'momo'
+        ? 'Đặt lịch thành công. Vui lòng thanh toán để hoàn tất đặt lịch.'
+        : (room 
           ? `Đặt lịch thành công. Bạn đã được phân công vào phòng ${room.name} (${room.number}).` 
-          : 'Đặt lịch thành công',
-        data: {
-          appointment,
-          payment,
-          room: room ? {
-            name: room.name,
-            number: room.number,
-            floor: room.floor,
-            block: room.block
-          } : null,
-          instructions: paymentMethod === 'cash' ? 'Vui lòng thanh toán tại quầy khi đến khám' : null
-        }
-      });
-    }
+          : 'Đặt lịch thành công'),
+      data: {
+        appointment,
+        bill: bill ? {
+          _id: bill._id,
+          billNumber: bill.billNumber,
+          consultationBill: bill.consultationBill,
+          overallStatus: bill.overallStatus
+        } : null,
+        room: room ? {
+          name: room.name,
+          number: room.number,
+          floor: room.floor,
+          block: room.block
+        } : null,
+        redirectUrl: redirectUrl || null,
+        instructions: paymentMethod === 'cash' ? 'Vui lòng thanh toán tại quầy khi đến khám' : null
+      }
+    });
     
   } catch (error) {
     console.error('Create appointment error:', error);

@@ -1,70 +1,37 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
-import { FaMoneyBillWave, FaCheck, FaClock, FaPills, FaBed, FaStethoscope, FaCreditCard, FaWallet, FaTimes } from 'react-icons/fa';
+import { FaMoneyBillWave, FaCheck, FaClock, FaPills, FaBed, FaStethoscope, FaCreditCard, FaWallet, FaTimes, FaInfoCircle } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import PayPalButton from './PayPalButton';
-
-const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appointment, initialBill = null, refreshKey }) => {
-  const [bill, setBill] = useState(initialBill);
+const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appointment }) => {
+  const [bill, setBill] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPayPalModal, setShowPayPalModal] = useState(false);
   const [payPalConfig, setPayPalConfig] = useState({ type: null, amount: 0 });
   const [hospitalizationData, setHospitalizationData] = useState(hospitalization || null);
   const [paymentMethods, setPaymentMethods] = useState({
-    consultation: 'cash',
-    hospitalization: 'cash'
+    consultation: 'momo', // Default to momo instead of cash
+    hospitalization: 'momo' // Default to momo instead of cash
   });
   const [prescriptionPaymentMethods, setPrescriptionPaymentMethods] = useState({});
-
-  const fetchBill = useCallback(async () => {
-    if (!appointmentId) return;
-    try {
-      setLoading(true);
-      const response = await api.get(`/billing/appointment/${appointmentId}`);
-      setBill(response.data.data);
-    } catch (error) {
-      console.error('Error fetching bill:', error);
-      toast.error('Khong the tai thong tin hoa don');
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (appointmentId) {
+      fetchBill();
+      if (!hospitalization && bill?.hospitalizationBill?.hospitalizationId) {
+        fetchHospitalization(bill.hospitalizationBill.hospitalizationId);
+      }
     }
   }, [appointmentId]);
-
-  useEffect(() => {
-    if (!appointmentId) {
-      setBill(null);
-      return;
-    }
-
-    if (initialBill) {
-      setBill(initialBill);
-      setLoading(false);
-    } else {
-      fetchBill();
-    }
-
-    if (!hospitalization && initialBill?.hospitalizationBill?.hospitalizationId) {
-      fetchHospitalization(initialBill.hospitalizationBill.hospitalizationId);
-    }
-  }, [appointmentId, initialBill, hospitalization, fetchBill]);
-
-  useEffect(() => {
-    if (refreshKey === undefined || !appointmentId) return;
-    fetchBill();
-  }, [refreshKey, appointmentId, fetchBill]);
-
   useEffect(() => {
     if (hospitalization) {
       setHospitalizationData(hospitalization);
     }
   }, [hospitalization]);
-
   useEffect(() => {
     if (bill?.hospitalizationBill?.hospitalizationId && !hospitalizationData) {
       fetchHospitalization(bill.hospitalizationBill.hospitalizationId);
     }
   }, [bill]);
-
   const fetchHospitalization = async (hospitalizationId) => {
     try {
       const response = await api.get(`/hospitalizations/${hospitalizationId}`);
@@ -73,39 +40,54 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
       }
     } catch (error) {
       console.error('Error fetching hospitalization:', error);
-      toast.error('KhÃƒÆ’Ã‚Â´ng thÃƒÂ¡Ã‚Â»Ã†â€™ tÃƒÂ¡Ã‚ÂºÃ‚Â£i thÃƒÆ’Ã‚Â´ng tin nÃƒÂ¡Ã‚ÂºÃ‚Â±m viÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n');
+      toast.error('Không thể tải thông tin nằm viện');
     }
   };
-
+  const fetchBill = async () => {
+    try {
+      const response = await api.get(`/billing/appointment/${appointmentId}`);
+      setBill(response.data.data);
+    } catch (error) {
+      console.error('Error fetching bill:', error);
+      toast.error('Không thể tải thông tin hóa đơn');
+    }
+  };
+  // Helper flags and displayed totals (hide inpatient amount until discharge)
+  const isStillHospitalized = appointment?.status === 'hospitalized' || (hospitalizationData && hospitalizationData.status !== 'discharged');
+  const displayedConsultation = bill?.consultationBill?.amount || 0;
+  const displayedMedication = bill?.medicationBill?.amount || 0;
+  const displayedHospitalization = isStillHospitalized ? 0 : (bill?.hospitalizationBill?.amount || 0);
+  const displayedTotalAmount = displayedConsultation + displayedMedication + displayedHospitalization;
+  const displayedPaidAmount = 
+    (bill?.consultationBill?.status === 'paid' ? displayedConsultation : 0) +
+    (bill?.medicationBill?.status === 'paid' ? displayedMedication : 0) +
+    (bill?.hospitalizationBill?.status === 'paid' ? displayedHospitalization : 0);
+  const displayedRemainingAmount = displayedTotalAmount - displayedPaidAmount;
   const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
-
   const getStatusBadge = (status) => {
     if (status === 'paid') return (
-      <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm flex items-center gap-1"><FaCheck /> Ãƒâ€žÃ‚ÂÃƒÆ’Ã‚Â£ thanh toÃƒÆ’Ã‚Â¡n</span>
+      <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm flex items-center gap-1"><FaCheck /> Đã thanh toán</span>
     );
     if (status === 'cancelled') return (
-      <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">Ãƒâ€žÃ‚ÂÃƒÆ’Ã‚Â£ hÃƒÂ¡Ã‚Â»Ã‚Â§y</span>
+      <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">Đã hủy</span>
     );
     return (
-      <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm flex items-center gap-1"><FaClock /> ChÃƒâ€ Ã‚Â°a thanh toÃƒÆ’Ã‚Â¡n</span>
+      <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm flex items-center gap-1"><FaClock /> Chưa thanh toán</span>
     );
   };
-
   const payPrescription = async (prescriptionId, method) => {
     if (!bill || !prescriptionId) return;
     if (appointment?.status === 'hospitalized') {
-      toast.warning('KhÃƒÆ’Ã‚Â´ng thÃƒÂ¡Ã‚Â»Ã†â€™ thanh toÃƒÆ’Ã‚Â¡n khi Ãƒâ€žÃ¢â‚¬Ëœang nÃƒÂ¡Ã‚ÂºÃ‚Â±m viÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n. Vui lÃƒÆ’Ã‚Â²ng Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã‚Â£i xuÃƒÂ¡Ã‚ÂºÃ‚Â¥t viÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n.');
+      toast.warning('Không thể thanh toán khi đang nằm viện. Vui lòng đợi xuất viện.');
       return;
     }
-
     try {
       setLoading(true);
-
       if (method === 'momo') {
         // Get prescription to get amount
         const prescription = bill.medicationBill.prescriptionIds.find(p => p._id === prescriptionId);
         if (!prescription) {
-          toast.error('KhÃƒÆ’Ã‚Â´ng tÃƒÆ’Ã‚Â¬m thÃƒÂ¡Ã‚ÂºÃ‚Â¥y Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â¡n thuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc');
+          toast.error('Không tìm thấy đơn thuốc');
           return;
         }
         const res = await api.post('/payments/momo/create', {
@@ -118,11 +100,11 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
           window.location.href = res.data.payUrl;
           return;
         }
-        toast.error('KhÃƒÆ’Ã‚Â´ng thÃƒÂ¡Ã‚Â»Ã†â€™ tÃƒÂ¡Ã‚ÂºÃ‚Â¡o thanh toÃƒÆ’Ã‚Â¡n MoMo');
+        toast.error('Không thể tạo thanh toán MoMo');
       } else if (method === 'paypal') {
         const prescription = bill.medicationBill.prescriptionIds.find(p => p._id === prescriptionId);
         if (!prescription) {
-          toast.error('KhÃƒÆ’Ã‚Â´ng tÃƒÆ’Ã‚Â¬m thÃƒÂ¡Ã‚ÂºÃ‚Â¥y Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â¡n thuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc');
+          toast.error('Không tìm thấy đơn thuốc');
           return;
         }
         setPayPalConfig({ type: 'prescription', prescriptionId, amount: prescription.totalAmount });
@@ -139,33 +121,30 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
         });
         
         if (response.data.success) {
-          toast.success('Thanh toÃƒÆ’Ã‚Â¡n Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â¡n thuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc thÃƒÆ’Ã‚Â nh cÃƒÆ’Ã‚Â´ng');
+          toast.success('Thanh toán đơn thuốc thành công');
           await fetchBill();
           if (onPaymentComplete) onPaymentComplete();
         } else {
-          toast.error(response.data.message || 'Thanh toÃƒÆ’Ã‚Â¡n thÃƒÂ¡Ã‚ÂºÃ‚Â¥t bÃƒÂ¡Ã‚ÂºÃ‚Â¡i');
+          toast.error(response.data.message || 'Thanh toán thất bại');
         }
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Thanh toÃƒÆ’Ã‚Â¡n thÃƒÂ¡Ã‚ÂºÃ‚Â¥t bÃƒÂ¡Ã‚ÂºÃ‚Â¡i');
+      toast.error(error.response?.data?.message || 'Thanh toán thất bại');
     } finally {
       setLoading(false);
     }
   };
-
   const pay = async (type) => {
     if (!bill) return;
     if (appointment?.status === 'hospitalized' && (type === 'consultation' || type === 'hospitalization')) {
-      toast.warning('KhÃƒÆ’Ã‚Â´ng thÃƒÂ¡Ã‚Â»Ã†â€™ thanh toÃƒÆ’Ã‚Â¡n khi Ãƒâ€žÃ¢â‚¬Ëœang nÃƒÂ¡Ã‚ÂºÃ‚Â±m viÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n. Vui lÃƒÆ’Ã‚Â²ng Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã‚Â£i xuÃƒÂ¡Ã‚ÂºÃ‚Â¥t viÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n.');
+      toast.warning('Không thể thanh toán khi đang nằm viện. Vui lòng đợi xuất viện.');
       return;
     }
-
     try {
       setLoading(true);
       const method = paymentMethods[type];
       const amount = type === 'consultation' ? bill.consultationBill.amount
         : bill.hospitalizationBill.amount;
-
       if (method === 'momo') {
         const res = await api.post('/payments/momo/create', {
           appointmentId: (bill.appointmentId && bill.appointmentId._id) ? bill.appointmentId._id : bill.appointmentId,
@@ -176,7 +155,7 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
           window.location.href = res.data.payUrl;
           return;
         }
-        toast.error('KhÃƒÆ’Ã‚Â´ng thÃƒÂ¡Ã‚Â»Ã†â€™ tÃƒÂ¡Ã‚ÂºÃ‚Â¡o thanh toÃƒÆ’Ã‚Â¡n MoMo');
+        toast.error('Không thể tạo thanh toán MoMo');
       } else if (method === 'paypal') {
         // Show PayPal modal with SDK
         setPayPalConfig({ type, amount });
@@ -184,11 +163,10 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
         setLoading(false);
         return;
       } else {
-        // cash ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ xÃƒÆ’Ã‚Â¡c nhÃƒÂ¡Ã‚ÂºÃ‚Â­n nÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢i bÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢ ngay
+        // cash – xác nhận nội bộ ngay
         const endpoint = type === 'consultation'
           ? '/billing/pay-consultation'
           : '/billing/pay-hospitalization';
-
         const txIdPrefix = type === 'consultation' ? 'CONS' : 'HOSP';
         const payload = {
           billId: bill._id,
@@ -197,83 +175,101 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
           paymentDetails: { method, timestamp: new Date().toISOString() }
         };
         const response = await api.post(endpoint, payload);
-        toast.success('Thanh toÃƒÆ’Ã‚Â¡n thÃƒÆ’Ã‚Â nh cÃƒÆ’Ã‚Â´ng');
+        toast.success('Thanh toán thành công');
         setBill(response.data.data);
         if (onPaymentComplete) onPaymentComplete();
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Thanh toÃƒÆ’Ã‚Â¡n thÃƒÂ¡Ã‚ÂºÃ‚Â¥t bÃƒÂ¡Ã‚ÂºÃ‚Â¡i');
+      toast.error(error.response?.data?.message || 'Thanh toán thất bại');
     } finally {
       setLoading(false);
     }
   };
-
   if (!bill) {
     return (
       <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="text-center py-8 text-gray-500">Ãƒâ€žÃ‚Âang tÃƒÂ¡Ã‚ÂºÃ‚Â£i thÃƒÆ’Ã‚Â´ng tin thanh toÃƒÆ’Ã‚Â¡n...</div>
+        <div className="text-center py-8 text-gray-500">Đang tải thông tin thanh toán...</div>
       </div>
     );
   }
-
   return (
     <div className="bg-white rounded-lg shadow-md">
       <div className="p-6 border-b bg-gradient-to-r from-blue-50 to-purple-50">
         <div className="flex justify-between items-start mb-4">
           <div>
             <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <FaMoneyBillWave /> Thanh ToÃƒÆ’Ã‚Â¡n LÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¹ch HÃƒÂ¡Ã‚ÂºÃ‚Â¹n
+              <FaMoneyBillWave /> Thanh Toán Lịch Hẹn
             </h2>
-            <p className="text-sm text-gray-600 mt-1">MÃƒÆ’Ã‚Â£ hÃƒÆ’Ã‚Â³a Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â¡n: {bill.billNumber}</p>
+            <p className="text-sm text-gray-600 mt-1">Mã hóa đơn: {bill.billNumber}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-600">TrÃƒÂ¡Ã‚ÂºÃ‚Â¡ng thÃƒÆ’Ã‚Â¡i tÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¢ng</p>
+            <p className="text-sm text-gray-600">Trạng thái tổng</p>
             <span className={`px-4 py-2 rounded-full font-semibold ${
               bill.overallStatus === 'paid' ? 'bg-green-100 text-green-800' :
               bill.overallStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
               'bg-red-100 text-red-800'
             }`}>
-              {bill.overallStatus === 'paid' ? 'Ãƒâ€žÃ‚ÂÃƒÆ’Ã‚Â£ thanh toÃƒÆ’Ã‚Â¡n Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã‚Â§' : bill.overallStatus === 'partial' ? 'Thanh toÃƒÆ’Ã‚Â¡n mÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢t phÃƒÂ¡Ã‚ÂºÃ‚Â§n' : 'ChÃƒâ€ Ã‚Â°a thanh toÃƒÆ’Ã‚Â¡n'}
+              {bill.overallStatus === 'paid' ? 'Đã thanh toán đủ' : bill.overallStatus === 'partial' ? 'Thanh toán một phần' : 'Chưa thanh toán'}
             </span>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           <div className="bg-white rounded-lg p-4 shadow-sm">
-            <p className="text-sm text-gray-600">TÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¢ng hÃƒÆ’Ã‚Â³a Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â¡n</p>
-            <p className="text-2xl font-bold text-blue-600">{formatCurrency(bill.totalAmount)}</p>
+            <p className="text-sm text-gray-600">Tổng hóa đơn</p>
+            <p className="text-2xl font-bold text-blue-600">{formatCurrency(displayedTotalAmount)}</p>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
-            <p className="text-sm text-gray-600">Ãƒâ€žÃ‚ÂÃƒÆ’Ã‚Â£ thanh toÃƒÆ’Ã‚Â¡n</p>
-            <p className="text-2xl font-bold text-green-600">{formatCurrency(bill.paidAmount)}</p>
+            <p className="text-sm text-gray-600">Đã thanh toán</p>
+            <p className="text-2xl font-bold text-green-600">{formatCurrency(displayedPaidAmount)}</p>
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
-            <p className="text-sm text-gray-600">CÃƒÆ’Ã‚Â²n lÃƒÂ¡Ã‚ÂºÃ‚Â¡i</p>
-            <p className="text-2xl font-bold text-red-600">{formatCurrency(bill.remainingAmount)}</p>
+            <p className="text-sm text-gray-600">Còn lại</p>
+            <p className="text-2xl font-bold text-red-600">{formatCurrency(displayedRemainingAmount)}</p>
           </div>
         </div>
       </div>
-
       <div className="p-6 space-y-6">
         {bill.consultationBill.amount > 0 && (
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-blue-50 px-6 py-3 border-b flex justify-between items-center">
               <h3 className="font-semibold text-lg flex items-center gap-2">
-                <FaStethoscope className="text-blue-600" /> PhÃƒÆ’Ã‚Â­ KhÃƒÆ’Ã‚Â¡m BÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡nh
+                <FaStethoscope className="text-blue-600" /> Phí Khám Bệnh
               </h3>
               {getStatusBadge(bill.consultationBill.status)}
             </div>
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div>
+                <div className="flex-1">
+                  {/* Hiển thị thông tin giảm giá nếu có */}
+                  {bill.consultationBill.originalAmount > 0 && bill.consultationBill.originalAmount !== bill.consultationBill.amount && (
+                    <div className="mb-3 space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Giá gốc:</span>
+                        <span className="text-gray-500 line-through">{formatCurrency(bill.consultationBill.originalAmount)}</span>
+                      </div>
+                      {bill.consultationBill.discount > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-green-600 font-medium">Giảm giá:</span>
+                          <span className="text-green-600 font-medium">-{formatCurrency(bill.consultationBill.discount)}</span>
+                        </div>
+                      )}
+                      {bill.consultationBill.couponId && (
+                        <div className="text-xs text-blue-600 mt-1">
+                          <FaInfoCircle className="inline mr-1" />
+                          Đã áp dụng mã giảm giá
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <p className="text-3xl font-bold text-blue-600">{formatCurrency(bill.consultationBill.amount)}</p>
                   {bill.consultationBill.status === 'paid' && bill.consultationBill.paymentDate && (
                     <p className="text-sm text-gray-500 mt-1">
-                      Ãƒâ€žÃ‚ÂÃƒÆ’Ã‚Â£ thanh toÃƒÆ’Ã‚Â¡n: {new Date(bill.consultationBill.paymentDate).toLocaleString('vi-VN')}
+                      Đã thanh toán: {new Date(bill.consultationBill.paymentDate).toLocaleString('vi-VN')}
                     </p>
                   )}
                   {bill.consultationBill.status === 'paid' && bill.consultationBill.paymentMethod && (
                     <p className="text-sm text-gray-500">
-                      PhÃƒâ€ Ã‚Â°Ãƒâ€ Ã‚Â¡ng thÃƒÂ¡Ã‚Â»Ã‚Â©c: {bill.consultationBill.paymentMethod === 'cash' ? 'TiÃƒÂ¡Ã‚Â»Ã‚Ân mÃƒÂ¡Ã‚ÂºÃ‚Â·t' : bill.consultationBill.paymentMethod === 'momo' ? 'MoMo' : 'PayPal'}
+                      Phương thức: {bill.consultationBill.paymentMethod === 'cash' ? 'Tiền mặt' : bill.consultationBill.paymentMethod === 'momo' ? 'MoMo' : 'PayPal'}
                     </p>
                   )}
                 </div>
@@ -283,23 +279,13 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                   {appointment?.status === 'hospitalized' && (
                     <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <p className="text-sm text-amber-800">
-                        <FaClock className="inline mr-1" /> Ãƒâ€žÃ‚Âang nÃƒÂ¡Ã‚ÂºÃ‚Â±m viÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n. Vui lÃƒÆ’Ã‚Â²ng Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã‚Â£i xuÃƒÂ¡Ã‚ÂºÃ‚Â¥t viÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ thanh toÃƒÆ’Ã‚Â¡n phÃƒÆ’Ã‚Â­ khÃƒÆ’Ã‚Â¡m.
+                        <FaClock className="inline mr-1" /> Đang nằm viện. Vui lòng đợi xuất viện để thanh toán phí khám.
                       </p>
                     </div>
                   )}
                   {appointment?.status !== 'hospitalized' && (
                     <div className="space-y-3">
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setPaymentMethods({ ...paymentMethods, consultation: 'cash' })}
-                          className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                            paymentMethods.consultation === 'cash'
-                              ? 'bg-blue-600 text-white shadow-md'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          <FaWallet className="inline mr-2" /> TiÃƒÂ¡Ã‚Â»Ã‚Ân mÃƒÂ¡Ã‚ÂºÃ‚Â·t
-                        </button>
                         <button
                           onClick={() => setPaymentMethods({ ...paymentMethods, consultation: 'momo' })}
                           className={`px-4 py-2 rounded-lg font-medium transition-all ${
@@ -329,11 +315,11 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                         {loading ? (
                           <>
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            <span>Ãƒâ€žÃ‚Âang xÃƒÂ¡Ã‚Â»Ã‚Â­ lÃƒÆ’Ã‚Â½...</span>
+                            <span>Đang xử lý...</span>
                           </>
                         ) : (
                           <>
-                            <FaMoneyBillWave /> Thanh ToÃƒÆ’Ã‚Â¡n {formatCurrency(bill.consultationBill.amount)}
+                            <FaMoneyBillWave /> Thanh Toán {formatCurrency(bill.consultationBill.amount)}
                           </>
                         )}
                       </button>
@@ -344,12 +330,11 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
             </div>
           </div>
         )}
-
         {bill.medicationBill.amount > 0 && bill.medicationBill.prescriptionIds && bill.medicationBill.prescriptionIds.length > 0 && (
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-green-50 px-6 py-3 border-b flex justify-between items-center">
               <h3 className="font-semibold text-lg flex items-center gap-2">
-                <FaPills className="text-green-600" /> TiÃƒÂ¡Ã‚Â»Ã‚Ân ThuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc
+                <FaPills className="text-green-600" /> Tiền Thuốc
               </h3>
               {getStatusBadge(bill.medicationBill.status)}
             </div>
@@ -360,8 +345,8 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                   <div className="flex items-center gap-2 text-amber-800">
                     <FaClock className="text-lg" />
                     <div>
-                      <p className="font-semibold">Ãƒâ€žÃ‚Âang nÃƒÂ¡Ã‚ÂºÃ‚Â±m viÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n</p>
-                      <p className="text-sm">Vui lÃƒÆ’Ã‚Â²ng Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã‚Â£i xuÃƒÂ¡Ã‚ÂºÃ‚Â¥t viÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡n Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã†â€™ thanh toÃƒÆ’Ã‚Â¡n Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â¡n thuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc.</p>
+                      <p className="font-semibold">Đang nằm viện</p>
+                      <p className="text-sm">Vui lòng đợi xuất viện để thanh toán đơn thuốc.</p>
                     </div>
                   </div>
                 </div>
@@ -382,16 +367,16 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-semibold">
-                            Ãƒâ€žÃ‚ÂÃƒÂ¡Ã‚Â»Ã‚Â£t {prescription.prescriptionOrder || idx + 1}
+                            Đợt {prescription.prescriptionOrder || idx + 1}
                           </span>
                           {prescription.isHospitalization && (
                             <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-semibold">
-                              NÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢i trÃƒÆ’Ã‚Âº
+                              Nội trú
                             </span>
                           )}
                           {isPaid && (
                             <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">
-                              Ãƒâ€žÃ‚ÂÃƒÆ’Ã‚Â£ thanh toÃƒÆ’Ã‚Â¡n
+                              Đã thanh toán
                             </span>
                           )}
                         </div>
@@ -407,23 +392,13 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                       
                       {prescription.diagnosis && (
                         <div className="mb-2 text-sm text-gray-600">
-                          <span className="font-medium">ChÃƒÂ¡Ã‚ÂºÃ‚Â©n Ãƒâ€žÃ¢â‚¬ËœoÃƒÆ’Ã‚Â¡n:</span> {prescription.diagnosis}
+                          <span className="font-medium">Chẩn đoán:</span> {prescription.diagnosis}
                         </div>
                       )}
                       
                       {canPay && (
                         <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
                           <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => setPrescriptionPaymentMethods({ ...prescriptionPaymentMethods, [prescription._id]: 'cash' })}
-                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                prescriptionPaymentMethods[prescription._id] === 'cash'
-                                  ? 'bg-green-600 text-white shadow-md'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                            >
-                              <FaWallet className="inline mr-1.5" /> TiÃƒÂ¡Ã‚Â»Ã‚Ân mÃƒÂ¡Ã‚ÂºÃ‚Â·t
-                            </button>
                             <button
                               onClick={() => setPrescriptionPaymentMethods({ ...prescriptionPaymentMethods, [prescription._id]: 'momo' })}
                               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
@@ -447,17 +422,17 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                           </div>
                           <button
                             disabled={loading || !prescriptionPaymentMethods[prescription._id]}
-                            onClick={() => payPrescription(prescription._id, prescriptionPaymentMethods[prescription._id] || 'cash')}
+                            onClick={() => payPrescription(prescription._id, prescriptionPaymentMethods[prescription._id] || 'momo')}
                             className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
                           >
                             {loading ? (
                               <>
                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                <span>Ãƒâ€žÃ‚Âang xÃƒÂ¡Ã‚Â»Ã‚Â­ lÃƒÆ’Ã‚Â½...</span>
+                                <span>Đang xử lý...</span>
                               </>
                             ) : (
                               <>
-                                <FaMoneyBillWave /> Thanh ToÃƒÆ’Ã‚Â¡n {formatCurrency(prescription.totalAmount)}
+                                <FaMoneyBillWave /> Thanh Toán {formatCurrency(prescription.totalAmount)}
                               </>
                             )}
                           </button>
@@ -471,56 +446,61 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
               {/* Total medication bill */}
               <div className="pt-4 border-t border-gray-200">
                 <div className="flex justify-between items-center">
-                  <span className="font-semibold text-gray-700">TÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¢ng tiÃƒÂ¡Ã‚Â»Ã‚Ân thuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc:</span>
+                  <span className="font-semibold text-gray-700">Tổng tiền thuốc:</span>
                   <span className="text-xl font-bold text-green-600">{formatCurrency(bill.medicationBill.amount)}</span>
                 </div>
               </div>
             </div>
           </div>
         )}
-
         {bill.hospitalizationBill.amount > 0 && (
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-purple-50 px-6 py-3 border-b flex justify-between items-center">
               <h3 className="font-semibold text-lg flex items-center gap-2">
-                <FaBed className="text-purple-600" /> PhÃƒÆ’Ã‚Â­ NÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢i TrÃƒÆ’Ã‚Âº
+                <FaBed className="text-purple-600" /> Phí Nội Trú
               </h3>
               {getStatusBadge(bill.hospitalizationBill.status)}
             </div>
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <p className="text-3xl font-bold text-purple-600">{formatCurrency(bill.hospitalizationBill.amount)}</p>
+                  {isStillHospitalized ? (
+                    <>
+                      <p className="text-3xl font-bold text-purple-600">Tạm tính</p>
+                      <p className="text-sm text-gray-500 mt-1">Sẽ chốt khi xuất viện</p>
+                    </>
+                  ) : (
+                    <p className="text-3xl font-bold text-purple-600">{formatCurrency(bill.hospitalizationBill.amount)}</p>
+                  )}
                   {bill.hospitalizationBill.status === 'paid' && bill.hospitalizationBill.paymentDate && (
                     <p className="text-sm text-gray-500 mt-1">
-                      Ãƒâ€žÃ‚ÂÃƒÆ’Ã‚Â£ thanh toÃƒÆ’Ã‚Â¡n: {new Date(bill.hospitalizationBill.paymentDate).toLocaleString('vi-VN')}
+                      Đã thanh toán: {new Date(bill.hospitalizationBill.paymentDate).toLocaleString('vi-VN')}
                     </p>
                   )}
                   {bill.hospitalizationBill.status === 'paid' && bill.hospitalizationBill.paymentMethod && (
                     <p className="text-sm text-gray-500">
-                      PhÃƒâ€ Ã‚Â°Ãƒâ€ Ã‚Â¡ng thÃƒÂ¡Ã‚Â»Ã‚Â©c: {bill.hospitalizationBill.paymentMethod === 'cash' ? 'TiÃƒÂ¡Ã‚Â»Ã‚Ân mÃƒÂ¡Ã‚ÂºÃ‚Â·t' : bill.hospitalizationBill.paymentMethod === 'momo' ? 'MoMo' : 'PayPal'}
+                      Phương thức: {bill.hospitalizationBill.paymentMethod === 'cash' ? 'Tiền mặt' : bill.hospitalizationBill.paymentMethod === 'momo' ? 'MoMo' : 'PayPal'}
                     </p>
                   )}
                   {hospitalizationData && (
                     <div className="mt-2 text-sm text-gray-600">
                       {hospitalizationData.totalHours > 0 && (
-                        <p>TÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¢ng thÃƒÂ¡Ã‚Â»Ã‚Âi gian: {hospitalizationData.totalHours} giÃƒÂ¡Ã‚Â»Ã‚Â</p>
+                        <p>Tổng thời gian: {hospitalizationData.totalHours} giờ</p>
                       )}
                     </div>
                   )}
                 </div>
               </div>
-
               {/* Room History Details */}
               {hospitalizationData?.roomHistory && hospitalizationData.roomHistory.length > 0 && (
                 <div className="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
-                  <div className="text-sm font-semibold text-purple-800 mb-3">Chi tiÃƒÂ¡Ã‚ÂºÃ‚Â¿t phÃƒÆ’Ã‚Â²ng</div>
+                  <div className="text-sm font-semibold text-purple-800 mb-3">Chi tiết phòng</div>
                   <div className="space-y-2">
                     {hospitalizationData.roomHistory.map((roomEntry, idx) => (
                       <div key={idx} className="bg-white rounded p-3 border border-purple-100">
                         <div className="flex items-center justify-between mb-2">
                           <div className="font-medium text-gray-800">
-                            PhÃƒÆ’Ã‚Â²ng {roomEntry.roomNumber || 'N/A'}
+                            Phòng {roomEntry.roomNumber || 'N/A'}
                             {roomEntry.roomType && (
                               <span className="ml-2 text-xs text-gray-500">({roomEntry.roomType})</span>
                             )}
@@ -533,19 +513,19 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
                           <div>
-                            <span className="font-medium">VÃƒÆ’Ã‚Â o:</span> {roomEntry.checkInTime ? new Date(roomEntry.checkInTime).toLocaleString('vi-VN') : 'N/A'}
+                            <span className="font-medium">Vào:</span> {roomEntry.checkInTime ? new Date(roomEntry.checkInTime).toLocaleString('vi-VN') : 'N/A'}
                           </div>
                           <div>
-                            <span className="font-medium">Ra:</span> {roomEntry.checkOutTime ? new Date(roomEntry.checkOutTime).toLocaleString('vi-VN') : 'Ãƒâ€žÃ‚Âang ÃƒÂ¡Ã‚Â»Ã…Â¸'}
+                            <span className="font-medium">Ra:</span> {roomEntry.checkOutTime ? new Date(roomEntry.checkOutTime).toLocaleString('vi-VN') : 'Đang ở'}
                           </div>
                           {roomEntry.hours > 0 && (
                             <div>
-                              <span className="font-medium">ThÃƒÂ¡Ã‚Â»Ã‚Âi gian:</span> {roomEntry.hours} giÃƒÂ¡Ã‚Â»Ã‚Â
+                              <span className="font-medium">Thời gian:</span> {roomEntry.hours} giờ
                             </div>
                           )}
                           {roomEntry.hourlyRate > 0 && (
                             <div>
-                              <span className="font-medium">GiÃƒÆ’Ã‚Â¡/giÃƒÂ¡Ã‚Â»Ã‚Â:</span> {formatCurrency(roomEntry.hourlyRate)}
+                              <span className="font-medium">Giá/giờ:</span> {formatCurrency(roomEntry.hourlyRate)}
                             </div>
                           )}
                         </div>
@@ -554,19 +534,9 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                   </div>
                 </div>
               )}
-              {bill.hospitalizationBill.status === 'pending' && (
+              {!isStillHospitalized && bill.hospitalizationBill.status === 'pending' && (
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => setPaymentMethods({ ...paymentMethods, hospitalization: 'cash' })}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                        paymentMethods.hospitalization === 'cash'
-                          ? 'bg-purple-600 text-white shadow-md'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      <FaWallet className="inline mr-2" /> TiÃƒÂ¡Ã‚Â»Ã‚Ân mÃƒÂ¡Ã‚ÂºÃ‚Â·t
-                    </button>
                     <button
                       onClick={() => setPaymentMethods({ ...paymentMethods, hospitalization: 'momo' })}
                       className={`px-4 py-2 rounded-lg font-medium transition-all ${
@@ -596,40 +566,46 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                     {loading ? (
                       <>
                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        <span>Ãƒâ€žÃ‚Âang xÃƒÂ¡Ã‚Â»Ã‚Â­ lÃƒÆ’Ã‚Â½...</span>
+                        <span>Đang xử lý...</span>
                       </>
                     ) : (
                       <>
-                        <FaMoneyBillWave /> Thanh ToÃƒÆ’Ã‚Â¡n {formatCurrency(bill.hospitalizationBill.amount)}
+                        <FaMoneyBillWave /> Thanh Toán {formatCurrency(bill.hospitalizationBill.amount)}
                       </>
                     )}
                   </button>
                 </div>
               )}
+              {isStillHospitalized && (
+                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-800">
+                    <FaClock className="inline mr-1" /> Chưa thể thanh toán khi đang nằm viện. Vui lòng đợi xuất viện.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
-
         <div className="mt-6 bg-gray-50 rounded-lg p-4">
           <div className="mb-4">
-            <h3 className="text-lg font-semibold text-gray-800 mb-3">TiÃƒÂ¡Ã‚ÂºÃ‚Â¿n Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢ thanh toÃƒÆ’Ã‚Â¡n</h3>
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">Tiến độ thanh toán</h3>
             <div className="flex justify-between text-sm mb-2">
-              <span>TÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¢ng tiÃƒÂ¡Ã‚ÂºÃ‚Â¿n Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢</span>
+              <span>Tổng tiến độ</span>
               <span className="font-semibold">{bill.totalAmount > 0 ? Math.round((bill.paidAmount / bill.totalAmount) * 100) : 0}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden mb-4">
               <div className="bg-gradient-to-r from-green-500 to-blue-500 h-4 rounded-full transition-all duration-300" style={{ width: `${bill.totalAmount > 0 ? (bill.paidAmount / bill.totalAmount) * 100 : 0}%` }} />
             </div>
             
-            {/* Chi tiÃƒÂ¡Ã‚ÂºÃ‚Â¿t tÃƒÂ¡Ã‚Â»Ã‚Â«ng loÃƒÂ¡Ã‚ÂºÃ‚Â¡i */}
+            {/* Chi tiết từng loại */}
             <div className="space-y-3">
-              {/* PhÃƒÆ’Ã‚Â­ khÃƒÆ’Ã‚Â¡m */}
+              {/* Phí khám */}
               {bill.consultationBill.amount > 0 && (
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <div className="flex items-center gap-2">
                       <FaStethoscope className="text-blue-600" />
-                      <span className="text-sm text-gray-700">PhÃƒÆ’Ã‚Â­ khÃƒÆ’Ã‚Â¡m bÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡nh</span>
+                      <span className="text-sm text-gray-700">Phí khám bệnh</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-600">
@@ -652,15 +628,14 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                   </div>
                 </div>
               )}
-
-              {/* Ãƒâ€žÃ‚ÂÃƒâ€ Ã‚Â¡n thuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc */}
+              {/* Đơn thuốc */}
               {bill.medicationBill.amount > 0 && bill.medicationBill.prescriptionIds && bill.medicationBill.prescriptionIds.length > 0 && (
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <div className="flex items-center gap-2">
                       <FaPills className="text-green-600" />
-                      <span className="text-sm text-gray-700">TiÃƒÂ¡Ã‚Â»Ã‚Ân thuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc</span>
-                      <span className="text-xs text-gray-500">({bill.medicationBill.prescriptionIds.length} Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â¡n)</span>
+                      <span className="text-sm text-gray-700">Tiền thuốc</span>
+                      <span className="text-xs text-gray-500">({bill.medicationBill.prescriptionIds.length} đơn)</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-600">
@@ -701,7 +676,7 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                       }}
                     />
                   </div>
-                  {/* Chi tiÃƒÂ¡Ã‚ÂºÃ‚Â¿t tÃƒÂ¡Ã‚Â»Ã‚Â«ng Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â¡n thuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc */}
+                  {/* Chi tiết từng đơn thuốc */}
                   <div className="mt-2 ml-4 space-y-1">
                     {bill.medicationBill.prescriptionIds.map((prescription, idx) => {
                       const prescriptionPayment = bill.medicationBill.prescriptionPayments?.find(
@@ -711,8 +686,8 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                       return (
                         <div key={prescription._id || idx} className="flex justify-between items-center text-xs">
                           <span className="text-gray-600">
-                            Ãƒâ€žÃ‚ÂÃƒÂ¡Ã‚Â»Ã‚Â£t {prescription.prescriptionOrder || idx + 1}
-                            {prescription.isHospitalization && ' (NÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢i trÃƒÆ’Ã‚Âº)'}
+                            Đợt {prescription.prescriptionOrder || idx + 1}
+                            {prescription.isHospitalization && ' (Nội trú)'}
                           </span>
                           <div className="flex items-center gap-1">
                             <span className="text-gray-500">
@@ -730,14 +705,13 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                   </div>
                 </div>
               )}
-
-              {/* PhÃƒÆ’Ã‚Â­ nÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢i trÃƒÆ’Ã‚Âº */}
+              {/* Phí nội trú */}
               {bill.hospitalizationBill.amount > 0 && (
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <div className="flex items-center gap-2">
                       <FaBed className="text-purple-600" />
-                      <span className="text-sm text-gray-700">PhÃƒÆ’Ã‚Â­ nÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢i trÃƒÆ’Ã‚Âº</span>
+                      <span className="text-sm text-gray-700">Phí nội trú</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-600">
@@ -764,7 +738,6 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
           </div>
         </div>
       </div>
-
       {/* PayPal Modal */}
       {showPayPalModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -777,17 +750,16 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
             </button>
             
             <div className="mb-4">
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Thanh toÃƒÆ’Ã‚Â¡n PayPal</h3>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">Thanh toán PayPal</h3>
               <p className="text-gray-600">
-                SÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœ tiÃƒÂ¡Ã‚Â»Ã‚Ân: <span className="font-semibold text-blue-600">{formatCurrency(payPalConfig.amount)}</span>
+                Số tiền: <span className="font-semibold text-blue-600">{formatCurrency(payPalConfig.amount)}</span>
               </p>
               <p className="text-sm text-gray-500 mt-1">
-                {payPalConfig.type === 'consultation' && 'PhÃƒÆ’Ã‚Â­ KhÃƒÆ’Ã‚Â¡m BÃƒÂ¡Ã‚Â»Ã¢â‚¬Â¡nh'}
-                {payPalConfig.type === 'prescription' && 'Ãƒâ€žÃ‚ÂÃƒâ€ Ã‚Â¡n ThuÃƒÂ¡Ã‚Â»Ã¢â‚¬Ëœc'}
-                {payPalConfig.type === 'hospitalization' && 'PhÃƒÆ’Ã‚Â­ NÃƒÂ¡Ã‚Â»Ã¢â€žÂ¢i TrÃƒÆ’Ã‚Âº'}
+                {payPalConfig.type === 'consultation' && 'Phí Khám Bệnh'}
+                {payPalConfig.type === 'prescription' && 'Đơn Thuốc'}
+                {payPalConfig.type === 'hospitalization' && 'Phí Nội Trú'}
               </p>
             </div>
-
             <div className="border-t pt-4">
               {payPalConfig.type === 'prescription' ? (
                 <PayPalButton
@@ -832,5 +804,4 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
     </div>
   );
 };
-
 export default UserBilling;

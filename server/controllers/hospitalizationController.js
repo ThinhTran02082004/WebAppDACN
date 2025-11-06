@@ -318,7 +318,7 @@ exports.dischargePatient = asyncHandler(async (req, res) => {
       await appointment.save({ session });
     }
     
-    // Update Bill with hospitalization cost
+    // Update Bill with hospitalization cost (finalize amount for payment after discharge)
     const Bill = require('../models/Bill');
     let bill = await Bill.findOne({ appointmentId: hospitalization.appointmentId }).session(session);
     
@@ -458,12 +458,31 @@ exports.getHospitalizationByAppointment = asyncHandler(async (req, res) => {
     });
   }
 
-  // Calculate current duration and cost if not discharged
+  // Calculate current duration/cost (current room) and cumulative totals if not discharged
   let currentInfo = null;
   if (hospitalization.status !== 'discharged') {
+    const history = hospitalization.roomHistory || [];
+    const latestEntry = history.length > 0 ? history[history.length - 1] : null;
+
+    const now = new Date();
+    const currentRoomStart = latestEntry?.checkInTime ? new Date(latestEntry.checkInTime) : new Date(hospitalization.admissionDate);
+    const currentRate = latestEntry?.hourlyRate || hospitalization.hourlyRate || 0;
+
+    const currentRoomHours = Math.max(0, Math.ceil((now - currentRoomStart) / (1000 * 60 * 60)));
+    const currentRoomCost = currentRoomHours * currentRate;
+
+    const finalizedEntries = history.filter(e => !!e.checkOutTime);
+    const finalizedHours = finalizedEntries.reduce((s, e) => s + (e.hours || 0), 0);
+    const finalizedAmount = finalizedEntries.reduce((s, e) => s + (e.amount || 0), 0);
+
     currentInfo = {
-      currentHours: hospitalization.getCurrentDuration(),
-      currentCost: hospitalization.getCurrentCost()
+      currentHours: currentRoomHours, // backward compatibility
+      currentCost: currentRoomCost,   // backward compatibility
+      currentRoomStart,
+      currentRoomHours,
+      currentRoomCost,
+      totalSoFarHours: finalizedHours + currentRoomHours,
+      totalSoFarAmount: finalizedAmount + currentRoomCost
     };
   }
 
@@ -550,12 +569,31 @@ exports.getHospitalizationDetails = asyncHandler(async (req, res) => {
     });
   }
 
-  // Calculate current info if not discharged
+  // Calculate current info if not discharged (current room + cumulative totals)
   let currentInfo = null;
   if (hospitalization.status !== 'discharged') {
+    const history = hospitalization.roomHistory || [];
+    const latestEntry = history.length > 0 ? history[history.length - 1] : null;
+
+    const now = new Date();
+    const currentRoomStart = latestEntry?.checkInTime ? new Date(latestEntry.checkInTime) : new Date(hospitalization.admissionDate);
+    const currentRate = latestEntry?.hourlyRate || hospitalization.hourlyRate || 0;
+
+    const currentRoomHours = Math.max(0, Math.ceil((now - currentRoomStart) / (1000 * 60 * 60)));
+    const currentRoomCost = currentRoomHours * currentRate;
+
+    const finalizedEntries = history.filter(e => !!e.checkOutTime);
+    const finalizedHours = finalizedEntries.reduce((s, e) => s + (e.hours || 0), 0);
+    const finalizedAmount = finalizedEntries.reduce((s, e) => s + (e.amount || 0), 0);
+
     currentInfo = {
-      currentHours: hospitalization.getCurrentDuration(),
-      currentCost: hospitalization.getCurrentCost()
+      currentHours: currentRoomHours,
+      currentCost: currentRoomCost,
+      currentRoomStart,
+      currentRoomHours,
+      currentRoomCost,
+      totalSoFarHours: finalizedHours + currentRoomHours,
+      totalSoFarAmount: finalizedAmount + currentRoomCost
     };
   }
 

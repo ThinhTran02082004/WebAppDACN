@@ -56,7 +56,17 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
       if (response.data.data) {
         setHospitalization(response.data.data);
-        setCurrentInfo(response.data.data.currentInfo);
+        const srv = response.data.data.currentInfo || {};
+        const calc = computeCurrentRoomAndTotals(response.data.data);
+        setCurrentInfo({
+          currentHours: srv.currentHours ?? calc.currentRoomHours,
+          currentCost: srv.currentCost ?? calc.currentRoomCost,
+          currentRoomStart: srv.currentRoomStart ?? calc.currentRoomStart,
+          currentRoomHours: srv.currentRoomHours ?? calc.currentRoomHours,
+          currentRoomCost: srv.currentRoomCost ?? calc.currentRoomCost,
+          totalSoFarHours: srv.totalSoFarHours ?? calc.totalSoFarHours,
+          totalSoFarAmount: srv.totalSoFarAmount ?? calc.totalSoFarAmount
+        });
       }
     } catch (error) {
       console.error('Error fetching hospitalization:', error);
@@ -135,7 +145,16 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
       toast.success('Chuyển phòng thành công');
       setHospitalization(response.data.data);
-      setCurrentInfo(response.data.data.currentInfo);
+      const calc = computeCurrentRoomAndTotals(response.data.data);
+      setCurrentInfo({
+        currentHours: calc.currentRoomHours,
+        currentCost: calc.currentRoomCost,
+        currentRoomStart: calc.currentRoomStart,
+        currentRoomHours: calc.currentRoomHours,
+        currentRoomCost: calc.currentRoomCost,
+        totalSoFarHours: calc.totalSoFarHours,
+        totalSoFarAmount: calc.totalSoFarAmount
+      });
       setShowTransferForm(false);
       setTransferForm({ newRoomId: '', reason: '' });
 
@@ -184,6 +203,27 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
   const formatDateTime = (date) => {
     return new Date(date).toLocaleString('vi-VN');
+  };
+
+  // Compute current room timing/cost and cumulative totals from roomHistory
+  const computeCurrentRoomAndTotals = (hosp) => {
+    const history = hosp?.roomHistory || [];
+    const latest = history.length > 0 ? history[history.length - 1] : null;
+    const now = new Date();
+    const start = latest?.checkInTime ? new Date(latest.checkInTime) : new Date(hosp.admissionDate);
+    const rate = latest?.hourlyRate || hosp.hourlyRate || 0;
+    const currentHours = Math.max(0, Math.ceil((now - start) / (1000 * 60 * 60)));
+    const currentCost = currentHours * rate;
+    const finalized = history.filter(e => !!e.checkOutTime);
+    const finalizedHours = finalized.reduce((s, e) => s + (e.hours || 0), 0);
+    const finalizedAmount = finalized.reduce((s, e) => s + (e.amount || 0), 0);
+    return {
+      currentRoomStart: start,
+      currentRoomHours: currentHours,
+      currentRoomCost: currentCost,
+      totalSoFarHours: finalizedHours + currentHours,
+      totalSoFarAmount: finalizedAmount + currentCost
+    };
   };
 
   const getRoomTypeLabel = (type) => {
@@ -332,10 +372,10 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
           ) : (
             <>
               <p className="text-sm">
-                <strong>Nhập viện:</strong> {formatDateTime(hospitalization.admissionDate)}
+                <strong>Vào phòng hiện tại:</strong> {formatDateTime(currentInfo?.currentRoomStart || hospitalization.admissionDate)}
               </p>
               <p className="text-lg font-bold text-blue-600 mt-2">
-                {currentInfo?.currentHours || 0} giờ (đang cập nhật...)
+                {currentInfo?.currentRoomHours ?? currentInfo?.currentHours ?? 0} giờ (đang cập nhật...)
               </p>
             </>
           )}
@@ -352,9 +392,18 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
             </p>
           ) : (
             <>
-              <p className="text-2xl font-bold text-yellow-600">
-                {formatCurrency(currentInfo?.currentCost || 0)}
-              </p>
+              <div className="mb-1">
+                <p className="text-xs text-gray-500">Chi phí phòng hiện tại</p>
+                <p className="text-xl font-bold text-yellow-600">
+                  {formatCurrency(currentInfo?.currentRoomCost ?? currentInfo?.currentCost ?? 0)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Tổng nội trú (tạm tính)</p>
+                <p className="text-xl font-bold text-purple-600">
+                  {formatCurrency(currentInfo?.totalSoFarAmount ?? (currentInfo?.currentCost || 0))}
+                </p>
+              </div>
               <p className="text-xs text-gray-500 mt-1">(Dự tính, cập nhật tự động)</p>
             </>
           )}

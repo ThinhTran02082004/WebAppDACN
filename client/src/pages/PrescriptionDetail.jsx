@@ -18,7 +18,7 @@ const PrescriptionDetail = () => {
   const [bill, setBill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentMethod, setPaymentMethod] = useState('momo'); // Default to momo instead of cash
   const [processingPayment, setProcessingPayment] = useState(false);
   const [showPayPalModal, setShowPayPalModal] = useState(false);
 
@@ -463,16 +463,6 @@ const PrescriptionDetail = () => {
                   {appointment?.status !== 'hospitalized' && (
                     <div className="space-y-3">
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setPaymentMethod('cash')}
-                          className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                            paymentMethod === 'cash'
-                              ? 'bg-green-600 text-white shadow-md'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          <FaWallet className="inline mr-2" /> Tiền mặt
-                        </button>
                         <button
                           onClick={() => setPaymentMethod('momo')}
                           className={`px-4 py-2 rounded-lg font-medium transition-all ${

@@ -428,7 +428,7 @@ const AppointmentDetail = () => {
               </>
             )}
             
-            {appointment.status === 'confirmed' && (
+            {(appointment.status === 'confirmed' || appointment.status === 'hospitalized') && (
               <>
                 <button 
                   className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
@@ -436,13 +436,15 @@ const AppointmentDetail = () => {
                 >
                   <FaNotesMedical className="mr-1.5" /> Kê Đơn Thuốc
                 </button>
-                <button 
-                  className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
-                  onClick={() => handleStatusChange('completed')}
-                  disabled={isUpdating}
-                >
-                  <FaClipboardCheck className="mr-1.5" /> Hoàn Thành Khám
-                </button>
+                {appointment.status === 'confirmed' && (
+                  <button 
+                    className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
+                    onClick={() => handleStatusChange('completed')}
+                    disabled={isUpdating}
+                  >
+                    <FaClipboardCheck className="mr-1.5" /> Hoàn Thành Khám
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -786,7 +788,7 @@ const AppointmentDetail = () => {
                       <div className="text-center py-8">
                         <FaNotesMedical className="mx-auto text-5xl text-gray-300 mb-4" />
                         <p className="text-gray-500 mb-4">Chưa có đơn thuốc nào được kê</p>
-                        {appointment.status === 'confirmed' && (
+                        {(appointment.status === 'confirmed' || appointment.status === 'hospitalized') && (
                           <button
                             onClick={() => setShowPrescriptionForm(true)}
                             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -816,7 +818,6 @@ const AppointmentDetail = () => {
             {activeTab === 'billing' && (
               <DoctorBilling
                 appointmentId={appointment._id}
-                initialBill={appointment.bill}
               />
             )}
           </div>
