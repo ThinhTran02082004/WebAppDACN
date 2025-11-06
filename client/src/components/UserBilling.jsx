@@ -54,15 +54,16 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
   };
   // Helper flags and displayed totals (hide inpatient amount until discharge)
   const isStillHospitalized = appointment?.status === 'hospitalized' || (hospitalizationData && hospitalizationData.status !== 'discharged');
+  const hospitalizationAmount = bill?.hospitalizationBill?.amount || 0;
   const displayedConsultation = bill?.consultationBill?.amount || 0;
   const displayedMedication = bill?.medicationBill?.amount || 0;
-  const displayedHospitalization = isStillHospitalized ? 0 : (bill?.hospitalizationBill?.amount || 0);
-  const displayedTotalAmount = displayedConsultation + displayedMedication + displayedHospitalization;
-  const displayedPaidAmount = 
+  const displayedTotalAmount = displayedConsultation + displayedMedication + hospitalizationAmount;
+  const displayedPaidAmount =
     (bill?.consultationBill?.status === 'paid' ? displayedConsultation : 0) +
     (bill?.medicationBill?.status === 'paid' ? displayedMedication : 0) +
-    (bill?.hospitalizationBill?.status === 'paid' ? displayedHospitalization : 0);
+    (bill?.hospitalizationBill?.status === 'paid' ? hospitalizationAmount : 0);
   const displayedRemainingAmount = displayedTotalAmount - displayedPaidAmount;
+  const totalAmountLabel = isStillHospitalized ? 'Tổng tạm tính' : 'Tổng hóa đơn';
   const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
   const getStatusBadge = (status) => {
     if (status === 'paid') return (
@@ -215,8 +216,11 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           <div className="bg-white rounded-lg p-4 shadow-sm">
-            <p className="text-sm text-gray-600">Tổng hóa đơn</p>
+            <p className="text-sm text-gray-600">{totalAmountLabel}</p>
             <p className="text-2xl font-bold text-blue-600">{formatCurrency(displayedTotalAmount)}</p>
+            {isStillHospitalized && (
+              <p className="text-xs text-gray-500 mt-1">Số tiền tạm tính, sẽ chốt khi xuất viện</p>
+            )}
           </div>
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <p className="text-sm text-gray-600">Đã thanh toán</p>
@@ -466,11 +470,11 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                 <div>
                   {isStillHospitalized ? (
                     <>
-                      <p className="text-3xl font-bold text-purple-600">Tạm tính</p>
-                      <p className="text-sm text-gray-500 mt-1">Sẽ chốt khi xuất viện</p>
+                      <p className="text-3xl font-bold text-purple-600">{formatCurrency(hospitalizationAmount)}</p>
+                      <p className="text-sm text-gray-500 mt-1">Số tiền tạm tính, sẽ chốt khi xuất viện</p>
                     </>
                   ) : (
-                    <p className="text-3xl font-bold text-purple-600">{formatCurrency(bill.hospitalizationBill.amount)}</p>
+                    <p className="text-3xl font-bold text-purple-600">{formatCurrency(hospitalizationAmount)}</p>
                   )}
                   {bill.hospitalizationBill.status === 'paid' && bill.hospitalizationBill.paymentDate && (
                     <p className="text-sm text-gray-500 mt-1">

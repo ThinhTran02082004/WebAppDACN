@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
 import { toast } from 'react-toastify';
 import { FaBed, FaExchangeAlt, FaSignOutAlt, FaClock, FaMoneyBillWave } from 'react-icons/fa';
@@ -90,15 +90,17 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
   const updateCurrentCost = () => {
     if (hospitalization && hospitalization.status !== 'discharged') {
-      const admissionDate = new Date(hospitalization.admissionDate);
-      const now = new Date();
-      const hours = Math.ceil((now - admissionDate) / (1000 * 60 * 60));
-      const cost = hours * hospitalization.hourlyRate;
-
-      setCurrentInfo({
-        currentHours: hours,
-        currentCost: cost
-      });
+      const calc = computeCurrentRoomAndTotals(hospitalization);
+      setCurrentInfo((prev) => ({
+        ...prev,
+        currentHours: calc.currentRoomHours,
+        currentCost: calc.currentRoomCost,
+        currentRoomStart: calc.currentRoomStart,
+        currentRoomHours: calc.currentRoomHours,
+        currentRoomCost: calc.currentRoomCost,
+        totalSoFarHours: calc.totalSoFarHours,
+        totalSoFarAmount: calc.totalSoFarAmount
+      }));
     }
   };
 
@@ -225,6 +227,17 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
       totalSoFarAmount: finalizedAmount + currentCost
     };
   };
+
+  const costSummary = useMemo(() => {
+    if (!hospitalization) {
+      return { currentRoomCost: 0, totalSoFarAmount: 0 };
+    }
+    const computed = computeCurrentRoomAndTotals(hospitalization);
+    return {
+      currentRoomCost: currentInfo?.currentRoomCost ?? currentInfo?.currentCost ?? computed.currentRoomCost,
+      totalSoFarAmount: currentInfo?.totalSoFarAmount ?? computed.totalSoFarAmount
+    };
+  }, [hospitalization, currentInfo]);
 
   const getRoomTypeLabel = (type) => {
     const labels = { standard: 'Tiêu chuẩn', vip: 'VIP', icu: 'ICU' };
@@ -395,13 +408,13 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
               <div className="mb-1">
                 <p className="text-xs text-gray-500">Chi phí phòng hiện tại</p>
                 <p className="text-xl font-bold text-yellow-600">
-                  {formatCurrency(currentInfo?.currentRoomCost ?? currentInfo?.currentCost ?? 0)}
+                  {formatCurrency(costSummary.currentRoomCost)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-gray-500">Tổng nội trú (tạm tính)</p>
                 <p className="text-xl font-bold text-purple-600">
-                  {formatCurrency(currentInfo?.totalSoFarAmount ?? (currentInfo?.currentCost || 0))}
+                  {formatCurrency(costSummary.totalSoFarAmount)}
                 </p>
               </div>
               <p className="text-xs text-gray-500 mt-1">(Dự tính, cập nhật tự động)</p>
@@ -566,7 +579,7 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
               <div className="bg-yellow-50 p-4 rounded-lg mb-4">
                 <p className="text-sm font-medium">Chi phí nội trú dự tính:</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {formatCurrency(currentInfo?.currentCost || hospitalization.totalAmount)}
+                  {formatCurrency(costSummary.totalSoFarAmount)}
                 </p>
               </div>
 
@@ -608,4 +621,3 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 };
 
 export default HospitalizationManager;
-

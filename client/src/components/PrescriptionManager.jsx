@@ -13,6 +13,7 @@ const PrescriptionManager = ({ appointmentId, patientId, onPrescriptionCreated }
   const [notes, setNotes] = useState('');
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
+  const [templateSearch, setTemplateSearch] = useState('');
   const [appointment, setAppointment] = useState(null);
   const [existingPrescriptions, setExistingPrescriptions] = useState([]);
 
@@ -37,18 +38,27 @@ const PrescriptionManager = ({ appointmentId, patientId, onPrescriptionCreated }
   }, [appointmentId]);
 
   useEffect(() => {
-    // Fetch medications after appointment is loaded so we can filter by hospitalId
-    if (appointment?.hospitalId || !appointmentId) {
+    // Fetch medications after appointment data is available so we can filter by branch
+    const hospitalId = appointment?.hospitalId?._id || appointment?.hospitalId;
+    if (hospitalId || !appointmentId) {
       fetchMedications();
     }
-  }, [appointment?.hospitalId]);
-
+  }, [appointment?.hospitalId?._id, appointment?.doctorId?.hospitalId?._id]);
   const fetchMedications = async () => {
     try {
-      // Get hospitalId from appointment if available
+      // Determine hospital/branch from appointment and ensure doctor belongs to that branch
+      const appointmentHospitalId = appointment?.hospitalId?._id || appointment?.hospitalId;
+      const doctorHospitalId = appointment?.doctorId?.hospitalId?._id || appointment?.doctorId?.hospitalId;
+
+      if (appointmentHospitalId && doctorHospitalId && doctorHospitalId !== appointmentHospitalId) {
+        toast.warning('Bac si khong thuoc chi nhanh nay. Vui long kiem tra lich hen.');
+        setMedications([]);
+        return;
+      }
+
       const params = { limit: 1000 };
-      if (appointment?.hospitalId) {
-        params.hospitalId = appointment.hospitalId;
+      if (appointmentHospitalId) {
+        params.hospitalId = appointmentHospitalId;
       }
       
       const response = await api.get('/medications', { params });
@@ -57,10 +67,31 @@ const PrescriptionManager = ({ appointmentId, patientId, onPrescriptionCreated }
         response?.data?.data ??
         response?.data ??
         [];
-      setMedications(Array.isArray(list) ? list.filter(m => m.stockQuantity > 0) : []);
+
+      const normalizeId = (value) => {
+        if (!value) return null;
+        if (typeof value === 'string') return value;
+        if (typeof value === 'object') {
+          if (value._id) return value._id;
+          if (typeof value.toString === 'function') return value.toString();
+        }
+        return null;
+      };
+
+      const filteredMedications = Array.isArray(list)
+        ? list.filter((med) => {
+            if (!med) return false;
+            if (med.stockQuantity <= 0) return false;
+            if (!appointmentHospitalId) return true;
+            const medHospitalId = normalizeId(med.hospitalId);
+            return medHospitalId === appointmentHospitalId;
+          })
+        : [];
+
+      setMedications(filteredMedications);
     } catch (error) {
       console.error('Error fetching medications:', error);
-      toast.error('Không thể tải danh sách thuốc');
+      toast.error('Khong the tai danh sach thuoc');
     }
   };
 
@@ -689,24 +720,61 @@ const PrescriptionManager = ({ appointmentId, patientId, onPrescriptionCreated }
 
         {/* Template Tab */}
         {activeTab === 'template' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {templates.map((template) => (
-              <div key={template._id} className="border rounded-lg p-4 hover:shadow-lg transition-shadow">
-                <h3 className="font-semibold text-lg mb-2">{template.name}</h3>
-                <p className="text-sm text-gray-600 mb-2">
-                  {template.diseaseType && `Bệnh: ${template.diseaseType}`}
+          <div className="space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-lg text-gray-800">Đơn thuốc mẫu</h3>
+                <p className="text-sm text-gray-500">
+                  Tìm kiếm theo tên để nhanh chóng chọn đơn phù hợp với bệnh nhân.
                 </p>
-                <p className="text-sm text-gray-500 mb-3">
-                  {template.medications?.length} thuốc | {formatCurrency(template.totalPrice)}
-                </p>
-                <button
-                  onClick={() => handleUseTemplate(template)}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  Sử Dụng Đơn Này
-                </button>
               </div>
-            ))}
+              <div className="relative md:w-64">
+                <input
+                  type="text"
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                  className="w-full px-4 py-2 border rounded-lg pr-10"
+                  placeholder="Tìm đơn mẫu..."
+                />
+                <svg
+                  className="w-5 h-5 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"
+                  />
+                </svg>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {templates
+                .filter((template) =>
+                  template.name.toLowerCase().includes(templateSearch.trim().toLowerCase())
+                )
+                .map((template) => (
+                  <div key={template._id} className="border rounded-lg p-4 hover:shadow-lg transition-shadow">
+                    <h3 className="font-semibold text-lg mb-2">{template.name}</h3>
+                    <p className="text-sm text-gray-600 mb-2">
+                      {template.diseaseType && `Bệnh: ${template.diseaseType}`}
+                    </p>
+                    <p className="text-sm text-gray-500 mb-3">
+                      {template.medications?.length} thuốc | {formatCurrency(template.totalPrice)}
+                    </p>
+                    <button
+                      onClick={() => handleUseTemplate(template)}
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      Sử Dụng Đơn Này
+                    </button>
+                  </div>
+                ))}
+            </div>
           </div>
         )}
 
@@ -788,4 +856,3 @@ const PrescriptionManager = ({ appointmentId, patientId, onPrescriptionCreated }
 };
 
 export default PrescriptionManager;
-
