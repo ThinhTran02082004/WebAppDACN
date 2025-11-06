@@ -3,7 +3,7 @@ const asyncHandler = require('../middlewares/async');
 
 // List all inpatient rooms
 exports.listRooms = asyncHandler(async (req, res) => {
-  const { type, floor, status, available, page = 1, limit = 50 } = req.query;
+  const { type, floor, status, available, hospitalId, page = 1, limit = 50 } = req.query;
 
   const query = { isActive: true };
 
@@ -17,6 +17,10 @@ exports.listRooms = asyncHandler(async (req, res) => {
 
   if (status) {
     query.status = status;
+  }
+
+  if (hospitalId) {
+    query.hospitalId = hospitalId;
   }
 
   // Filter by availability
@@ -358,4 +362,3 @@ exports.getRoomStatistics = asyncHandler(async (req, res) => {
     }
   });
 });
-

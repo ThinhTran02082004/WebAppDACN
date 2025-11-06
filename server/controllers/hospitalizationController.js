@@ -66,6 +66,10 @@ exports.assignInpatientRoom = asyncHandler(async (req, res) => {
       throw new Error('Phòng không khả dụng hoặc đã đầy');
     }
 
+    if (appointment.hospitalId && room.hospitalId.toString() !== appointment.hospitalId.toString()) {
+      throw new Error('Phong khong thuoc chi nhanh cua lich hen');
+    }
+
     await room.occupy(1);
 
     // Create hospitalization record
@@ -166,6 +170,16 @@ exports.transferRoom = asyncHandler(async (req, res) => {
       throw new Error('Phòng mới không khả dụng');
     }
 
+
+    const appointmentDoc = await Appointment.findById(hospitalization.appointmentId).session(session);
+    if (!appointmentDoc) {
+      throw new Error('Khong tim thay lich hen lien quan');
+    }
+
+    if (appointmentDoc.hospitalId && newRoom.hospitalId.toString() !== appointmentDoc.hospitalId.toString()) {
+      throw new Error('Phong moi khong thuoc chi nhanh cua lich hen');
+    }
+
     // Release old room
     if (oldRoom) {
       await oldRoom.release(1);
@@ -183,17 +197,16 @@ exports.transferRoom = asyncHandler(async (req, res) => {
     
     // Update Bill with current hospitalization cost (even if not discharged yet)
     const Bill = require('../models/Bill');
-    const appointment = await Appointment.findById(hospitalization.appointmentId).session(session);
-    if (appointment) {
-      let bill = await Bill.findOne({ appointmentId: appointment._id }).session(session);
+    if (appointmentDoc) {
+      let bill = await Bill.findOne({ appointmentId: appointmentDoc._id }).session(session);
       
       if (!bill) {
         // Create bill if not exists
         bill = await Bill.create([{
-          appointmentId: appointment._id,
-          patientId: appointment.patientId,
+          appointmentId: appointmentDoc._id,
+          patientId: appointmentDoc.patientId,
           consultationBill: {
-            amount: appointment.fee?.totalAmount || 0,
+            amount: appointmentDoc.fee?.totalAmount || 0,
             status: 'pending'
           },
           hospitalizationBill: {
@@ -398,11 +411,31 @@ exports.dischargePatient = asyncHandler(async (req, res) => {
 
 // Get available rooms
 exports.getAvailableRooms = asyncHandler(async (req, res) => {
-  const { type, floor } = req.query;
+  const { type, floor, hospitalId: hospitalIdQuery } = req.query;
+
+  let hospitalId = hospitalIdQuery;
+
+  if (!hospitalId && req.user) {
+    const role = req.user.roleType || req.user.role;
+    if (role === 'doctor') {
+      const doctor = await Doctor.findOne({ user: req.user.id }).select('hospitalId');
+      hospitalId = doctor?.hospitalId;
+    } else if (role === 'admin' && req.user.hospitalId) {
+      hospitalId = req.user.hospitalId;
+    }
+  }
+
+  if (!hospitalId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Chi nhanh benh vien la bat buoc'
+    });
+  }
 
   const query = {
     isActive: true,
-    status: 'available', // Chỉ lấy phòng có status available
+    status: 'available',
+    hospitalId,
     $expr: { $lt: ['$currentOccupancy', '$capacity'] }
   };
 
@@ -424,7 +457,6 @@ exports.getAvailableRooms = asyncHandler(async (req, res) => {
     count: rooms.length
   });
 });
-
 // Get hospitalization by appointment
 exports.getHospitalizationByAppointment = asyncHandler(async (req, res) => {
   const { appointmentId } = req.params;
@@ -605,4 +637,5 @@ exports.getHospitalizationDetails = asyncHandler(async (req, res) => {
     }
   });
 });
+
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
 import { toast } from 'react-toastify';
-import { FaBed, FaExchangeAlt, FaSignOutAlt, FaClock, FaMoneyBillWave } from 'react-icons/fa';
+import { FaBed, FaExchangeAlt, FaSignOutAlt, FaClock, FaMoneyBillWave, FaCheck } from 'react-icons/fa';
 
 const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
   const [hospitalization, setHospitalization] = useState(null);
@@ -28,10 +28,19 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
   const [currentInfo, setCurrentInfo] = useState(null);
   const [autoUpdateInterval, setAutoUpdateInterval] = useState(null);
+  const [appointmentDetails, setAppointmentDetails] = useState(null);
+  const [roomSearch, setRoomSearch] = useState('');
+  const [showDischargeConfirm, setShowDischargeConfirm] = useState(false);
+
+  const appointmentHospitalId = useMemo(() => {
+    if (!appointmentDetails) return null;
+    return appointmentDetails.hospitalId?._id || appointmentDetails.hospitalId || null;
+  }, [appointmentDetails]);
 
   useEffect(() => {
     if (appointmentId) {
       fetchHospitalization();
+      fetchAppointmentDetails();
     }
   }, [appointmentId]);
 
@@ -79,14 +88,64 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
   const fetchAvailableRooms = async (type = '') => {
     try {
-      const params = {};
+      let hospitalIdToUse = appointmentHospitalId;
+
+      if (!hospitalIdToUse) {
+        const latestAppointment = await fetchAppointmentDetails();
+        hospitalIdToUse = latestAppointment?.hospitalId?._id || latestAppointment?.hospitalId || null;
+      }
+
+      if (!hospitalIdToUse) {
+        toast.error('Khong xac dinh duoc chi nhanh benh vien cua lich hen');
+        return;
+      }
+
+      const params = { hospitalId: hospitalIdToUse };
       if (type) params.type = type;
       const response = await api.get('/hospitalizations/available-rooms', { params });
-      setAvailableRooms(response.data.data);
+      const rooms = response?.data?.data ?? [];
+      setAvailableRooms(Array.isArray(rooms) ? rooms : []);
     } catch (error) {
-      toast.error('Không thể tải danh sách phòng trống');
+      console.error('Error fetching available rooms:', error);
+      toast.error('Khong the tai danh sach phong trong');
     }
   };
+
+  const fetchAppointmentDetails = async () => {
+    try {
+      const response = await api.get(`/appointments/${appointmentId}`);
+      if (response.data?.success) {
+        setAppointmentDetails(response.data.data);
+        return response.data.data;
+      }
+    } catch (error) {
+      console.error('Error fetching appointment for hospitalization manager:', error);
+      toast.error('Khong the tai thong tin lich hen');
+    }
+    return null;
+  };
+  const filteredTransferRooms = useMemo(() => {
+    const currentRoomId = hospitalization?.inpatientRoomId?._id || hospitalization?.inpatientRoomId;
+
+    return availableRooms
+      .filter((room) => {
+        if (!room || !currentRoomId) return !!room;
+        return room._id !== currentRoomId;
+      })
+      .filter((room) => {
+        if (!roomSearch.trim()) return true;
+        const term = roomSearch.trim().toLowerCase();
+        const candidates = [
+          room.roomNumber,
+          room.roomName,
+          getRoomTypeLabel(room.type),
+          room.hospitalId?.name
+        ];
+        return candidates.some((value) => value && value.toLowerCase().includes(term));
+      });
+  }, [availableRooms, hospitalization, roomSearch]);
+
+
 
   const updateCurrentCost = () => {
     if (hospitalization && hospitalization.status !== 'discharged') {
@@ -159,6 +218,7 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
       });
       setShowTransferForm(false);
       setTransferForm({ newRoomId: '', reason: '' });
+      setRoomSearch('');
 
       if (onUpdate) onUpdate();
 
@@ -239,10 +299,10 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
     };
   }, [hospitalization, currentInfo]);
 
-  const getRoomTypeLabel = (type) => {
+  function getRoomTypeLabel(type) {
     const labels = { standard: 'Tiêu chuẩn', vip: 'VIP', icu: 'ICU' };
     return labels[type] || type;
-  };
+  }
 
   // If not hospitalized yet
   if (!hospitalization) {
@@ -277,13 +337,19 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
                 required
               >
                 <option value="">Chọn phòng trống</option>
-                {availableRooms.map((room) => (
-                  <option key={room._id} value={room._id}>
-                    Phòng {room.roomNumber} - {getRoomTypeLabel(room.type)} 
-                    ({formatCurrency(room.hourlyRate)}/giờ) - Còn trống: {room.capacity - room.currentOccupancy}
-                  </option>
-                ))}
-              </select>
+                {availableRooms.map((room) => {
+                  const remaining = Math.max(0, (room.capacity || 0) - (room.currentOccupancy || 0));
+                  return (
+                    <option
+                      key={room._id}
+                      value={room._id}
+                      disabled={remaining <= 0}
+                    >
+                      Phong {room.roomNumber} - {getRoomTypeLabel(room.type)} ({formatCurrency(room.hourlyRate)}/gio) - Con {remaining}
+                    </option>
+                  );
+                })}
+                </select>
             </div>
 
             <div>
@@ -479,7 +545,7 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
       {hospitalization.status !== 'discharged' && (
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => { setShowTransferForm(true); fetchAvailableRooms(); }}
+            onClick={() => { setRoomSearch(''); setTransferForm({ newRoomId: '', reason: '' }); fetchAvailableRooms(); setShowTransferForm(true); }}
             className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center gap-2"
           >
             <FaExchangeAlt />
@@ -515,26 +581,110 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
       {/* Transfer Form Modal */}
       {showTransferForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-bold mb-4">Chuyển Phòng</h3>
-            <form onSubmit={handleTransferRoom} className="space-y-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full p-6 space-y-5">
+            <h3 className="text-2xl font-bold text-gray-800">Chuyển Phòng</h3>
+            <form onSubmit={handleTransferRoom} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Phòng mới *
                 </label>
-                <select
-                  value={transferForm.newRoomId}
-                  onChange={(e) => setTransferForm({ ...transferForm, newRoomId: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg"
-                  required
-                >
-                  <option value="">Chọn phòng trống</option>
-                  {availableRooms.map((room) => (
-                    <option key={room._id} value={room._id}>
-                      Phòng {room.roomNumber} - {getRoomTypeLabel(room.type)} ({formatCurrency(room.hourlyRate)}/giờ)
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  value={roomSearch}
+                  onChange={(e) => setRoomSearch(e.target.value)}
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Tìm theo số phòng, tên phòng, loại phòng..."
+                />
+                <p className="text-xs text-gray-500 mt-1">Không hiển thị phòng hiện tại. Chọn một phòng còn trống để chuyển.</p>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto">
+                {filteredTransferRooms.length === 0 ? (
+                  <div className="text-sm text-gray-500 text-center py-6 bg-gray-50 border border-dashed rounded-lg">
+                    Không tìm thấy phòng phù hợp.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {filteredTransferRooms.map((room) => {
+                      const remaining = Math.max(0, (room.capacity || 0) - (room.currentOccupancy || 0));
+                      const isSelected = transferForm.newRoomId === room._id;
+                      const disabled = remaining <= 0;
+                      return (
+                        <button
+                          type="button"
+                          key={room._id}
+                          onClick={() => !disabled && setTransferForm({ ...transferForm, newRoomId: room._id })}
+                          disabled={disabled}
+                          className={[
+                            'relative text-left border rounded-xl p-4 transition-all',
+                            disabled ? 'opacity-60 cursor-not-allowed bg-gray-50' : 'hover:border-blue-400 hover:shadow-md bg-white',
+                            isSelected ? 'border-blue-500 ring-2 ring-blue-200 bg-blue-50' : 'border-gray-200'
+                          ].join(' ')}
+                        >
+                          {isSelected && (
+                            <span className="absolute top-4 right-4 text-blue-600">
+                              <FaCheck />
+                            </span>
+                          )}
+                          <div className="font-semibold text-gray-800 text-lg">Phòng {room.roomNumber}</div>
+                          {room.roomName && (
+                            <div className="text-sm text-gray-500">{room.roomName}</div>
+                          )}
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600">
+                            <div>
+                              <span className="font-medium">Loại:</span> {getRoomTypeLabel(room.type)}
+                            </div>
+                            {room.floor && (
+                              <div>
+                                <span className="font-medium">Tầng:</span> {room.floor}
+                              </div>
+                            )}
+                            <div>
+                              <span className="font-medium">Sức chứa:</span> {room.currentOccupancy || 0}/{room.capacity || 0}
+                            </div>
+                            <div>
+                              <span className="font-medium">Còn trống:</span> {remaining}
+                            </div>
+                            <div className="col-span-2">
+                              <span className="font-medium">Giá/giờ:</span> {formatCurrency(room.hourlyRate)}
+                            </div>
+                            {room.hospitalId?.name && (
+                              <div className="col-span-2">
+                                <span className="font-medium">Bệnh viện:</span> {room.hospitalId.name}
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-3">
+                            <span
+                              className={[
+                                'inline-flex px-2 py-1 text-xs rounded-full',
+                                room.status === 'available'
+                                  ? 'bg-green-100 text-green-700'
+                                  : room.status === 'occupied'
+                                  ? 'bg-red-100 text-red-600'
+                                  : room.status === 'maintenance'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : room.status === 'cleaning'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              ].join(' ')}
+                            >
+                              {room.status === 'available'
+                                ? 'Khả dụng'
+                                : room.status === 'occupied'
+                                ? 'Đã đầy'
+                                : room.status === 'maintenance'
+                                ? 'Bảo trì'
+                                : room.status === 'cleaning'
+                                ? 'Vệ sinh'
+                                : room.status}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -546,29 +696,29 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
                   onChange={(e) => setTransferForm({ ...transferForm, reason: e.target.value })}
                   className="w-full px-4 py-2 border rounded-lg"
                   rows="3"
+                  placeholder="Ví dụ: Yêu cầu phòng riêng, cần thiết bị đặc biệt..."
                 />
               </div>
 
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowTransferForm(false)}
+                  onClick={() => { setShowTransferForm(false); setRoomSearch(''); }}
                   className="px-4 py-2 border rounded-lg hover:bg-gray-50"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+                  disabled={loading || !transferForm.newRoomId}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-60"
                 >
                   Chuyển Phòng
                 </button>
               </div>
             </form>
           </div>
-        </div>
-      )}
+        </div>      )}
 
       {/* Discharge Form Modal */}
       {showDischargeForm && (
@@ -621,3 +771,6 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 };
 
 export default HospitalizationManager;
+
+
+

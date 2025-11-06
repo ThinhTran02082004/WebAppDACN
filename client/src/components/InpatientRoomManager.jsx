@@ -15,7 +15,8 @@ const InpatientRoomManager = () => {
   const [filter, setFilter] = useState({
     type: '',
     floor: '',
-    status: ''
+    status: '',
+    hospitalId: ''
   });
 
   const [formData, setFormData] = useState({
@@ -80,6 +81,7 @@ const InpatientRoomManager = () => {
       if (filter.type) params.type = filter.type;
       if (filter.floor) params.floor = filter.floor;
       if (filter.status) params.status = filter.status;
+      if (filter.hospitalId) params.hospitalId = filter.hospitalId;
 
       const response = await api.get('/inpatient-rooms', { params });
       setRooms(response.data.data);
@@ -310,7 +312,20 @@ const InpatientRoomManager = () => {
           )}
 
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <select
+              value={filter.hospitalId}
+              onChange={(e) => setFilter({ ...filter, hospitalId: e.target.value })}
+              className="px-4 py-2 border rounded-lg"
+            >
+              <option value="">Tất cả bệnh viện</option>
+              {hospitals.map((hospital) => (
+                <option key={hospital._id || hospital.id} value={hospital._id || hospital.id}>
+                  {hospital.name}
+                </option>
+              ))}
+            </select>
+
             <select
               value={filter.type}
               onChange={(e) => setFilter({ ...filter, type: e.target.value })}
@@ -656,4 +671,3 @@ const InpatientRoomManager = () => {
 };
 
 export default InpatientRoomManager;
-

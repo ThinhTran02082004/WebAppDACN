@@ -347,7 +347,7 @@ exports.createConversation = async (req, res) => {
       } 
       // For doctors trying to chat with patients
       else if (userRole === 'doctor' && participant.roleType === 'user') {
-        const doctor = await Doctor.findOne({ user });
+        const doctor = await Doctor.findOne({ user: userId });
         if (!doctor) {
           return res.status(404).json({
             success: false,
