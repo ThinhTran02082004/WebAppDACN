@@ -107,12 +107,17 @@ const PayPalButton = ({
           try {
             // SDK trả về orderID (EC-XXX), nhưng server cần payment ID (PAY-XXX)
             // Gửi cả orderID và paymentId (đã lưu từ createOrder)
-            const response = await api.post('/payments/paypal/execute', {
+            const executePayload = {
               orderId: data.orderID || data.paymentID, // EC-XXX từ SDK
               paymentId: paymentIdRef.current, // PAY-XXX đã lưu khi create
               PayerID: data.payerID,
               billType // Pass billType to server
-            });
+            };
+            if (prescriptionId) {
+              executePayload.prescriptionId = prescriptionId;
+            }
+
+            const response = await api.post('/payments/paypal/execute', executePayload);
 
             if (!response.data.success) {
               throw new Error(response.data.message || 'Thanh toán PayPal thất bại');

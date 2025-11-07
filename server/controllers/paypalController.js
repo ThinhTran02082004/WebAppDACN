@@ -207,6 +207,23 @@ exports.createPaypalPayment = async (req, res) => {
           }
         }, 3600000);
       }
+
+      // Also index metadata by paymentId so execute step can recover context
+      if (!global.paypalPaymentMetadata) {
+        global.paypalPaymentMetadata = new Map();
+      }
+      global.paypalPaymentMetadata.set(paypalPayment.id, {
+        paymentId: paypalPayment.id,
+        appointmentId,
+        billType,
+        prescriptionId: prescriptionId || null,
+        approvalToken: approvalToken || null
+      });
+      setTimeout(() => {
+        if (global.paypalPaymentMetadata) {
+          global.paypalPaymentMetadata.delete(paypalPayment.id);
+        }
+      }, 3600000);
       
       // Return order ID (EC-XXX token) for SDK, payment ID and approvalUrl for redirect
       return res.status(200).json({
@@ -243,28 +260,37 @@ exports.executePaypalPayment = async (req, res) => {
     let actualPaymentId = paymentId;
     
     let mappingData = null;
-    if ((orderId && orderId.startsWith('EC-')) && !actualPaymentId) {
-      // Lookup payment ID từ mapping
+    if (orderId && orderId.startsWith('EC-')) {
+      // Lookup payment ID from mapping
       if (global.paypalTokenMapping && global.paypalTokenMapping.has(orderId)) {
         mappingData = global.paypalTokenMapping.get(orderId);
-        actualPaymentId = mappingData.paymentId || mappingData;
-        if (typeof mappingData === 'object') {
-          // Extract prescriptionId from mapping if not provided in body
-          if (!prescriptionId && mappingData.prescriptionId) {
-            prescriptionId = mappingData.prescriptionId;
-          }
-          if (!billType && mappingData.billType) {
-            billType = mappingData.billType;
-          }
+        if (!actualPaymentId) {
+          actualPaymentId = mappingData.paymentId || mappingData;
         }
-        console.log(`Đã map order ID ${orderId} → payment ID ${actualPaymentId}`);
-      } else {
-        // Nếu không tìm thấy mapping, thử dùng orderId trực tiếp (sẽ fail nhưng log rõ)
-        console.warn(`Không tìm thấy mapping cho order ID: ${orderId}`);
+        console.log(`Mapped order ID ${orderId} -> payment ID ${actualPaymentId}`);
+      } else if (!actualPaymentId) {
+        // No mapping found, fallback to using orderId directly (likely to fail but logs help)
+        console.warn(`No mapping found for order ID: ${orderId}`);
         actualPaymentId = orderId;
       }
     }
-    
+
+    // Fallback: Lookup metadata using paymentId when clients do not send orderId
+    if (!mappingData && actualPaymentId && global.paypalPaymentMetadata && global.paypalPaymentMetadata.has(actualPaymentId)) {
+      mappingData = global.paypalPaymentMetadata.get(actualPaymentId);
+      console.log(`Found metadata for payment ID ${actualPaymentId}`);
+    }
+
+    if (mappingData && typeof mappingData === 'object') {
+      // Extract prescriptionId from mapping if not provided in body
+      if (!prescriptionId && mappingData.prescriptionId) {
+        prescriptionId = mappingData.prescriptionId;
+      }
+      if (!billType && mappingData.billType) {
+        billType = mappingData.billType;
+      }
+    }
+
     console.log(`Xử lý thanh toán PayPal: ${actualPaymentId} với PayerID: ${PayerID}`);
     
     if (!actualPaymentId || !PayerID) {
@@ -505,6 +531,15 @@ exports.executePaypalPayment = async (req, res) => {
           } catch (e) {
             console.error('Failed to update Bill from PayPal execute:', e);
           }
+
+          // Clean cached mapping entries once payment is finalized
+          if (orderId && global.paypalTokenMapping) {
+            global.paypalTokenMapping.delete(orderId);
+          }
+          if (actualPaymentId && global.paypalPaymentMetadata) {
+            global.paypalPaymentMetadata.delete(actualPaymentId);
+          }
+
 
           return res.status(200).json({
             success: true,

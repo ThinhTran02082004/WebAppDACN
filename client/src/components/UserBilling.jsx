@@ -58,11 +58,23 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
   const displayedConsultation = bill?.consultationBill?.amount || 0;
   const displayedMedication = bill?.medicationBill?.amount || 0;
   const displayedTotalAmount = displayedConsultation + displayedMedication + hospitalizationAmount;
+  const medicationPaidAmount = (() => {
+    if (!bill?.medicationBill) return 0;
+    if (bill.medicationBill.status === 'paid') {
+      return displayedMedication;
+    }
+    if (bill.medicationBill.prescriptionPayments?.length) {
+      return bill.medicationBill.prescriptionPayments
+        .filter(payment => payment.status === 'paid')
+        .reduce((sum, payment) => sum + (payment.amount || 0), 0);
+    }
+    return 0;
+  })();
   const displayedPaidAmount =
     (bill?.consultationBill?.status === 'paid' ? displayedConsultation : 0) +
-    (bill?.medicationBill?.status === 'paid' ? displayedMedication : 0) +
+    medicationPaidAmount +
     (bill?.hospitalizationBill?.status === 'paid' ? hospitalizationAmount : 0);
-  const displayedRemainingAmount = displayedTotalAmount - displayedPaidAmount;
+  const displayedRemainingAmount = Math.max(displayedTotalAmount - displayedPaidAmount, 0);
   const totalAmountLabel = isStillHospitalized ? 'Tổng tạm tính' : 'Tổng hóa đơn';
   const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
   const getStatusBadge = (status) => {
