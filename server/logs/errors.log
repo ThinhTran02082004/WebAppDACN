@@ -1661,3 +1661,8 @@ Use mongoose.model(name, schema)
 [2025-11-07T14:56:52.858Z] [ERROR] GET /api/coupons/validate?code=SONDZ&serviceId=69076f0e17d2824ecc362b46&specialtyId=69076f0e17d2824ecc362b3d&totalAmount=800000 Error: Mã giảm giá này không áp dụng cho dịch vụ đã chọn
     at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:554:19
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[2025-11-07T16:38:42.353Z] [ERROR] POST /api/video-rooms/690e208f4e19bb2a202c473c/leave VersionError: No matching document found for id "690e208f4e19bb2a202c473c" version 1 modifiedPaths "participants, participants.0, participants.0.leftAt"
+    at generateVersionError (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\model.js:572:10)
+    at model.save (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\model.js:630:28)
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\videoRoomController.js:617:19
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

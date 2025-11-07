@@ -73,6 +73,7 @@ const DoctorMeetingHub = () => {
   const [activeTab, setActiveTab] = useState('active'); // active, ended
   const [activeVideoRoom, setActiveVideoRoom] = useState(null);
   const [copied, setCopied] = useState(null);
+  const [currentDoctorId, setCurrentDoctorId] = useState(null);
 
   // Hospitals
   const [hospitals, setHospitals] = useState([]);
@@ -157,7 +158,15 @@ const DoctorMeetingHub = () => {
         if (!mounted) return;
 
         if (profileResponse.data.success) {
-          const hospital = profileResponse.data.data?.hospital;
+          const doctorData = profileResponse.data.data;
+          
+          // Lưu doctor ID
+          if (doctorData?._id) {
+            const doctorId = doctorData._id.toString ? doctorData._id.toString() : doctorData._id;
+            setCurrentDoctorId(doctorId);
+          }
+          
+          const hospital = doctorData?.hospital;
           if (hospital) {
             const hospitalId = hospital._id ? hospital._id.toString() : null;
             const formattedHospital =
@@ -208,8 +217,8 @@ const DoctorMeetingHub = () => {
         if (includeMeetingForDoctor(normalized)) {
           upsertMeeting(normalized, { normalized: true });
           if (activeTab === 'active') {
-            const message = payload.message || `Cuộc họp mới: ${normalized.title}`;
-            toast.info(message);
+            const message = payload.message || `Cuộc họp nội bộ mới: "${normalized.title}"`;
+            toast.info(message, { autoClose: 6000 });
           }
           return;
         }
@@ -317,16 +326,23 @@ const DoctorMeetingHub = () => {
       });
 
       if (response.data.success) {
-        toast.success('Tạo cuộc họp thành công!');
+        const roomCode = response.data.data.roomCode;
+        const meetingTitle = response.data.data.title || 'Cuộc họp nội bộ';
+        
+        // Show success message with room code
+        toast.success(
+          <div>
+            <div className="font-semibold">Tạo cuộc họp nội bộ thành công!</div>
+            <div className="text-sm mt-1">Mã cuộc họp: <strong>{roomCode}</strong></div>
+          </div>,
+          { autoClose: 8000 }
+        );
+        
         setTitle('');
         setDescription('');
         setSelectedHospitals([]);
         setShowCreateForm(false);
         fetchMeetings();
-        
-        // Show room code
-        const roomCode = response.data.data.roomCode;
-        toast.info(`Mã cuộc họp: ${roomCode}`, { autoClose: 10000 });
       }
     } catch (error) {
       console.error('Error creating meeting:', error);
@@ -759,13 +775,30 @@ const DoctorMeetingHub = () => {
                           <FaVideo />
                           Tham gia
                         </button>
-                        <button
-                          onClick={() => handleEndMeeting(meeting._id)}
-                          className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md font-semibold transition-colors flex items-center gap-2"
-                        >
-                          <FaTimes />
-                          Kết thúc
-                        </button>
+                        {/* Chỉ hiển thị nút kết thúc cho người tạo cuộc họp */}
+                        {(() => {
+                          const createdById = meeting.createdBy?._id 
+                            ? (typeof meeting.createdBy._id === 'string' ? meeting.createdBy._id : meeting.createdBy._id.toString())
+                            : (typeof meeting.createdBy === 'string' ? meeting.createdBy : null);
+                          const organizerId = meeting.organizer?._id
+                            ? (typeof meeting.organizer._id === 'string' ? meeting.organizer._id : meeting.organizer._id.toString())
+                            : (typeof meeting.organizer === 'string' ? meeting.organizer : null);
+                          
+                          const isCreator = currentDoctorId && (
+                            (createdById && createdById === currentDoctorId) ||
+                            (organizerId && organizerId === currentDoctorId)
+                          );
+                          
+                          return isCreator ? (
+                            <button
+                              onClick={() => handleEndMeeting(meeting._id)}
+                              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md font-semibold transition-colors flex items-center gap-2"
+                            >
+                              <FaTimes />
+                              Kết thúc
+                            </button>
+                          ) : null;
+                        })()}
                       </>
                     )}
                   </div>

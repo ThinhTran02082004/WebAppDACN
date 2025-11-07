@@ -254,12 +254,12 @@ exports.createMeeting = asyncHandler(async (req, res) => {
 
     const meetingPayload = await buildMeetingPayload(populatedMeeting);
     await emitMeetingCreated(meetingPayload, {
-      message: 'Có cuộc họp mới được tạo'
+      message: `Cuộc họp nội bộ "${title}" đã được tạo`
     });
 
     res.status(201).json({
       success: true,
-      message: 'Tạo cuộc họp thành công',
+      message: 'Tạo cuộc họp nội bộ thành công',
       data: meetingPayload
     });
   } catch (error) {
