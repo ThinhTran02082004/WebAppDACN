@@ -1658,3 +1658,6 @@ Use mongoose.model(name, schema)
 [2025-11-04T15:45:43.900Z] [ERROR] GET /api/coupons/validate?code=aaaa&serviceId=69076f0e17d2824ecc362b46&specialtyId=69076f0e17d2824ecc362b3d&totalAmount=800000 Error: Mã giảm giá không hợp lệ hoặc không tồn tại
     at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:534:17
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[2025-11-07T14:56:52.858Z] [ERROR] GET /api/coupons/validate?code=SONDZ&serviceId=69076f0e17d2824ecc362b46&specialtyId=69076f0e17d2824ecc362b3d&totalAmount=800000 Error: Mã giảm giá này không áp dụng cho dịch vụ đã chọn
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:554:19
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

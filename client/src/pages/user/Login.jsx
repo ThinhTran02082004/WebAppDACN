@@ -37,11 +37,25 @@ const Login = ({ onRegisterClick }) => {
   // Regular login handler
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Basic validation
+    if (!formData.email || !formData.password) {
+      toast.error('Vui lòng nhập đầy đủ email và mật khẩu');
+      return;
+    }
+    
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast.error('Email không hợp lệ');
+      return;
+    }
+    
     setLoading(true);
     
     try {
       const response = await api.post('/auth/login', {
-        email: formData.email,
+        email: formData.email.trim(),
         password: formData.password,
         rememberMe: formData.rememberMe
       });
@@ -56,18 +70,51 @@ const Login = ({ onRegisterClick }) => {
     } catch (error) {
       console.error('Login error:', error);
       
-      if (error.response?.data?.needVerification) {
-        toast.info('Email của bạn chưa được xác thực. Vui lòng kiểm tra hòm thư.');
-        navigate('/need-verification', { 
-          state: { email: formData.email } 
-        });
-        return;
+      // Handle different error cases
+      if (error.response) {
+        const { status, data } = error.response;
+        
+        // Handle 401 Unauthorized
+        if (status === 401) {
+          // Check if account needs verification
+          if (data?.needVerification) {
+            toast.info('Email của bạn chưa được xác thực. Vui lòng kiểm tra hòm thư.');
+            navigate('/need-verification', { 
+              state: { email: formData.email } 
+            });
+            return;
+          }
+          
+          // Check for specific field errors
+          if (data?.field === 'email') {
+            toast.error(data.message || 'Email không tồn tại trong hệ thống');
+          } else if (data?.field === 'password') {
+            toast.error(data.message || 'Mật khẩu không chính xác');
+          } else {
+            toast.error(data.message || 'Tài khoản hoặc mật khẩu không chính xác');
+          }
+        } 
+        // Handle 403 Forbidden (account locked)
+        else if (status === 403) {
+          toast.error(data.message || 'Tài khoản của bạn đã bị khóa');
+        }
+        // Handle 400 Bad Request
+        else if (status === 400) {
+          toast.error(data.message || 'Thông tin đăng nhập không hợp lệ');
+        }
+        // Handle other errors
+        else {
+          toast.error(data.message || 'Đăng nhập không thành công. Vui lòng thử lại.');
+        }
+      } 
+      // Handle network errors
+      else if (error.request) {
+        toast.error('Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.');
+      } 
+      // Handle other errors
+      else {
+        toast.error('Đã xảy ra lỗi. Vui lòng thử lại sau.');
       }
-      
-      toast.error(
-        error.response?.data?.message || 
-        'Đăng nhập không thành công. Vui lòng thử lại.'
-      );
     } finally {
       setLoading(false);
     }

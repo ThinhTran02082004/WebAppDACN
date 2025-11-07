@@ -189,7 +189,8 @@ async function autoCompleteAppointmentAfterPayment({ appointmentId, billDoc }) {
     };
   }
 
-  if (['pending', 'pending_payment'].includes(appointment.status)) {
+  // Nếu không phải pending_payment hoặc thiếu điều kiện, chỉ cập nhật status
+    if (eligibility.canComplete && appointment.status === 'pending_payment') {
     appointment.status = 'confirmed';
   }
 
