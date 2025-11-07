@@ -818,6 +818,9 @@ const AppointmentDetail = () => {
             {activeTab === 'billing' && (
               <DoctorBilling
                 appointmentId={appointment._id}
+                onPaymentComplete={() => {
+                  fetchAppointmentDetail();
+                }}
               />
             )}
           </div>

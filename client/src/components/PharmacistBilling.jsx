@@ -286,6 +286,11 @@ const PharmacistBilling = ({ appointmentId, onPaymentComplete }) => {
                       Đã thanh toán: {new Date(bill.hospitalizationBill.paymentDate).toLocaleString('vi-VN')}
                     </p>
                   )}
+                  {bill.hospitalizationBill.status === 'paid' && bill.hospitalizationBill.paymentMethod && (
+                    <p className="text-sm text-gray-600">
+                      Phương thức: {getPaymentMethodLabel(bill.hospitalizationBill.paymentMethod)}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

@@ -88,6 +88,14 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
       <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm flex items-center gap-1"><FaClock /> Chưa thanh toán</span>
     );
   };
+  const getPaymentMethodLabel = (method) => {
+    const labels = { cash: 'Tiền mặt', momo: 'MoMo', paypal: 'PayPal' };
+    return labels[method] || method;
+  };
+  const getPaymentMethodIcon = (method) => {
+    if (method === 'cash') return <FaWallet className="inline mr-1" />;
+    return <FaCreditCard className="inline mr-1" />;
+  };
   const payPrescription = async (prescriptionId, method) => {
     if (!bill || !prescriptionId) return;
     if (appointment?.status === 'hospitalized') {
@@ -285,7 +293,8 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                   )}
                   {bill.consultationBill.status === 'paid' && bill.consultationBill.paymentMethod && (
                     <p className="text-sm text-gray-500">
-                      Phương thức: {bill.consultationBill.paymentMethod === 'cash' ? 'Tiền mặt' : bill.consultationBill.paymentMethod === 'momo' ? 'MoMo' : 'PayPal'}
+                      {getPaymentMethodIcon(bill.consultationBill.paymentMethod)}
+                      Phương thức: {getPaymentMethodLabel(bill.consultationBill.paymentMethod)}
                     </p>
                   )}
                 </div>
@@ -399,8 +408,14 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                         <div className="text-right">
                           <p className="text-lg font-bold text-green-600">{formatCurrency(prescription.totalAmount)}</p>
                           {isPaid && prescriptionPayment?.paymentDate && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Đã thanh toán: {new Date(prescriptionPayment.paymentDate).toLocaleDateString('vi-VN')}
+                            </p>
+                          )}
+                          {isPaid && prescriptionPayment?.paymentMethod && (
                             <p className="text-xs text-gray-500">
-                              {new Date(prescriptionPayment.paymentDate).toLocaleDateString('vi-VN')}
+                              {getPaymentMethodIcon(prescriptionPayment.paymentMethod)}
+                              {getPaymentMethodLabel(prescriptionPayment.paymentMethod)}
                             </p>
                           )}
                         </div>
@@ -495,7 +510,8 @@ const UserBilling = ({ appointmentId, onPaymentComplete, hospitalization, appoin
                   )}
                   {bill.hospitalizationBill.status === 'paid' && bill.hospitalizationBill.paymentMethod && (
                     <p className="text-sm text-gray-500">
-                      Phương thức: {bill.hospitalizationBill.paymentMethod === 'cash' ? 'Tiền mặt' : bill.hospitalizationBill.paymentMethod === 'momo' ? 'MoMo' : 'PayPal'}
+                      {getPaymentMethodIcon(bill.hospitalizationBill.paymentMethod)}
+                      Phương thức: {getPaymentMethodLabel(bill.hospitalizationBill.paymentMethod)}
                     </p>
                   )}
                   {hospitalizationData && (

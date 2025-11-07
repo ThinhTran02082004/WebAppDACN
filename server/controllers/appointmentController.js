@@ -12,6 +12,7 @@ const Service = require('../models/Service');
 const Specialty = require('../models/Specialty');
 const Coupon = require('../models/Coupon');
 const MedicalRecord = require('../models/MedicalRecord');
+const { checkCompletionEligibility, finalizeAppointmentCompletion } = require('../utils/appointmentCompletionHelper');
 // Import socket functions for time slot locking and real-time updates
 const { 
   isTimeSlotLocked, 
@@ -3328,43 +3329,13 @@ exports.completeAppointment = async (req, res) => {
       });
     }
     
-    // Validation 1: Kiểm tra có ít nhất 1 Prescription
     const Prescription = require('../models/Prescription');
     const prescriptions = await Prescription.find({ appointmentId: id });
     
-    if (!prescriptions || prescriptions.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Không thể hoàn thành lịch hẹn. Chưa có đơn thuốc nào được kê.'
-      });
-    }
-    
-    // Validation 2: Nếu có hospitalizationId, phải đã discharge
-    if (appointment.hospitalizationId) {
-      const Hospitalization = require('../models/Hospitalization');
-      const hospitalization = await Hospitalization.findById(appointment.hospitalizationId);
-      
-      if (!hospitalization) {
-        return res.status(400).json({
-          success: false,
-          message: 'Không tìm thấy thông tin nằm viện'
-        });
-      }
-      
-      if (hospitalization.status !== 'discharged') {
-        return res.status(400).json({
-          success: false,
-          message: 'Bệnh nhân đang nằm viện, chưa thể hoàn thành. Vui lòng xuất viện trước.'
-        });
-      }
-    }
-    
-    // Validation 3: Kiểm tra thanh toán đủ (consultation + medication + hospitalization)
     const Bill = require('../models/Bill');
     let bill = await Bill.findOne({ appointmentId: id });
     
     if (!bill) {
-      // Tạo bill mới nếu chưa có
       bill = await Bill.create({
         appointmentId: id,
         patientId: appointment.patientId,
@@ -3374,7 +3345,6 @@ exports.completeAppointment = async (req, res) => {
         }
       });
       
-      // Cập nhật medication và hospitalization amounts nếu có
       if (prescriptions.length > 0) {
         bill.medicationBill.prescriptionIds = prescriptions.map(p => p._id);
         bill.medicationBill.amount = prescriptions.reduce((sum, p) => sum + p.totalAmount, 0);
@@ -3392,39 +3362,34 @@ exports.completeAppointment = async (req, res) => {
       await bill.save();
     }
     
-    // Kiểm tra từng phần thanh toán
-    const consultationPaid = bill.consultationBill.status === 'paid';
-    const medicationPaid = bill.medicationBill.amount > 0 ? bill.medicationBill.status === 'paid' : true; // Nếu không có thuốc thì coi như đã thanh toán
-    const hospitalizationPaid = bill.hospitalizationBill.amount > 0 
-      ? bill.hospitalizationBill.status === 'paid' 
-      : true; // Nếu không có nội trú thì coi như đã thanh toán
+    const eligibility = await checkCompletionEligibility({
+      appointmentId: id,
+      appointmentDoc: appointment,
+      billDoc: bill,
+      prescriptions
+    });
     
-    if (!consultationPaid || !medicationPaid || !hospitalizationPaid) {
-      // Chuyển sang trạng thái pending_payment nếu chưa thanh toán đủ
-      appointment.status = 'pending_payment';
-      await appointment.save();
-      
-      const unpaidParts = [];
-      if (!consultationPaid) unpaidParts.push('phí khám');
-      if (!medicationPaid) unpaidParts.push('tiền thuốc');
-      if (!hospitalizationPaid) unpaidParts.push('phí nội trú');
-      
-      return res.status(400).json({
+    if (!eligibility.canComplete) {
+      const statusCode = eligibility.code === 'APPOINTMENT_NOT_FOUND' ? 404 : 400;
+      const response = {
         success: false,
-        message: `Chưa thanh toán đủ. Còn thiếu: ${unpaidParts.join(', ')}. Không thể hoàn thành lịch hẹn.`,
-        unpaidParts
-      });
+        message: eligibility.message || 'Không thể hoàn thành lịch hẹn.'
+      };
+      
+      if (eligibility.code === 'UNPAID' && eligibility.unpaidParts) {
+        response.unpaidParts = eligibility.unpaidParts;
+      }
+      
+      return res.status(statusCode).json(response);
     }
     
-    // Tất cả validation đã pass, cập nhật trạng thái lịch hẹn
-    appointment.status = 'completed';
-    appointment.completionDate = new Date();
-    await appointment.save();
-    
+    await finalizeAppointmentCompletion(eligibility);
+      
+
     return res.status(200).json({
       success: true,
       data: {
-        appointment
+        appointment: eligibility.appointment
       },
       message: 'Hoàn thành lịch hẹn thành công'
     });

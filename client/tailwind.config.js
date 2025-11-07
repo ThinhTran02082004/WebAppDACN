@@ -60,8 +60,11 @@ module.exports = {
           '50%': { transform: 'translateY(-5px)' },
         },
         'fadeIn': {
-          '0%': { transform: 'scale(0)', opacity: '0' },
-          '50%': { transform: 'scale(1.1)' },
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        'scaleIn': {
+          '0%': { transform: 'scale(0.95)', opacity: '0' },
           '100%': { transform: 'scale(1)', opacity: '1' },
         },
         'slideUp': {
@@ -79,7 +82,9 @@ module.exports = {
         'slide-in': 'slide-in 0.5s ease-out',
         'slide-out': 'slide-out 0.5s ease-out',
         'bounce-gentle': 'bounce-gentle 2s infinite ease-in-out',
-        'fade-in': 'fadeIn 0.5s ease-out',
+        'fade-in': 'fadeIn 0.3s ease-out',
+        'fadeIn': 'fadeIn 0.3s ease-out',
+        'scaleIn': 'scaleIn 0.2s ease-out',
         'slide-up': 'slideUp 0.3s ease-out',
         'bounce-dot': 'bounceDot 1.4s infinite',
       },

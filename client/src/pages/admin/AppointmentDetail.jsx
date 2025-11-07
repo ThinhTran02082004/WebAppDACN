@@ -536,42 +536,9 @@ const AdminAppointmentDetail = () => {
               </div>
             </div>
           </div>
-
-          {/* Payment Information */}
-          {appointment.fee && (
-            <div className="bg-white rounded-xl shadow-md overflow-hidden">
-              <div className="px-6 py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
-                <h2 className="text-lg font-semibold">Thông tin thanh toán</h2>
-              </div>
-              <div className="p-6 space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Phí khám:</span>
-                  <span className="font-medium">{appointment.fee.consultationFee?.toLocaleString('vi-VN')} đ</span>
-                </div>
-                {appointment.fee.additionalFees > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Phí phụ:</span>
-                    <span className="font-medium">{appointment.fee.additionalFees?.toLocaleString('vi-VN')} đ</span>
-                  </div>
-                )}
-                {appointment.fee.discount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Giảm giá:</span>
-                    <span className="font-medium">-{appointment.fee.discount?.toLocaleString('vi-VN')} đ</span>
-                  </div>
-                )}
-                <div className="border-t pt-3 flex justify-between text-lg font-bold">
-                  <span>Tổng cộng:</span>
-                  <span className="text-blue-600">{appointment.fee.totalAmount?.toLocaleString('vi-VN')} đ</span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
   );
 };
-
 export default AdminAppointmentDetail;
-

@@ -114,6 +114,22 @@ exports.getBillByAppointment = asyncHandler(async (req, res) => {
     .populate('medicationBill.prescriptionPayments.prescriptionId')
     .populate('hospitalizationBill.hospitalizationId');
 
+  // If bill exists and hospitalization is paid but missing paymentMethod, get it from BillPayment
+  if (bill && bill.hospitalizationBill.status === 'paid' && !bill.hospitalizationBill.paymentMethod) {
+    const latestPayment = await BillPayment.findOne({
+      billId: bill._id,
+      billType: 'hospitalization',
+      paymentStatus: 'completed'
+    }).sort({ createdAt: -1 });
+    
+    if (latestPayment) {
+      bill.hospitalizationBill.paymentMethod = latestPayment.paymentMethod;
+      bill.hospitalizationBill.paymentDate = latestPayment.createdAt;
+      // Save to update the bill
+      await bill.save();
+    }
+  }
+
   if (!bill) {
     // Auto-generate bill if doesn't exist
     const appointment = await Appointment.findById(appointmentId);
@@ -744,7 +760,8 @@ exports.confirmCashPayment = asyncHandler(async (req, res) => {
 
   // Update bill status
   targetBill.status = 'paid';
-  targetBill.paidAt = new Date();
+  targetBill.paymentMethod = 'cash';
+  targetBill.paymentDate = new Date();
 
   // If medication is paid, update prescription status to 'dispensed' only if status is 'verified'
   if (billType === 'medication' && bill.medicationBill.prescriptionIds && bill.medicationBill.prescriptionIds.length > 0) {

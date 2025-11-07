@@ -6,7 +6,7 @@ import {
   FaClock, FaCheck, FaTimes, FaExchangeAlt,
   FaCalendarCheck, FaBan, FaUserClock, FaAngleRight,
   FaAngleLeft, FaRegCalendarCheck, FaListAlt, FaPlus,
-  FaExclamationTriangle, FaInfoCircle
+  FaExclamationTriangle, FaInfoCircle, FaHospital, FaMoneyBillWave
 } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
 
@@ -35,7 +35,9 @@ const Appointments = () => {
     cancelled: 0,
     rejected: 0,
     rescheduled: 0,
-    'no-show': 0
+    'no-show': 0,
+    hospitalized: 0,
+    pending_payment: 0
   });
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [completionData, setCompletionData] = useState({
@@ -90,7 +92,9 @@ const Appointments = () => {
           cancelled: counts.cancelled || 0,
           rejected: counts.rejected || 0,
           rescheduled: counts.rescheduled || 0,
-          'no-show': counts['no-show'] || 0
+          'no-show': counts['no-show'] || 0,
+          hospitalized: counts.hospitalized || 0,
+          pending_payment: counts.pending_payment || 0
         });
       } else {
         console.error('Invalid counts response format:', response.data);
@@ -103,7 +107,9 @@ const Appointments = () => {
           cancelled: 0,
           rejected: 0,
           rescheduled: 0,
-          'no-show': 0
+          'no-show': 0,
+          hospitalized: 0,
+          pending_payment: 0
         });
       }
     } catch (error) {
@@ -370,7 +376,9 @@ const Appointments = () => {
       cancelled: "bg-red-100 text-red-800 border border-red-200",
       rejected: "bg-red-100 text-red-800 border border-red-200",
       rescheduled: "bg-indigo-100 text-indigo-800 border border-indigo-200",
-      'no-show': "bg-gray-100 text-gray-800 border border-gray-200"
+      'no-show': "bg-gray-100 text-gray-800 border border-gray-200",
+      hospitalized: "bg-indigo-100 text-indigo-800 border border-indigo-200",
+      pending_payment: "bg-orange-100 text-orange-800 border border-orange-200"
     };
     
     const statusIcons = {
@@ -380,7 +388,9 @@ const Appointments = () => {
       cancelled: <FaTimesCircle className="mr-1.5" />,
       rejected: <FaTimesCircle className="mr-1.5" />,
       rescheduled: <FaExchangeAlt className="mr-1.5" />,
-      'no-show': <FaBan className="mr-1.5" />
+      'no-show': <FaBan className="mr-1.5" />,
+      hospitalized: <FaHospital className="mr-1.5" />,
+      pending_payment: <FaMoneyBillWave className="mr-1.5" />
     };
     
     const statusText = {
@@ -390,7 +400,9 @@ const Appointments = () => {
       cancelled: "Đã hủy",
       rejected: "Đã từ chối",
       rescheduled: "Đã đổi lịch",
-      'no-show': "Không đến"
+      'no-show': "Không đến",
+      hospitalized: "Đang nằm viện",
+      pending_payment: "Chờ thanh toán"
     };
     
     return (
@@ -1352,6 +1364,8 @@ const Appointments = () => {
                 <option value="rescheduled">Đã đổi lịch</option>
                 <option value="pending_rescheduled">Chờ xác nhận & Đã đổi lịch</option>
                 <option value="confirmed">Đã xác nhận</option>
+                <option value="hospitalized">Đang nằm viện</option>
+                <option value="pending_payment">Chờ thanh toán</option>
                 <option value="completed">Hoàn thành</option>
                 <option value="cancelled">Đã hủy</option>
                 <option value="rejected">Đã từ chối</option>

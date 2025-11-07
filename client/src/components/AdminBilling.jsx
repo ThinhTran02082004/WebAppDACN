@@ -3,13 +3,16 @@ import api from '../utils/api';
 import { toast } from 'react-toastify';
 import { 
   FaMoneyBillWave, FaCheck, FaClock, FaPills, FaBed, FaStethoscope, 
-  FaCreditCard, FaWallet, FaFileInvoice, FaHistory, FaInfoCircle 
+  FaCreditCard, FaWallet, FaFileInvoice, FaHistory, FaInfoCircle, FaExclamationTriangle
 } from 'react-icons/fa';
 const AdminBilling = ({ appointmentId, onPaymentComplete }) => {
   const [bill, setBill] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmingBillType, setConfirmingBillType] = useState(null);
+  const [confirmingPrescriptionId, setConfirmingPrescriptionId] = useState(null);
   useEffect(() => {
     if (appointmentId) {
       fetchBill();
@@ -39,50 +42,64 @@ const AdminBilling = ({ appointmentId, onPaymentComplete }) => {
     }
   };
   const handleConfirmCashPayment = async (billType) => {
+    setConfirmingBillType(billType);
+    setConfirmingPrescriptionId(null);
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmPrescriptionCashPayment = async (prescriptionId) => {
+    setConfirmingBillType('medication');
+    setConfirmingPrescriptionId(prescriptionId);
+    setShowConfirmModal(true);
+  };
+
+  const executeCashPayment = async () => {
     const billTypeLabels = {
       consultation: 'phí khám',
       medication: 'tiền thuốc',
       hospitalization: 'phí nội trú'
     };
-    if (!window.confirm(`Xác nhận bệnh nhân đã thanh toán ${billTypeLabels[billType]} bằng tiền mặt?`)) return;
+
     try {
       setLoading(true);
-      const response = await api.post('/billing/confirm-cash-payment', {
-        appointmentId: bill.appointmentId?._id || bill.appointmentId,
-        billType
-      });
-      if (response.data.success) {
-        toast.success(`Xác nhận thanh toán ${billTypeLabels[billType]} thành công`);
-        setBill(response.data.data.bill);
-        fetchPaymentHistory();
-        if (onPaymentComplete) onPaymentComplete();
+      
+      if (confirmingPrescriptionId) {
+        // Xác nhận thanh toán cho một đơn thuốc cụ thể
+        const response = await api.post('/billing/pay-prescription', {
+          prescriptionId: confirmingPrescriptionId,
+          paymentMethod: 'cash',
+          transactionId: `PRES-CASH-${Date.now()}`,
+          paymentDetails: { method: 'cash', timestamp: new Date().toISOString() }
+        });
+
+        if (response.data.success) {
+          toast.success('Xác nhận thanh toán đơn thuốc thành công');
+          setBill(response.data.data.bill);
+          fetchPaymentHistory();
+          if (onPaymentComplete) onPaymentComplete();
+        } else {
+          toast.error(response.data.message || 'Xác nhận thất bại');
+        }
       } else {
-        toast.error(response.data.message || 'Xác nhận thất bại');
+        // Xác nhận thanh toán cho một loại bill
+        const response = await api.post('/billing/confirm-cash-payment', {
+          appointmentId: bill.appointmentId?._id || bill.appointmentId,
+          billType: confirmingBillType
+        });
+
+        if (response.data.success) {
+          toast.success(`Xác nhận thanh toán ${billTypeLabels[confirmingBillType]} thành công`);
+          setBill(response.data.data.bill);
+          fetchPaymentHistory();
+          if (onPaymentComplete) onPaymentComplete();
+        } else {
+          toast.error(response.data.message || 'Xác nhận thất bại');
+        }
       }
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Xác nhận thất bại');
-    } finally {
-      setLoading(false);
-    }
-  };
-  const handleConfirmPrescriptionCashPayment = async (prescriptionId) => {
-    if (!window.confirm('Xác nhận bệnh nhân đã thanh toán đơn thuốc này bằng tiền mặt?')) return;
-    try {
-      setLoading(true);
-      const response = await api.post('/billing/pay-prescription', {
-        prescriptionId,
-        paymentMethod: 'cash',
-        transactionId: `PRES-CASH-${Date.now()}`,
-        paymentDetails: { method: 'cash', timestamp: new Date().toISOString() }
-      });
-      if (response.data.success) {
-        toast.success('Xác nhận thanh toán đơn thuốc thành công');
-        setBill(response.data.data.bill);
-        fetchPaymentHistory();
-        if (onPaymentComplete) onPaymentComplete();
-      } else {
-        toast.error(response.data.message || 'Xác nhận thất bại');
-      }
+      
+      setShowConfirmModal(false);
+      setConfirmingBillType(null);
+      setConfirmingPrescriptionId(null);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Xác nhận thất bại');
     } finally {
@@ -334,7 +351,7 @@ const AdminBilling = ({ appointmentId, onPaymentComplete }) => {
                     {bill.hospitalizationBill.status === 'paid' && bill.hospitalizationBill.paymentMethod && (
                       <p className="text-sm text-gray-600">
                         {getPaymentMethodIcon(bill.hospitalizationBill.paymentMethod)}
-                        {getPaymentMethodLabel(bill.hospitalizationBill.paymentMethod)}
+                        Phương thức: {getPaymentMethodLabel(bill.hospitalizationBill.paymentMethod)}
                       </p>
                     )}
                   </div>
@@ -564,6 +581,101 @@ const AdminBilling = ({ appointmentId, onPaymentComplete }) => {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn"
+          onClick={(e) => e.target === e.currentTarget && setShowConfirmModal(false)}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-scaleIn">
+            <div className="p-6">
+              {/* Icon */}
+              <div className="flex justify-center mb-4">
+                <div className="p-4 bg-amber-100 rounded-full">
+                  <FaExclamationTriangle className="text-amber-600 text-3xl" />
+                </div>
+              </div>
+
+              {/* Message */}
+              <h3 className="text-xl font-bold text-gray-800 text-center mb-2">
+                Xác nhận thanh toán tiền mặt
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                {confirmingPrescriptionId 
+                  ? 'Bạn có chắc chắn bệnh nhân đã thanh toán đơn thuốc này bằng tiền mặt?'
+                  : `Bạn có chắc chắn bệnh nhân đã thanh toán ${
+                      confirmingBillType === 'consultation' ? 'phí khám' :
+                      confirmingBillType === 'medication' ? 'tiền thuốc' :
+                      'phí nội trú'
+                    } bằng tiền mặt?`}
+              </p>
+
+              {/* Amount reminder */}
+              {confirmingPrescriptionId ? (
+                bill?.medicationBill?.prescriptionIds?.find(p => p._id === confirmingPrescriptionId) && (
+                  <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-xl p-4 mb-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FaMoneyBillWave className="text-amber-600" />
+                      <p className="text-sm font-semibold text-gray-700">Số tiền cần xác nhận</p>
+                    </div>
+                    <p className="text-2xl font-bold text-green-600">
+                      {formatCurrency(bill.medicationBill.prescriptionIds.find(p => p._id === confirmingPrescriptionId).totalAmount)}
+                    </p>
+                  </div>
+                )
+              ) : (
+                confirmingBillType && bill && (
+                  <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-xl p-4 mb-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FaMoneyBillWave className="text-amber-600" />
+                      <p className="text-sm font-semibold text-gray-700">Số tiền cần xác nhận</p>
+                    </div>
+                    <p className="text-2xl font-bold text-green-600">
+                      {formatCurrency(
+                        confirmingBillType === 'consultation' ? bill.consultationBill.amount :
+                        confirmingBillType === 'medication' ? bill.medicationBill.amount :
+                        bill.hospitalizationBill.amount
+                      )}
+                    </p>
+                  </div>
+                )
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setConfirmingBillType(null);
+                    setConfirmingPrescriptionId(null);
+                  }}
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium transition-all"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={executeCashPayment}
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 font-semibold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Đang xử lý...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FaCheck />
+                      <span>Xác nhận</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

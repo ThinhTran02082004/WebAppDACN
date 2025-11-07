@@ -279,51 +279,19 @@ billSchema.pre('save', async function(next) {
 billSchema.post('save', async function() {
   if (this._shouldUpdateAppointment && this.appointmentId) {
     try {
-      const Appointment = mongoose.model('Appointment');
-      
-      // Check if any payment was made via online methods (momo/paypal)
-      // If so, only update to 'confirmed', not 'completed'
-      const hasOnlinePayment = 
-        (this.consultationBill?.paymentMethod && ['momo', 'paypal'].includes(this.consultationBill.paymentMethod)) ||
-        (this.medicationBill?.paymentMethod && ['momo', 'paypal'].includes(this.medicationBill.paymentMethod)) ||
-        (this.hospitalizationBill?.paymentMethod && ['momo', 'paypal'].includes(this.hospitalizationBill.paymentMethod)) ||
-        // Check prescriptionPayments
-        (this.medicationBill?.prescriptionPayments?.some(pp => 
-          pp.paymentMethod && ['momo', 'paypal'].includes(pp.paymentMethod)
-        ));
-      
-      // Only update to 'completed' if all payments are cash or admin-confirmed
-      // Otherwise, keep status as 'confirmed' for online payments
-      const updateData = {
-        paymentStatus: 'completed'
-      };
-      
-      if (!hasOnlinePayment) {
-        // All payments are cash, can update to completed
-        updateData.status = 'completed';
-      } else {
-        // Has online payment, only update to confirmed if currently pending
-        const currentAppointment = await Appointment.findById(this.appointmentId);
-        if (currentAppointment && currentAppointment.status === 'pending') {
-          updateData.status = 'confirmed';
-        }
-        // If already confirmed, keep it as confirmed (don't change to completed)
-      }
-      
-      await Appointment.findByIdAndUpdate(
-        this.appointmentId,
-        updateData
-      );
+      const { autoCompleteAppointmentAfterPayment } = require('../utils/appointmentCompletionHelper');
+      await autoCompleteAppointmentAfterPayment({
+        appointmentId: this.appointmentId,
+        billDoc: this
+      });
     } catch (error) {
-      console.error('Error updating appointment status:', error);
-      // Don't fail bill save if appointment update fails
+      console.error('Error updating appointment status after bill payment:', error);
+    } finally {
+      this._shouldUpdateAppointment = false;
     }
-    // Clear flag
-    this._shouldUpdateAppointment = false;
   }
 });
 
 const Bill = mongoose.model('Bill', billSchema);
 
 module.exports = Bill;
-

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
 import { toast } from 'react-toastify';
-import { FaBed, FaExchangeAlt, FaSignOutAlt, FaClock, FaMoneyBillWave, FaCheck } from 'react-icons/fa';
+import { FaBed, FaExchangeAlt, FaSignOutAlt, FaClock, FaMoneyBillWave, FaCheck, FaExclamationTriangle, FaTimes } from 'react-icons/fa';
 
 const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
   const [hospitalization, setHospitalization] = useState(null);
@@ -229,11 +229,7 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
     }
   };
 
-  const handleDischarge = async (e) => {
-    e.preventDefault();
-
-    if (!window.confirm('Bạn có chắc chắn muốn xuất viện cho bệnh nhân này?')) return;
-
+  const handleDischarge = async () => {
     try {
       setLoading(true);
       const response = await api.post(`/hospitalizations/${hospitalization._id}/discharge`, dischargeForm);
@@ -241,6 +237,7 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
       toast.success('Xuất viện thành công');
       setHospitalization(response.data.data);
       setShowDischargeForm(false);
+      setShowDischargeConfirm(false);
       setDischargeForm({ reason: '' });
       
       if (autoUpdateInterval) {
@@ -254,6 +251,11 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDischargeSubmit = (e) => {
+    e.preventDefault();
+    setShowDischargeConfirm(true);
   };
 
   const formatCurrency = (amount) => {
@@ -722,47 +724,137 @@ const HospitalizationManager = ({ appointmentId, patientId, onUpdate }) => {
 
       {/* Discharge Form Modal */}
       {showDischargeForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-bold mb-4">Xuất Viện</h3>
-            <form onSubmit={handleDischarge} className="space-y-4">
-              <div className="bg-yellow-50 p-4 rounded-lg mb-4">
-                <p className="text-sm font-medium">Chi phí nội trú dự tính:</p>
-                <p className="text-2xl font-bold text-green-600">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn"
+          onClick={(e) => e.target === e.currentTarget && setShowDischargeForm(false)}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full transform transition-all animate-scaleIn">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <FaSignOutAlt className="text-green-600 text-xl" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800">Xuất Viện</h3>
+              </div>
+              <button
+                onClick={() => setShowDischargeForm(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <FaTimes className="text-gray-500" />
+              </button>
+            </div>
+
+            <form onSubmit={handleDischargeSubmit} className="p-6 space-y-6">
+              {/* Cost Summary Card */}
+              <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-xl p-5 shadow-sm">
+                <div className="flex items-center gap-2 mb-2">
+                  <FaMoneyBillWave className="text-amber-600" />
+                  <p className="text-sm font-semibold text-gray-700">Chi phí nội trú dự tính</p>
+                </div>
+                <p className="text-3xl font-bold text-green-600 mt-2">
                   {formatCurrency(costSummary.totalSoFarAmount)}
                 </p>
+                <p className="text-xs text-gray-500 mt-2">Số tiền này sẽ được tính vào hóa đơn</p>
               </div>
 
+              {/* Discharge Reason */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Lý do xuất viện
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Lý do xuất viện <span className="text-gray-400 font-normal">(tùy chọn)</span>
                 </label>
                 <textarea
                   value={dischargeForm.reason}
                   onChange={(e) => setDischargeForm({ ...dischargeForm, reason: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg"
-                  rows="3"
-                  placeholder="VD: Đã hồi phục, chuyển viện, ..."
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all resize-none"
+                  rows="4"
+                  placeholder="VD: Đã hồi phục, chuyển viện, xuất viện theo yêu cầu..."
                 />
               </div>
 
-              <div className="flex justify-end gap-2">
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setShowDischargeForm(false)}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                  onClick={() => {
+                    setShowDischargeForm(false);
+                    setDischargeForm({ reason: '' });
+                  }}
+                  className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 font-medium text-gray-700 transition-all hover:border-gray-400"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Xác Nhận Xuất Viện
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Đang xử lý...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FaCheck />
+                      <span>Xác Nhận Xuất Viện</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Discharge Confirmation Modal */}
+      {showDischargeConfirm && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-fadeIn"
+          onClick={(e) => e.target === e.currentTarget && setShowDischargeConfirm(false)}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-scaleIn">
+            <div className="p-6">
+              {/* Icon */}
+              <div className="flex justify-center mb-4">
+                <div className="p-4 bg-amber-100 rounded-full">
+                  <FaExclamationTriangle className="text-amber-600 text-3xl" />
+                </div>
+              </div>
+
+              {/* Message */}
+              <h3 className="text-xl font-bold text-gray-800 text-center mb-2">
+                Xác nhận xuất viện
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                Bạn có chắc chắn muốn xuất viện cho bệnh nhân này?
+              </p>
+
+              {/* Cost reminder */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <p className="text-sm text-gray-600 mb-1">Chi phí nội trú:</p>
+                <p className="text-lg font-bold text-green-600">
+                  {formatCurrency(costSummary.totalSoFarAmount)}
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDischargeConfirm(false)}
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium transition-all"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={handleDischarge}
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 font-semibold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Đang xử lý...' : 'Xác nhận'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

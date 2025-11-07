@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { FaComments, FaTimes, FaMinus } from 'react-icons/fa';
 import ConversationList from './ConversationList';
 import ChatWindow from './ChatWindow';
@@ -14,6 +15,11 @@ const ChatWidget = ({ currentUserId }) => {
   const [loading, setLoading] = useState(false);
   const { messageUnreadCount, fetchMessageUnreadCount } = useNotification();
   const { socket, isConnected } = useSocket();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Fetch conversations when widget opens
   useEffect(() => {
@@ -61,14 +67,17 @@ const ChatWidget = ({ currentUserId }) => {
     fetchMessageUnreadCount();
   };
 
-  return (
+  if (!isMounted) return null;
+
+  return createPortal(
     <>
       {/* Floating button */}
       {!isOpen && (
         <button
+          type="button"
           onClick={() => setIsOpen(true)}
           className="fixed bottom-20 right-6 w-14 h-14 bg-primary text-white rounded-full shadow-lg hover:bg-primary-dark hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center animate-fade-in"
-          style={{ zIndex: 45 }}
+          style={{ zIndex: 1050 }}
         >
           <FaComments className="w-6 h-6" />
           {messageUnreadCount > 0 && (
@@ -79,13 +88,12 @@ const ChatWidget = ({ currentUserId }) => {
         </button>
       )}
 
-      Chat widget popup
       {isOpen && (
         <div
           className={`fixed bottom-6 right-6 bg-white rounded-lg shadow-2xl transition-all duration-300 animate-slide-up max-md:fixed max-md:inset-0 max-md:w-full max-md:h-screen max-md:rounded-none max-md:bottom-0 max-md:right-0 w-[400px] ${
             isMinimized ? 'h-14' : 'h-[600px] max-md:h-screen'
           }`}
-          style={{ zIndex: 45 }}
+          style={{ zIndex: 1050 }}
         >
           {/* Header */}
           <div className="bg-primary text-white px-4 py-3 rounded-t-lg flex items-center justify-between">
@@ -148,6 +156,7 @@ const ChatWidget = ({ currentUserId }) => {
         </div>
       )}
     </>
+    , document.body
   );
 };
 
