@@ -79,7 +79,7 @@ router.put('/:id/confirmed', authorize('doctor'), appointmentController.confirmA
 router.put('/:id/reject', authorize('doctor'), appointmentController.rejectAppointment);
 
 // PUT /api/appointments/:id/complete – Bác sĩ hoàn thành lịch hẹn
-router.put('/:id/complete', authorize('doctor'), appointmentController.completeAppointment);
+router.put('/:id/complete', authorize('doctor','admin'), appointmentController.completeAppointment);
 
 // PUT /api/appointments/:id/no-show – Bác sĩ đánh dấu bệnh nhân không đến khám
 router.put('/:id/no-show', authorize('doctor'), appointmentController.markAsNoShow);

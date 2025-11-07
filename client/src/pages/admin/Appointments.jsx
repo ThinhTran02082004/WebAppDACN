@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaEdit, FaSearch, FaFilter, FaDownload, FaCalendarAlt, FaUserMd, FaUser, FaHospital, FaEye } from 'react-icons/fa';
+import { FaEdit, FaSearch, FaFilter, FaDownload, FaCalendarAlt, FaUserMd, FaUser, FaHospital, FaEye, FaClipboardCheck } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import api from '../../utils/api';
 import { toast } from 'react-toastify';
@@ -31,6 +31,7 @@ const Appointments = () => {
     notes: ''
   });
   const [loadingAction, setLoadingAction] = useState(false);
+  const [completingId, setCompletingId] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -289,6 +290,42 @@ const Appointments = () => {
     }
   };
 
+  const handleCompleteAppointment = async (appointmentId) => {
+    if (completingId) return;
+    
+    setCompletingId(appointmentId);
+    try {
+      const res = await api.put(`/appointments/${appointmentId}/complete`);
+      
+      if (res.data.success) {
+        const completionDate = res.data.data?.appointment?.completionDate;
+        setAppointments(prevAppointments =>
+          prevAppointments.map(appt =>
+            appt._id === appointmentId
+              ? {
+                  ...appt,
+                  status: 'completed',
+                  completionDate: completionDate || appt.completionDate || new Date().toISOString()
+                }
+              : appt
+          )
+        );
+        toast.success(res.data.message || 'Hoan thanh lich hen thanh cong');
+      } else {
+        toast.error(res.data.message || 'Khong the hoan thanh lich hen');
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Loi khi hoan thanh lich hen';
+      toast.error(errorMessage);
+      if (error.response?.data?.unpaidParts?.length) {
+        toast.info(`Can thanh toan: ${error.response.data.unpaidParts.join(', ')}`);
+      }
+      console.error('Error completing appointment:', error.response?.data || error.message);
+    } finally {
+      setCompletingId(null);
+    }
+  };
+
   return (
     <div className="w-full">
       <div className="mb-6">
@@ -465,13 +502,26 @@ const Appointments = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-3">
                           <button
+                            type="button"
                             className="text-green-600 hover:text-green-900"
                             onClick={() => navigate(`/admin/appointments/${appointment._id}`)}
                             title="Xem chi tiết"
                           >
                             <FaEye />
                           </button>
+                          {['confirmed', 'hospitalized', 'pending_payment'].includes(appointment.status) && (
+                            <button
+                              type="button"
+                              className={`text-emerald-600 hover:text-emerald-900 ${completingId === appointment._id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              onClick={() => handleCompleteAppointment(appointment._id)}
+                              disabled={completingId === appointment._id}
+                              title="Hoan thanh lich hen"
+                            >
+                              <FaClipboardCheck />
+                            </button>
+                          )}
                           <button
+                            type="button"
                             className="text-blue-600 hover:text-blue-900"
                             onClick={() => openModal('edit', appointment)}
                             title="Cập nhật trạng thái"

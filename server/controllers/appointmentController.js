@@ -3294,7 +3294,7 @@ exports.completeAppointment = async (req, res) => {
     const Doctor = require('../models/Doctor');
     const doctor = await Doctor.findOne({ user: userId });
     
-    if (!doctor) {
+    if (!doctor && req.user.role !== 'admin') {
       return res.status(404).json({
         success: false,
         message: 'Không tìm thấy thông tin bác sĩ'
