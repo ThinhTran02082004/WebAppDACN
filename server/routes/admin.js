@@ -20,6 +20,7 @@ const { protect, authorize } = require('../middlewares/authMiddleware');
 const { upload, uploadToMemory } = require('../middlewares/uploadMiddleware');
 
 const medicationController = require('../controllers/medicationController');
+const cronController = require('../controllers/cronController');
 
 
 
@@ -123,5 +124,8 @@ router.get('/dashboard/charts', statisticsController.getDashboardCharts);
 router.post('/medications',  medicationController.createMedication);
 router.put('/medications/:id',  medicationController.updateMedication);
 router.delete('/medications/:id',  medicationController.deleteMedication);
+
+// Cron job test routes
+router.get('/cron/test-appointment-reminder', cronController.testAppointmentReminder);
 
 module.exports = router; 
