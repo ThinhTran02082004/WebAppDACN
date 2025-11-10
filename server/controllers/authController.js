@@ -845,7 +845,7 @@ exports.socialLoginSuccess = async (req, res) => {
     const userDataParam = encodeURIComponent(JSON.stringify(userData));
     
     // Redirect to the frontend with the token
-    return res.redirect(`${frontendURL}/auth/social-callback?data=${userDataParam}`);
+    return res.redirect(`${FRONTEND_URL}/auth/social-callback?data=${userDataParam}`);
   } catch (error) {
     console.error('Social login success error:', error);
     const frontendURL = process.env.FRONTEND_URL;
