@@ -7,12 +7,12 @@ const mongoose = require('mongoose');
 // MoMo API configuration
 const momoConfig = {
   // Use environment variables in production
-  accessKey: process.env.MOMO_ACCESS_KEY || 'F8BBA842ECF85',
-  secretKey: process.env.MOMO_SECRET_KEY || 'K951B6PE1waDMi640xX08PD3vg6EkVlz',
-  partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMO',
-  endpoint: process.env.MOMO_ENDPOINT || 'https://test-payment.momo.vn/v2/gateway/api/create',
-  redirectUrl: process.env.MOMO_REDIRECT_URL || 'http://localhost:3000/payment/result',
-  ipnUrl: process.env.MOMO_IPN_URL || 'http://localhost:5000/api/payments/momo/ipn',
+  accessKey: process.env.MOMO_ACCESS_KEY ,
+  secretKey: process.env.MOMO_SECRET_KEY ,
+  partnerCode: process.env.MOMO_PARTNER_CODE ,
+  endpoint: process.env.MOMO_ENDPOINT ,
+  redirectUrl: process.env.MOMO_REDIRECT_URL ,
+  ipnUrl: process.env.MOMO_IPN_URL ,
 };
 
 const decodeMomoExtraData = (rawExtraData) => {

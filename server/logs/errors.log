@@ -1666,3 +1666,6 @@ Use mongoose.model(name, schema)
     at model.save (D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\node_modules\mongoose\lib\model.js:630:28)
     at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\videoRoomController.js:617:19
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[2025-11-10T14:11:31.601Z] [ERROR] GET /api/coupons/validate?code=sondz&serviceId=69076f0e17d2824ecc362b46&specialtyId=69076f0e17d2824ecc362b3d&totalAmount=800000 Error: Mã giảm giá đã hết hạn hoặc đã đạt giới hạn sử dụng
+    at D:\DACS\icon\New folder (2)\DACS-hospitalwebfn\DACS-hospitalweb\server\controllers\couponController.js:539:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

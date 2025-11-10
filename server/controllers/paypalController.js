@@ -84,8 +84,8 @@ exports.createPaypalPayment = async (req, res) => {
         payment_method: 'paypal'
       },
       redirect_urls: {
-        return_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/paypal/success`,
-        cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/paypal/cancel`
+        return_url: `${process.env.FRONTEND_URL}/payment/paypal/success`,
+        cancel_url: `${process.env.FRONTEND_URL}/payment/paypal/cancel`
       },
       transactions: [{
         item_list: {

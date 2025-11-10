@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { toastWarning } from './toast';
 
-const apiBaseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const apiBaseURL = import.meta.env.VITE_API_URL ;
 
 // Create a custom axios instance
 const api = axios.create({

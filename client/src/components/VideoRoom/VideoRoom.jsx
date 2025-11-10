@@ -55,7 +55,7 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
       if (!targetRoomId || hasLeftRef.current) return;
 
       const attemptKeepAlive = options.keepalive && typeof fetch === 'function';
-      const apiBaseUrl = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+      const apiBaseUrl = import.meta.env?.VITE_API_URL ;
 
       if (meetingMode) {
         if (attemptKeepAlive) {

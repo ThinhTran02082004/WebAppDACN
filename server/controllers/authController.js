@@ -800,7 +800,7 @@ exports.socialLoginSuccess = async (req, res) => {
     const token = await generateToken(req.user._id);
     
     // Get the frontend URL from environment variables
-    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendURL = process.env.FRONTEND_URL ;
     
     // Determine if user is new and needs password
     const isNewUser = req.user.createdAt && 
@@ -848,7 +848,7 @@ exports.socialLoginSuccess = async (req, res) => {
     return res.redirect(`${frontendURL}/auth/social-callback?data=${userDataParam}`);
   } catch (error) {
     console.error('Social login success error:', error);
-    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendURL = process.env.FRONTEND_URL;
     res.redirect(`${frontendURL}/login?error=social-login-failed`);
   }
 };

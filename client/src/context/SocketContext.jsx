@@ -25,7 +25,7 @@ export const SocketProvider = ({ children }) => {
       return;
     }
 
-    const apiBaseUrl = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+    const apiBaseUrl = import.meta.env?.VITE_API_URL ;
     const socketUrl = apiBaseUrl.replace(/\/api$/, '');
 
     console.log('[SocketContext] Connecting to:', socketUrl);

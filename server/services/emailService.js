@@ -150,7 +150,7 @@ const sendVerificationEmail = async (email, verificationToken, fullName) => {
 
   try {
     // Tạo link xác thực
-    const verificationUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;//https://gkplh9lm-3000.asse.devtunnels.ms
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;//https://gkplh9lm-3000.asse.devtunnels.ms
     
     
     const mailOptions = {
@@ -411,7 +411,7 @@ const sendAppointmentReminderEmail = async (email, patientName, appointmentInfo)
           </ul>
           
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}/appointments" style="display: inline-block; padding: 12px 24px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
+            <a href="${process.env.FRONTEND_URL}/appointments" style="display: inline-block; padding: 12px 24px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
               Quản lý lịch hẹn
             </a>
           </div>

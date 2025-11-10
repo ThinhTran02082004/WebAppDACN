@@ -24,3 +24,4 @@ exports.testAppointmentReminder = asyncHandler(async (req, res) => {
   }
 });
 
+
