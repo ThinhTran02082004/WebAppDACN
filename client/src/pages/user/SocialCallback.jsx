@@ -18,6 +18,11 @@ const SocialCallback = () => {
   // Hiển thị thông báo đang xử lý ngay khi component mount
   useEffect(() => {
     if (!toastShownRef.current && (searchParams.get('data') || searchParams.get('code'))) {
+      console.log('[SocialCallback] Component mounted with params:', {
+        hasData: !!searchParams.get('data'),
+        hasCode: !!searchParams.get('code'),
+        url: window.location.href
+      });
       toastInfo('Đang xử lý đăng nhập...');
       toastShownRef.current = true;
     }
@@ -89,21 +94,35 @@ const SocialCallback = () => {
         // Get the data parameter from URL (for existing social callback)
         const dataParam = searchParams.get('data');
         if (!dataParam) {
+          console.error('[SocialCallback] No data parameter in URL');
           setError('Không nhận được dữ liệu người dùng từ máy chủ.');
           return;
         }
 
+        console.log('[SocialCallback] Parsing user data from URL parameter');
         // Parse the user data
         const userData = JSON.parse(decodeURIComponent(dataParam));
+        console.log('[SocialCallback] User data parsed successfully:', {
+          userId: userData._id,
+          email: userData.email,
+          hasToken: !!userData.token,
+          needPassword: userData.needPassword,
+          provider: userData.googleId ? 'google' : userData.facebookId ? 'facebook' : 'unknown'
+        });
         
         if (!userData.token) {
+          console.error('[SocialCallback] Token missing in user data');
           setError('Token xác thực không hợp lệ.');
           return;
         }
 
         // Log the user in (store token, set logged in state)
-        console.log('Đăng nhập thành công với dữ liệu:', userData);
-        console.log('needPassword:', userData.needPassword); // ✅ Debug log
+        console.log('[SocialCallback] Logging in user with data:', {
+          userId: userData._id,
+          email: userData.email,
+          roleType: userData.roleType,
+          needPassword: userData.needPassword
+        });
         
         // Set authentication in context (không hiển thị thông báo từ hàm login)
         await login(userData, true, false);
@@ -117,26 +136,33 @@ const SocialCallback = () => {
         
         // Hiển thị thông báo dựa vào loại đăng nhập
         if (isGoogleLogin) {
-          console.log('Hiển thị thông báo đăng nhập Google thành công');
+          console.log('[SocialCallback] Google login successful, showing toast');
           toastGoogleSuccess(`Đăng nhập Google thành công! Xin chào, ${userData.fullName}`);
         } else if (isFacebookLogin) {
+          console.log('[SocialCallback] Facebook login successful, showing toast');
           toastFacebookSuccess(`Đăng nhập Facebook thành công! Xin chào, ${userData.fullName}`);
         } else {
+          console.log('[SocialCallback] Social login successful, showing toast');
           toastSuccess(`Đăng nhập thành công! Xin chào, ${userData.fullName}`);
         }
         
         // ✅ Kiểm tra needPassword NGAY LẬP TỨC (không cần setTimeout)
         if (userData.needPassword) {
-          console.log('User cần đặt mật khẩu, chuyển hướng đến /set-social-password');
+          console.log('[SocialCallback] User needs to set password, redirecting to /set-social-password');
           navigate('/set-social-password', { replace: true });
           return;
         }
         
         // Chuyển hướng sau một chút để đảm bảo toast hiển thị (chỉ cho trường hợp không cần password)
+        console.log('[SocialCallback] Scheduling redirect in 1.5s');
         setTimeout(() => {
           // Lấy đường dẫn redirect từ session storage hoặc redirect theo role
           const redirectTo = sessionStorage.getItem('auth_redirect');
           sessionStorage.removeItem('auth_redirect');
+          console.log('[SocialCallback] Redirecting user:', {
+            savedRedirect: redirectTo,
+            userRole: userData.roleType
+          });
           if (redirectTo) {
             window.location.href = redirectTo;
           } else {
@@ -145,7 +171,11 @@ const SocialCallback = () => {
           redirectingRef.current = false; // ✅ Reset flag sau khi redirect
         }, 1500);
       } catch (error) {
-        console.error('Lỗi xử lý callback mạng xã hội:', error);
+        console.error('[SocialCallback] Error processing OAuth callback:', {
+          error: error.message,
+          stack: error.stack,
+          url: window.location.href
+        });
         setError('Đã xảy ra lỗi khi xử lý đăng nhập. Vui lòng thử lại.');
         toastError('Đăng nhập không thành công. Vui lòng thử lại.');
         redirectingRef.current = false; // ✅ Reset flag nếu có lỗi
