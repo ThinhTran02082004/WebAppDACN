@@ -10,7 +10,6 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const Appointment = require('../models/Appointment');
 const { sendAppointmentReminderEmail } = require('../services/emailService');
-const { initializeEmailTransport } = require('../services/emailService');
 
 // Kết nối database
 const connectDB = async () => {
@@ -161,15 +160,8 @@ const testAppointmentReminder = async () => {
 const main = async () => {
   console.log('🚀 Bắt đầu test cron jobs...\n');
   
-  // Khởi tạo email service
-  try {
-    console.log('📧 Đang khởi tạo email service...');
-    await initializeEmailTransport(false);
-    console.log('✅ Email service đã sẵn sàng\n');
-  } catch (error) {
-    console.error('❌ Lỗi khởi tạo email service:', error);
-    console.log('⚠️  Tiếp tục test nhưng email có thể không gửi được\n');
-  }
+  // Email service (SendGrid) is initialized automatically when imported
+  console.log('✅ Email service (SendGrid) đã sẵn sàng\n');
   
   // Kết nối database
   await connectDB();

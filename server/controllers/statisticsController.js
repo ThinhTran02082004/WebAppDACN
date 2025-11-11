@@ -63,11 +63,11 @@ exports.getRevenueStatistics = asyncHandler(async (req, res, next) => {
             count: { $sum: 1 }
           }
         },
-        { 
+        {
           $addFields: {
             systemRevenue: { $multiply: ['$totalRevenue', SYSTEM_REVENUE_PERCENTAGE / 100] },
             doctorRevenue: { $multiply: ['$totalRevenue', (100 - SYSTEM_REVENUE_PERCENTAGE) / 100] }
-          } 
+          }
         },
         { $sort: { _id: 1 } }
       ]) || [];
@@ -129,7 +129,7 @@ exports.getUserStatistics = asyncHandler(async (req, res, next) => {
   try {
     // Tổng số người dùng với roleType 'user'
     const totalUsers = await User.countDocuments({ roleType: 'user' });
-    
+
     // Người dùng mới trong tháng này
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -193,7 +193,7 @@ exports.getDoctorStatistics = asyncHandler(async (req, res, next) => {
   try {
     // Tổng số bác sĩ (tài khoản có roleType doctor)
     const totalDoctors = await User.countDocuments({ roleType: 'doctor' });
-    
+
     // Bác sĩ mới trong tháng này
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -284,7 +284,7 @@ exports.getAppointmentStatistics = asyncHandler(async (req, res, next) => {
   try {
     // Tổng số lịch hẹn
     const totalAppointments = await Appointment.countDocuments();
-    
+
     // Lịch hẹn trong tháng này
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -328,9 +328,9 @@ exports.getAppointmentStatistics = asyncHandler(async (req, res, next) => {
     // Thống kê doanh thu theo tháng
     let revenueByMonth = [];
     try {
-      revenueByMonth = await Payment.aggregate([
+      revenueByMonth = await BillPayment.aggregate([
         {
-          $match: { 
+          $match: {
             $or: [
               { paymentStatus: 'completed' },
               { paymentStatus: 'Completed' }
@@ -420,7 +420,7 @@ exports.getDashboardStatistics = async (req, res) => {
       // Thống kê lịch làm việc
       totalSchedules
     ] = [0, 0, 0, 0, 0, 0, 0, 0, 0, [], 0, 0]; // Initialize with default values
-    
+
     try {
       [
         totalUsers,
@@ -484,7 +484,7 @@ exports.getDashboardStatistics = async (req, res) => {
         // Thanh toán
         BillPayment.aggregate([
           {
-            $match: { 
+            $match: {
               $or: [
                 { paymentStatus: 'completed' },
                 { paymentStatus: 'Completed' }
@@ -569,20 +569,20 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
       return date;
     });
 
-    const last7DaysFormatted = last7Days.map(date => 
+    const last7DaysFormatted = last7Days.map(date =>
       date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
     );
 
     let appointmentStats = Array(7).fill({ newAppointments: 0, completedAppointments: 0 });
-    
+
     try {
       const appointmentStatsPromises = last7Days.map(async (date) => {
         const startOfDay = new Date(date);
         startOfDay.setHours(0, 0, 0, 0);
-        
+
         const endOfDay = new Date(date);
         endOfDay.setHours(23, 59, 59, 999);
-        
+
         const [newAppointments, completedAppointments] = await Promise.all([
           Appointment.countDocuments({
             createdAt: { $gte: startOfDay, $lte: endOfDay }
@@ -592,10 +592,10 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
             scheduledTime: { $gte: startOfDay, $lte: endOfDay }
           }).catch(() => 0)
         ]);
-        
+
         return { newAppointments, completedAppointments };
       });
-      
+
       appointmentStats = await Promise.all(appointmentStatsPromises);
     } catch (error) {
       console.error('Error getting appointment stats:', error);
@@ -656,10 +656,12 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
             totalAmount: {
               $sum: {
                 $cond: [
-                  { $or: [
-                    { $eq: ['$paymentStatus', 'completed'] },
-                    { $eq: ['$paymentStatus', 'Completed'] }
-                  ]},
+                  {
+                    $or: [
+                      { $eq: ['$paymentStatus', 'completed'] },
+                      { $eq: ['$paymentStatus', 'Completed'] }
+                    ]
+                  },
                   { $ifNull: ['$amount', 0] },
                   0
                 ]
@@ -714,17 +716,17 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
         let doctorCount = 0;
         let activeDoctorCount = 0;
         let avgRating = 0;
-        
+
         try {
           doctorCount = await Doctor.countDocuments({
             specialtyId: specialty._id
           });
-          
+
           activeDoctorCount = await Doctor.countDocuments({
             specialtyId: specialty._id,
             status: 'active'
           });
-          
+
           // Lấy đánh giá trung bình cho chuyên khoa
           const avgRatingResult = await Review.aggregate([
             {
@@ -753,12 +755,12 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
               }
             }
           ]);
-          
+
           avgRating = avgRatingResult.length > 0 ? parseFloat(avgRatingResult[0].avgRating.toFixed(1)) : 0;
         } catch (error) {
           console.error(`Error getting details for specialty ${specialty.specialtyName}:`, error);
         }
-        
+
         return {
           ...specialty,
           doctorCount,
@@ -778,7 +780,7 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
 
     // Tính tổng số lịch hẹn cho tất cả các chuyên khoa để tính tỷ lệ phần trăm
     const totalSpecialtyAppointments = specialtyDistribution.reduce((sum, item) => sum + item.count, 0);
-    
+
     // Biểu đồ phân bố chuyên khoa với thông tin bổ sung
     const enhancedSpecialtyDistribution = {
       chartData: {
@@ -894,11 +896,11 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
       const revenueByDayPromises = last10Days.map(async (date) => {
         const startOfDay = new Date(date);
         startOfDay.setHours(0, 0, 0, 0);
-        
+
         const endOfDay = new Date(date);
         endOfDay.setHours(23, 59, 59, 999);
-        
-        const result = await Payment.aggregate([
+
+        const result = await BillPayment.aggregate([
           {
             $match: {
               $or: [
@@ -915,13 +917,13 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
             }
           }
         ]);
-        
+
         return {
           date: date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
           revenue: result.length > 0 ? result[0].totalRevenue : 0
         };
       });
-      
+
       revenueByDay = await Promise.all(revenueByDayPromises);
     } catch (error) {
       console.error('Error getting revenue by day:', error);
@@ -935,9 +937,9 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
     // Doanh thu theo tháng (12 tháng gần nhất)
     let revenueByMonth = [];
     try {
-      revenueByMonth = await Payment.aggregate([
+      revenueByMonth = await BillPayment.aggregate([
         {
-          $match: { 
+          $match: {
             $or: [
               { paymentStatus: 'completed' },
               { paymentStatus: 'Completed' }
@@ -982,8 +984,8 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
     } catch (error) {
       console.error('Error getting revenue by month:', error);
       // Generate mock data if API fails
-      const months = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 
-                      'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
+      const months = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+        'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
       const lastMonths = months.slice(now.getMonth() - 11 >= 0 ? now.getMonth() - 11 : 0, now.getMonth() + 1);
       revenueByMonth = lastMonths.map((month, index) => ({
         month,
@@ -994,9 +996,9 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
     // Doanh thu theo năm (5 năm gần nhất)
     let revenueByYear = [];
     try {
-      revenueByYear = await Payment.aggregate([
+      revenueByYear = await BillPayment.aggregate([
         {
-          $match: { 
+          $match: {
             $or: [
               { paymentStatus: 'completed' },
               { paymentStatus: 'Completed' }
@@ -1051,11 +1053,11 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
           }
         ]
       },
-      
+
       // Biểu đồ phân bố theo chuyên khoa
       specialtyDistribution: enhancedSpecialtyDistribution.chartData,
       specialtyDetailedData: enhancedSpecialtyDistribution.detailedData,
-      
+
       // Biểu đồ hiệu suất cơ sở y tế
       hospitalPerformance: {
         labels: hospitalPerformance.map(item => item.hospitalName),
@@ -1072,7 +1074,7 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
           }
         ]
       },
-      
+
       // Biểu đồ doanh thu
       revenueByTime: {
         daily: {
@@ -1121,7 +1123,7 @@ exports.getDashboardCharts = asyncHandler(async (req, res, next) => {
       success: true,
       data: chartData
     });
-    
+
   } catch (error) {
     console.error('Error fetching dashboard charts:', error);
     res.status(500).json({

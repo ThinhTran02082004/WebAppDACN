@@ -58,23 +58,18 @@ if (result.error) {
 }
 
 // Import email service after environment variables are loaded
-const { initializeEmailTransport } = require('./services/emailService');
+// SendGrid is initialized automatically when the module is imported
+try {
+  require('./services/emailService');
+  console.log('Email service (SendGrid) initialized successfully');
+} catch (error) {
+  console.error('Failed to initialize email service:', error);
+  console.error('Email notifications will not be available');
+  console.error('Please check your SENDGRID_API_KEY and EMAIL_USER in .env file');
+}
 
 // Import cron jobs
 const { initCronJobs } = require('./utils/cron');
-
-// Initialize email service with more robust handling
-(async () => {
-  try {
-    console.log('Initializing email service...');
-    // false for Gmail, true for Ethereal
-    await initializeEmailTransport(false);
-    console.log('Email service initialized successfully');
-  } catch (error) {
-    console.error('Failed to initialize email service:', error);
-    console.error('Email notifications will not be available');
-  }
-})();
 
 // Kiểm tra biến môi trường bắt buộc
 if (!process.env.JWT_SECRET) {
