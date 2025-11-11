@@ -1,18 +1,8 @@
 # HOSPITAL WEB - HỆ THỐNG QUẢN LÝ BỆNH VIỆN
 
-## TÀI LIỆU ĐẦY ĐỦ
-**Xem thư mục `/DOCS/` để đọc tài liệu chi tiết về dự án:**
-
-- **[DOCS/README.md](DOCS/README.md)** - Danh mục tài liệu
-- **[01_PROJECT_OVERVIEW.md](DOCS/01_PROJECT_OVERVIEW.md)** - Tổng quan dự án
-- **[02_API_DOCUMENTATION.md](DOCS/02_API_DOCUMENTATION.md)** - API endpoints
-- **[03_DATABASE_SCHEMA.md](DOCS/03_DATABASE_SCHEMA.md)** - Database schema
-- **[04_FRONTEND_GUIDE.md](DOCS/04_FRONTEND_GUIDE.md)** - Frontend guide
-- **[05_BACKEND_GUIDE.md](DOCS/05_BACKEND_GUIDE.md)** - Backend guide
-- **[06_DEPLOYMENT_GUIDE.md](DOCS/06_DEPLOYMENT_GUIDE.md)** - Deployment guide
-- **[07_BUSINESS_FLOWS.md](DOCS/07_BUSINESS_FLOWS.md)** - Business workflows
-
----
+# ĐÂY LÀ NHÁNH ĐÃ HOÀN THIỆN DEYLOY CHẠY TRÊN Railway VÀ Vercel
+# ĐÂY LÀ NHÁNH ĐÃ HOÀN THIỆN DEYLOY CHẠY TRÊN Railway VÀ Vercel
+# ĐÂY LÀ NHÁNH ĐÃ HOÀN THIỆN DEYLOY CHẠY TRÊN Railway VÀ Vercel
 
 # HƯỚNG DẪN THIẾT LẬP VÀ CHẠY DỰ ÁN HOSPITAL WEB
 
