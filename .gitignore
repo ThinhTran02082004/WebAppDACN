@@ -10,3 +10,5 @@ logs/
 *.log
 logs/
 dist/
+.vscode/
+.kiro/specs/
