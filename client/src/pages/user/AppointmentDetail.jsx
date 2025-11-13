@@ -682,8 +682,6 @@ const AppointmentDetail = () => {
               
               {/* Actions */}
               <div className="flex flex-wrap gap-2">
-<<<<<<< HEAD
-=======
                 {/* Chat Button - Show for pending, confirmed, or completed appointments */}
                 {(appointment.status === 'pending' || appointment.status === 'confirmed' || appointment.status === 'completed') && (
                   <>
@@ -701,7 +699,6 @@ const AppointmentDetail = () => {
                     </button>
                   </>
                 )}
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
                 {/* Video Call Button */}
                 {(appointment.status === 'confirmed') && (
                   <VideoCallButton 

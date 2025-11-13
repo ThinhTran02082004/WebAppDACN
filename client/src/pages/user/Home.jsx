@@ -46,102 +46,98 @@ const Home = () => {
     const fetchHomeData = async () => {
       setLoading(true);
       try {
-        // Fetch featured doctors
-        const doctorsResponse = await api.get('/doctors', {
-          params: {
-            limit: 6,
-            featured: true
-          }
-        });
+        // Fetch all data with Promise.allSettled to handle individual failures gracefully
+        const [
+          doctorsResponse,
+          branchesResponse,
+          specialtiesResponse,
+          statsResponse,
+          doctorsStatsResponse,
+          appointmentsStatsResponse
+        ] = await Promise.allSettled([
+          api.get('/doctors', { params: { limit: 6, featured: true } }),
+          api.get('/hospitals', { params: { includeServices: true, limit: 6 } }),
+          api.get('/specialties', { params: { limit: 5, featured: true } }),
+          api.get('/reviews/all'),
+          api.get('/statistics/doctors'),
+          api.get('/statistics/appointments')
+        ]);
         
-        // Fetch branches with services data - limit to 6
-        const branchesResponse = await api.get('/hospitals', {
-          params: {
-            includeServices: true,
-            limit: 6
-          }
-        });
-
-        // Fetch specialties - limit to 5 featured specialties
-        const specialtiesResponse = await api.get('/specialties', {
-          params: {
-            limit: 5,
-            featured: true
-          }
-        });
+        // Extract successful responses
+        const doctorsData = doctorsResponse.status === 'fulfilled' ? doctorsResponse.value : { data: { data: [] } };
+        const branchesData = branchesResponse.status === 'fulfilled' ? branchesResponse.value : { data: { data: [] } };
+        const specialtiesData = specialtiesResponse.status === 'fulfilled' ? specialtiesResponse.value : { data: { data: [] } };
+        const statsData = statsResponse.status === 'fulfilled' ? statsResponse.value : { data: { data: {} } };
+        const doctorsStatsData = doctorsStatsResponse.status === 'fulfilled' ? doctorsStatsResponse.value : { data: { data: {} } };
+        const appointmentsStatsData = appointmentsStatsResponse.status === 'fulfilled' ? appointmentsStatsResponse.value : { data: { data: {} } };
         
-        // Fetch statistics
-        const statsResponse = await api.get('/reviews/all');
-        const doctorsStatsResponse = await api.get('/statistics/doctors');
-        const appointmentsStatsResponse = await api.get('/statistics/appointments');
-        
-        console.log('Doctors response:', doctorsResponse.data);
-        console.log('Branches response:', branchesResponse.data);
-        console.log('Specialties response:', specialtiesResponse.data);
+        console.log('Doctors response:', doctorsData.data);
+        console.log('Branches response:', branchesData.data);
+        console.log('Specialties response:', specialtiesData.data);
         
         // Xử lý dữ liệu bác sĩ
-        let doctorsData = [];
-        if (doctorsResponse.data) {
-          if (Array.isArray(doctorsResponse.data.data)) {
-            doctorsData = doctorsResponse.data.data;
-          } else if (doctorsResponse.data.data && doctorsResponse.data.data.doctors) {
+        let doctors = [];
+        if (doctorsData.data) {
+          if (Array.isArray(doctorsData.data.data)) {
+            doctors = doctorsData.data.data;
+          } else if (doctorsData.data.data && doctorsData.data.data.doctors) {
             // Trường hợp cấu trúc mới: { data: { doctors: [...] } }
-            doctorsData = doctorsResponse.data.data.doctors;
+            doctors = doctorsData.data.data.doctors;
           }
         }
         
         // Lọc bác sĩ theo trạng thái: chỉ hiển thị các bác sĩ đang hoạt động và tài khoản không bị khóa
-        doctorsData = doctorsData.filter(doctor => {
+        doctors = doctors.filter(doctor => {
           // Kiểm tra tài khoản user không bị khóa (nếu thông tin có sẵn)
           const userActive = doctor.user ? (doctor.user.isLocked === false) : true;
           return userActive;
         });
         
-        setFeaturedDoctors(doctorsData);
+        setFeaturedDoctors(doctors);
         
         // Xử lý dữ liệu chi nhánh
-        let branchesData = [];
-        if (branchesResponse.data) {
-          if (Array.isArray(branchesResponse.data.data)) {
-            branchesData = branchesResponse.data.data.slice(0, 6);
-          } else if (branchesResponse.data.data && branchesResponse.data.data.hospitals) {
+        let branches = [];
+        if (branchesData.data) {
+          if (Array.isArray(branchesData.data.data)) {
+            branches = branchesData.data.data.slice(0, 6);
+          } else if (branchesData.data.data && branchesData.data.data.hospitals) {
             // Trường hợp cấu trúc mới: { data: { hospitals: [...] } }
-            branchesData = branchesResponse.data.data.hospitals.slice(0, 6);
+            branches = branchesData.data.data.hospitals.slice(0, 6);
           }
         }
         
         // Lọc chỉ hiển thị các chi nhánh đang hoạt động (isActive=true)
-        branchesData = branchesData.filter(branch => branch.isActive === true);
+        branches = branches.filter(branch => branch.isActive === true);
         
-        setBranches(branchesData);
+        setBranches(branches);
         
-        if (statsResponse.data) {
+        if (statsData.data) {
           setStats({
-            reviewsCount: statsResponse.data.data.total || 0,
-            doctorsCount: doctorsStatsResponse.data.data.totalDoctors || 0,
-            branchesCount: branchesResponse.data.count || branchesData.length || 0,
-            appointmentsCount: appointmentsStatsResponse.data.data.totalAppointments || 0
+            reviewsCount: statsData.data.data?.total || statsData.data.total || 0,
+            doctorsCount: doctorsStatsData.data.data?.totalDoctors || doctorsStatsData.data.totalDoctors || 0,
+            branchesCount: branchesData.data.count || branches.length || 0,
+            appointmentsCount: appointmentsStatsData.data.data?.totalAppointments || appointmentsStatsData.data.totalAppointments || 0
           });
         }
         
         // Xử lý dữ liệu chuyên khoa
-        let specialtiesData = [];
-        if (specialtiesResponse.data) {
-          if (Array.isArray(specialtiesResponse.data.data)) {
-            specialtiesData = specialtiesResponse.data.data;
-          } else if (specialtiesResponse.data.data && specialtiesResponse.data.data.specialties) {
+        let specialties = [];
+        if (specialtiesData.data) {
+          if (Array.isArray(specialtiesData.data.data)) {
+            specialties = specialtiesData.data.data;
+          } else if (specialtiesData.data.data && specialtiesData.data.data.specialties) {
             // Trường hợp cấu trúc mới: { data: { specialties: [...] } }
-            specialtiesData = specialtiesResponse.data.data.specialties;
+            specialties = specialtiesData.data.data.specialties;
           }
         }
         
         // Lọc chỉ hiển thị các chuyên khoa đang hoạt động (isActive=true)
-        specialtiesData = specialtiesData.filter(specialty => specialty.isActive === true);
+        specialties = specialties.filter(specialty => specialty.isActive === true);
         
         // Giới hạn số lượng hiển thị
-        specialtiesData = specialtiesData.slice(0, 5);
+        specialties = specialties.slice(0, 5);
         
-        setSpecialties(specialtiesData);
+        setSpecialties(specialties);
         
         setError(null);
       } catch (error) {

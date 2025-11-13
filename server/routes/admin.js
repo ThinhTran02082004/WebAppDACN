@@ -57,8 +57,7 @@ router.put('/doctors/:id', doctorController.updateDoctor);
 router.delete('/doctors/:id', doctorController.deleteDoctor);
 router.get('/doctors', doctorController.getDoctors);
 router.get('/doctors/:id', doctorController.getDoctorById);
-router.post('/doctors/:id/avatar', uploadToMemory.single('avatar'), doctorController.uploadDoctorAvatar);
-
+router.post('/doctors/:id/avatar', uploadToMemory.single('avatar'), doctorController.uploadDoctorAvatar)
 // Branch/Hospital routes
 router.post('/hospitals', hospitalController.createHospital);
 router.put('/hospitals/:id', hospitalController.updateHospital);

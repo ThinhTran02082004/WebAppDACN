@@ -1,0 +1,125 @@
+/* AI Chat Popup Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.ai-chat-popup {
+  animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ai-chat-button {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ai-chat-button:hover {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.ai-chat-button:active {
+  transform: scale(0.95);
+}
+
+/* Custom scrollbar for messages */
+.ai-chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ai-chat-messages::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.ai-chat-messages::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
+
+.ai-chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Message animations */
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-item {
+  animation: messageSlideIn 0.3s ease-out;
+}
+
+/* Typing indicator animation */
+@keyframes typingDot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
+}
+
+.typing-dot {
+  animation: typingDot 1.4s infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Gradient text effect */
+.gradient-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .ai-chat-popup {
+    width: calc(100vw - 2rem);
+    height: calc(100vh - 8rem);
+    bottom: 1rem;
+    right: 1rem;
+  }
+  
+  .ai-chat-button {
+    bottom: 1rem;
+    right: 1rem;
+  }
+}
