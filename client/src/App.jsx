@@ -4,7 +4,6 @@ import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 import Navbar from './components/Navbar.jsx';
 import Footer from './components/Footer.jsx';
-import ChatWidget from './components/ChatWidget.jsx';
 import Home from './pages/user/Home.jsx';
 import Doctors from './pages/user/Doctors.jsx';
 import DoctorDetail from './pages/user/DoctorDetail.jsx';
