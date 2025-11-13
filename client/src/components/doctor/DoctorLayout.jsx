@@ -3,9 +3,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   FaCalendarAlt, FaUserInjured, FaClipboardList,
-  FaUserMd, FaClock, FaSignOutAlt, FaChartLine,
+  FaUserMd, FaClock, FaSignOutAlt,
   FaTachometerAlt, FaCommentMedical,
-  FaBars, FaTimes, FaHistory
+  FaBars, FaTimes, FaHistory, FaComments, FaVideo,
+  FaMoneyBillWave
 } from 'react-icons/fa';
 
 const DoctorLayout = ({ children }) => {
@@ -41,8 +42,11 @@ const DoctorLayout = ({ children }) => {
     { path: '/doctor/dashboard', label: 'Tổng quan', icon: <FaTachometerAlt /> },
     { path: '/doctor/appointments', label: 'Lịch hẹn', icon: <FaCalendarAlt /> },
     { path: '/doctor/patients', label: 'Bệnh nhân', icon: <FaUserInjured /> },
+    { path: '/doctor/chat', label: 'Tin nhắn', icon: <FaComments /> },
+    { path: '/doctor/meetings', label: 'Cuộc họp nội bộ', icon: <FaVideo /> },
     { path: '/doctor/schedule', label: 'Quản lý lịch trực', icon: <FaClock /> },
     { path: '/doctor/medical-records', label: 'Hồ sơ y tế', icon: <FaClipboardList /> },
+    { path: '/doctor/payment-history', label: 'Lịch sử thanh toán', icon: <FaMoneyBillWave /> },
     { path: '/doctor/video-call-history', label: 'Lịch sử Video Call', icon: <FaHistory /> },
     { path: '/doctor/reviews', label: 'Đánh giá', icon: <FaCommentMedical /> },
     { path: '/doctor/profile', label: 'Hồ sơ cá nhân', icon: <FaUserMd /> },

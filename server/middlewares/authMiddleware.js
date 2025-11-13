@@ -33,8 +33,13 @@ exports.protect = async (req, res, next) => {
       // Xác định loại tài khoản dựa vào role trong token
       let user;
       
-      // Luôn lấy thông tin từ User model trước
-        user = await User.findById(decoded.id).select('-passwordHash');
+      // Luôn lấy thông tin từ User model trước và populate hospitalId
+      const userRole = decoded.role || decoded.roleType;
+      const populateOptions = userRole === 'pharmacist' || userRole === 'doctor' ? 'hospitalId' : '';
+      
+      user = await User.findById(decoded.id)
+        .select('-passwordHash')
+        .populate(populateOptions);
       
       if (!user) {
         return res.status(401).json({
@@ -43,9 +48,15 @@ exports.protect = async (req, res, next) => {
         });
       }
       
-      // Gán thông tin role từ token vào req.user
+      // Gán thông tin role từ token vào req.user, nhưng ưu tiên roleType từ DB
       req.user = user;
-      req.user.role = decoded.role;
+      req.user.role = user.roleType || decoded.role;
+      
+      // Log warning if role mismatch
+      if (decoded.role && user.roleType && decoded.role !== user.roleType) {
+        console.warn(`Role mismatch for user ${user._id}: token role=${decoded.role}, DB roleType=${user.roleType}`);
+      }
+      
       next();
     } catch (error) {
       return res.status(401).json({
@@ -217,6 +228,14 @@ exports.hasRole = (roleCode) => {
         });
       }
 
+      // For pharmacist routes, allow both pharmacists and admins
+      if (roleCode === 'pharmacist' && req.user.role !== 'pharmacist' && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn không có quyền truy cập tài nguyên này'
+        });
+      }
+
       // Regular user routes are accessible by all authenticated users
       next();
     } catch (error) {
@@ -269,6 +288,30 @@ exports.doctor = async (req, res, next) => {
     }
   } catch (error) {
     console.error('Doctor middleware error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Middleware to restrict routes to pharmacist role
+ * @desc    PHARMACIST-ONLY ROUTE: Only accessible by pharmacists
+ */
+exports.pharmacist = async (req, res, next) => {
+  try {
+    if (req.user && (req.user.role === 'pharmacist' || req.user.role === 'admin')) {
+      next();
+    } else {
+      res.status(403).json({ 
+        success: false,
+        message: 'Không được phép truy cập, chỉ dành cho dược sĩ' 
+      });
+    }
+  } catch (error) {
+    console.error('Pharmacist middleware error:', error);
     res.status(500).json({
       success: false,
       message: 'Lỗi server',

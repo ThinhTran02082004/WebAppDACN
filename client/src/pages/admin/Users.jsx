@@ -41,10 +41,11 @@ function Users() {
         isLockedParam = false;
       }
       
-      // Xác định loại vai trò cần lấy (chỉ lấy admin hoặc user)
+      // Xác định loại vai trò cần lấy (chỉ lấy admin, user, hoặc pharmacist)
       const roleTypeParam = filter.role === 'admin' ? 'admin' : 
-                           filter.role === 'user' ? 'user' : 
-                           'user,admin';
+                           filter.role === 'user' ? 'user' :
+                           filter.role === 'pharmacist' ? 'pharmacist' :
+                           'user,admin,pharmacist';
       
       console.log(`Tìm người dùng với roleType=${roleTypeParam}, trạng thái=${filter.status}, isLocked=${isLockedParam}`);
       const res = await api.get('/admin/users', {
@@ -59,7 +60,7 @@ function Users() {
       
       console.log('User data response:', res.data);
       
-      // Thêm bước lọc bổ sung ở phía client để đảm bảo không có bác sĩ
+      // Lấy tất cả users (admin, user, pharmacist) - không filter doctor
       if (res.data && res.data.success) {
         const userData = Array.isArray(res.data.data) 
           ? res.data.data.filter(user => user.roleType !== 'doctor') 
@@ -398,6 +399,7 @@ function Users() {
                 <option value="all">Tất cả vai trò</option>
                 <option value="user">Người dùng</option>
                 <option value="admin">Quản trị viên</option>
+                <option value="pharmacist">Dược sĩ</option>
               </select>
             </div>
           </div>
@@ -472,14 +474,24 @@ function Users() {
                       <div className="text-sm text-gray-500">{user.phoneNumber || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        user.roleType === 'admin' 
-                          ? 'bg-purple-100 text-purple-800' 
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {user.roleType === 'admin' ? 'Quản trị viên' : 
-                         user.roleType === 'staff' ? 'Nhân viên' : 'Người dùng'}
-                      </span>
+                      <div>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          user.roleType === 'admin' 
+                            ? 'bg-purple-100 text-purple-800' 
+                            : user.roleType === 'pharmacist'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {user.roleType === 'admin' ? 'Quản trị viên' : 
+                           user.roleType === 'pharmacist' ? 'Dược sĩ' :
+                           user.roleType === 'staff' ? 'Nhân viên' : 'Người dùng'}
+                        </span>
+                        {user.roleType === 'pharmacist' && user.hospitalId && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {user.hospitalId.name || user.hospitalId}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

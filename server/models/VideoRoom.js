@@ -6,6 +6,7 @@ const videoRoomSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+<<<<<<< HEAD
   appointmentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Appointment',
@@ -20,6 +21,35 @@ const videoRoomSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
+=======
+  roomCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    uppercase: true,
+    trim: true
+  },
+  meetingType: {
+    type: String,
+    enum: ['appointment', 'internal'],
+    default: 'appointment'
+  },
+  isPublic: {
+    type: Boolean,
+    default: false
+  },
+  appointmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Appointment'
+  },
+  doctorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Doctor'
+  },
+  patientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+>>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
   },
   status: {
     type: String,
@@ -67,7 +97,11 @@ const videoRoomSchema = new mongoose.Schema({
   metadata: {
     maxParticipants: {
       type: Number,
+<<<<<<< HEAD
       default: 2
+=======
+      default: 10
+>>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
     },
     enableRecording: {
       type: Boolean,
@@ -92,11 +126,27 @@ const videoRoomSchema = new mongoose.Schema({
 });
 
 // Indexes
+<<<<<<< HEAD
 videoRoomSchema.index({ appointmentId: 1 });
+=======
+// Note: roomCode already has unique index from field definition
+videoRoomSchema.index(
+  { appointmentId: 1 },
+  {
+    unique: true,
+    sparse: true,
+    partialFilterExpression: { status: { $in: ['waiting', 'active'] } }
+  }
+);
+>>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
 videoRoomSchema.index({ doctorId: 1 });
 videoRoomSchema.index({ patientId: 1 });
 videoRoomSchema.index({ status: 1 });
 videoRoomSchema.index({ createdAt: -1 });
+<<<<<<< HEAD
+=======
+videoRoomSchema.index({ meetingType: 1, status: 1 });
+>>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
 
 // Virtual for room duration calculation
 videoRoomSchema.virtual('calculatedDuration').get(function() {
@@ -135,6 +185,51 @@ videoRoomSchema.methods.endRoom = function() {
   return this.save();
 };
 
+<<<<<<< HEAD
+=======
+// Static method to generate unique room code
+videoRoomSchema.statics.generateRoomCode = async function() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let roomCode;
+  let isUnique = false;
+  let attempts = 0;
+  const maxAttempts = 10;
+
+  while (!isUnique && attempts < maxAttempts) {
+    // Generate 6-character code
+    roomCode = '';
+    for (let i = 0; i < 6; i++) {
+      roomCode += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    // Check if code already exists
+    const existing = await this.findOne({ roomCode });
+    if (!existing) {
+      isUnique = true;
+    }
+    attempts++;
+  }
+
+  if (!isUnique) {
+    throw new Error('Could not generate unique room code');
+  }
+
+  return roomCode;
+};
+
+// Pre-save hook to generate room code if not present
+videoRoomSchema.pre('save', async function(next) {
+  if (!this.roomCode && this.isNew) {
+    try {
+      this.roomCode = await this.constructor.generateRoomCode();
+    } catch (error) {
+      return next(error);
+    }
+  }
+  next();
+});
+
+>>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
 const VideoRoom = mongoose.model('VideoRoom', videoRoomSchema);
 
 module.exports = VideoRoom;

@@ -23,6 +23,7 @@ const { protect, authorize } = require('../middlewares/authMiddleware');
 const { getChatHistory, addIrrelevantQuestion } = require('../controllers/adminController');
 
 const medicationController = require('../controllers/medicationController');
+const cronController = require('../controllers/cronController');
 
 
 // Cấu hình multer để lưu file vào bộ nhớ (RAM)
@@ -46,6 +47,17 @@ router.put('/users/:id/unlock', userController.unlockUserAccount);
 router.put('/doctors/:id/lock', doctorController.lockDoctorAccount);
 router.put('/doctors/:id/unlock', doctorController.unlockDoctorAccount);
 
+// Pharmacist routes
+router.post('/pharmacists', userController.createPharmacist);
+router.get('/pharmacists', userController.getAllUsers); // Reuse getAllUsers with filter
+
+// Doctor routes
+router.post('/doctors', doctorController.createDoctor);
+router.put('/doctors/:id', doctorController.updateDoctor);
+router.delete('/doctors/:id', doctorController.deleteDoctor);
+router.get('/doctors', doctorController.getDoctors);
+router.get('/doctors/:id', doctorController.getDoctorById);
+router.post('/doctors/:id/avatar', uploadToMemory.single('avatar'), doctorController.uploadDoctorAvatar);
 
 // Branch/Hospital routes
 router.post('/hospitals', hospitalController.createHospital);
@@ -122,6 +134,7 @@ router.post('/medications',  medicationController.createMedication);
 router.put('/medications/:id',  medicationController.updateMedication);
 router.delete('/medications/:id',  medicationController.deleteMedication);
 
-
+// Cron job test routes
+router.get('/cron/test-appointment-reminder', cronController.testAppointmentReminder);
 
 module.exports = router;

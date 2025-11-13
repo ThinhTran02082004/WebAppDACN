@@ -41,7 +41,7 @@ const BranchDetail = () => {
         // Fetch reviews for this branch
         const reviewsRes = await api.get(`/reviews/hospital/${id}`);
         console.log('Reviews data:', reviewsRes.data.data);
-        
+
         // Handle paginated response structure
         let reviewsData = [];
         if (reviewsRes.data.data && reviewsRes.data.data.docs) {
@@ -54,7 +54,7 @@ const BranchDetail = () => {
           // Default to empty array if no valid data structure
           reviewsData = [];
         }
-        
+
         setReviews(reviewsData);
 
         // Get top 3 reviews with highest rating
@@ -86,14 +86,17 @@ const BranchDetail = () => {
   }, [id, navigate]);
 
   const handleAppointmentClick = () => {
+    // Use 'hospital' parameter for consistency with Appointment component
+    const appointmentUrl = `/appointment?hospital=${id}`;
+
     // If not authenticated, redirect to login
     if (!isAuthenticated) {
-      navigate('/auth', { state: { from: `/appointment?branch=${id}` } });
+      navigate('/auth', { state: { from: appointmentUrl } });
       return;
     }
 
-    // If authenticated, redirect directly to appointment page with branch preselected
-    navigate(`/appointment?branch=${id}`);
+    // If authenticated, redirect directly to appointment page with hospital preselected
+    navigate(appointmentUrl);
   };
 
   const handleReplySubmit = async (reviewId) => {
@@ -125,7 +128,7 @@ const BranchDetail = () => {
       });
 
       setReviews(updatedReviews);
-      
+
       // Update top reviews if needed
       const updatedTopReviews = topReviews.map(review => {
         if (review._id === reviewId) {
@@ -136,7 +139,7 @@ const BranchDetail = () => {
         }
         return review;
       });
-      
+
       setTopReviews(updatedTopReviews);
       setReplyText('');
       setReplyingTo(null);
@@ -154,14 +157,14 @@ const BranchDetail = () => {
     return (
       <div className="flex items-center">
         {[1, 2, 3, 4, 5].map((star) => (
-          <FaStar 
+          <FaStar
             key={star}
-            className={`${star <= Math.floor(rating) 
-              ? 'text-yellow-500' 
-              : star <= Math.ceil(rating) && rating % 1 !== 0 
-                ? 'text-yellow-300' 
+            className={`${star <= Math.floor(rating)
+              ? 'text-yellow-500'
+              : star <= Math.ceil(rating) && rating % 1 !== 0
+                ? 'text-yellow-300'
                 : 'text-gray-300'
-            } w-4 h-4`}
+              } w-4 h-4`}
           />
         ))}
         <span className="ml-2 font-semibold text-gray-700">{rating.toFixed(1)}</span>
@@ -217,12 +220,12 @@ const BranchDetail = () => {
       {/* Hero Banner */}
       <section className="bg-gradient-to-r from-primary to-blue-700 relative py-20 overflow-hidden">
         <div className="absolute inset-0 overflow-hidden">
-            <img
+          <img
             src={branch.imageUrl || "https://img.freepik.com/free-photo/hospital-building-modern-parking-lot_1127-3616.jpg"}
-            alt={branch.name} 
-            className="w-full h-full object-cover object-center opacity-20" 
-              onError={(e) => {
-                e.target.onerror = null;
+            alt={branch.name}
+            className="w-full h-full object-cover object-center opacity-20"
+            onError={(e) => {
+              e.target.onerror = null;
               e.target.src = "https://img.freepik.com/free-photo/hospital-building-modern-parking-lot_1127-3616.jpg";
             }}
           />
@@ -261,7 +264,7 @@ const BranchDetail = () => {
           <path fill="currentColor" fillOpacity="1" d="M0,32L80,42.7C160,53,320,75,480,74.7C640,75,800,53,960,48C1120,43,1280,53,1360,58.7L1440,64L1440,100L1360,100C1280,100,1120,100,960,100C800,100,640,100,480,100C320,100,160,100,80,100L0,100Z"></path>
         </svg>
       </section>
-      
+
       {/* Rest of branch detail content */}
       <div className="container mx-auto px-4 py-8">
         {/* Branch Info Card */}
@@ -272,7 +275,7 @@ const BranchDetail = () => {
                 <FaHospital className="text-primary mr-2" />
                 Thông tin chi nhánh
               </h2>
-              
+
               <div className="space-y-4">
                 <div className="flex items-start">
                   <FaMapMarkerAlt className="text-primary mt-1 mr-3 flex-shrink-0" />
@@ -280,7 +283,7 @@ const BranchDetail = () => {
                     <div className="font-medium text-gray-700">Địa chỉ</div>
                     <div className="text-gray-600">{branch.address || "Không có thông tin"}</div>
                   </div>
-          </div>
+                </div>
 
                 {branch.phone && (
                   <div className="flex items-start">
@@ -291,7 +294,7 @@ const BranchDetail = () => {
                     </div>
                   </div>
                 )}
-                
+
                 {branch.email && (
                   <div className="flex items-start">
                     <FaEnvelope className="text-primary mt-1 mr-3 flex-shrink-0" />
@@ -301,7 +304,7 @@ const BranchDetail = () => {
                     </div>
                   </div>
                 )}
-                
+
                 {branch.openingHours && (
                   <div className="flex items-start">
                     <FaClock className="text-primary mt-1 mr-3 flex-shrink-0" />
@@ -319,29 +322,29 @@ const BranchDetail = () => {
                 <FaStethoscope className="text-primary mr-2" />
                 Tổng quan
               </h2>
-              
+
               <div className="grid grid-cols-2 gap-6">
                 <div className="bg-gray-50 p-4 rounded-lg text-center">
                   <div className="text-xl font-bold text-primary mb-1">{doctorCount}</div>
                   <div className="text-gray-600 text-sm">Bác sĩ</div>
                 </div>
-                
+
                 <div className="bg-gray-50 p-4 rounded-lg text-center">
                   <div className="text-xl font-bold text-primary mb-1">{specialties.length}</div>
                   <div className="text-gray-600 text-sm">Chuyên khoa</div>
                 </div>
-                
+
                 <div className="bg-gray-50 p-4 rounded-lg text-center">
                   <div className="text-xl font-bold text-primary mb-1">{services.length}</div>
                   <div className="text-gray-600 text-sm">Dịch vụ</div>
                 </div>
-                
+
                 <div className="bg-gray-50 p-4 rounded-lg text-center">
                   <div className="text-xl font-bold text-primary mb-1">{reviewCount}</div>
                   <div className="text-gray-600 text-sm">Đánh giá</div>
                 </div>
               </div>
-              
+
               <button
                 onClick={handleAppointmentClick}
                 className="mt-6 w-full bg-primary hover:bg-primary-dark text-white py-3 rounded-lg font-medium transition-all flex items-center justify-center"
@@ -372,25 +375,25 @@ const BranchDetail = () => {
                   Chuyên khoa
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {specialties.map(specialty => (
+                  {specialties.map(specialty => (
                     <div key={specialty._id} className="border border-gray-100 rounded-lg p-4 hover:border-primary/30 hover:shadow-md transition-all">
                       <h3 className="font-semibold text-lg text-gray-800 mb-2">{specialty.name}</h3>
                       <p className="text-gray-600 text-sm mb-3 line-clamp-2">{specialty.description || 'Không có mô tả.'}</p>
                       <Link to={`/specialties/${specialty._id}`} className="text-primary hover:text-primary-dark font-medium text-sm flex items-center">
-                          Xem chi tiết
+                        Xem chi tiết
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                         </svg>
-                        </Link>
-                      </div>
-                    ))}
-                  </div>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
                 <Link to="/specialties" className="mt-4 text-primary hover:text-primary-dark font-medium inline-flex items-center">
-                    Xem tất cả chuyên khoa
+                  Xem tất cả chuyên khoa
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                   </svg>
-                  </Link>
+                </Link>
               </div>
             )}
 
@@ -402,7 +405,7 @@ const BranchDetail = () => {
                   Dịch vụ y tế
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {services.map(service => (
+                  {services.map(service => (
                     <div key={service._id} className="border border-gray-100 rounded-lg p-4 hover:border-primary/30 hover:shadow-md transition-all">
                       <h3 className="font-semibold text-lg text-gray-800 mb-2">{service.name}</h3>
                       <p className="text-gray-600 text-sm mb-2 line-clamp-2">{service.description || 'Không có mô tả.'}</p>
@@ -410,13 +413,13 @@ const BranchDetail = () => {
                         {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(service.price || 0)}
                       </div>
                       <Link to={`/services/${service._id}`} className="text-primary hover:text-primary-dark font-medium text-sm flex items-center">
-                          Xem chi tiết
+                        Xem chi tiết
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                         </svg>
                       </Link>
-                      </div>
-                    ))}
+                    </div>
+                  ))}
                 </div>
                 <Link to="/services" className="mt-4 text-primary hover:text-primary-dark font-medium inline-flex items-center">
                   Xem tất cả dịch vụ
@@ -439,8 +442,8 @@ const BranchDetail = () => {
                     <div key={review._id} className="border-b border-gray-100 pb-6 last:border-0 last:pb-0">
                       <div className="flex items-start">
                         <div className="mr-4">
-                          <img 
-                            src={review.userId?.avatarUrl || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'} 
+                          <img
+                            src={review.userId?.avatarUrl || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
                             alt={review.userId?.fullName || 'Ẩn danh'}
                             className="w-12 h-12 rounded-full object-cover border border-gray-200"
                             onError={(e) => {
@@ -459,56 +462,56 @@ const BranchDetail = () => {
                             {renderStars(review.rating || 0)}
                           </div>
                           <p className="text-gray-700 mb-3">{review.comment || 'Không có nội dung đánh giá.'}</p>
-                      
+
                           {/* Replies */}
-                      {review.replies && review.replies.length > 0 && (
+                          {review.replies && review.replies.length > 0 && (
                             <div className="mt-3 pl-4 border-l-2 border-gray-100 space-y-3">
-                          {review.replies.map((reply, index) => (
+                              {review.replies.map((reply, index) => (
                                 <div key={index} className="bg-gray-50 rounded-lg p-3">
                                   <div className="flex items-center gap-2 mb-1">
-                                  <img 
-                                    src={reply.userId?.avatarUrl || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'} 
-                                    alt={reply.userId?.fullName || 'Người dùng'}
+                                    <img
+                                      src={reply.userId?.avatarUrl || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
+                                      alt={reply.userId?.fullName || 'Người dùng'}
                                       className="w-8 h-8 rounded-full"
-                                    onError={(e) => {
-                                      e.target.onerror = null;
-                                      e.target.src = 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
-                                    }}
-                                  />
+                                      onError={(e) => {
+                                        e.target.onerror = null;
+                                        e.target.src = 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+                                      }}
+                                    />
                                     <div>
                                       <div className="font-semibold text-sm text-gray-800">{reply.userId?.fullName || 'Người dùng'}</div>
                                       <div className="text-xs text-gray-500">{formatDate(reply.createdAt)}</div>
-                                </div>
+                                    </div>
                                   </div>
                                   <p className="text-gray-700 text-sm">{reply.comment}</p>
                                 </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {/* Reply button and form */}
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Reply button and form */}
                           <div className="mt-3">
-                        {replyingTo === review._id ? (
+                            {replyingTo === review._id ? (
                               <div className="border border-gray-200 rounded-lg p-3">
-                            <textarea
-                              value={replyText}
-                              onChange={(e) => setReplyText(e.target.value)}
-                              placeholder="Nhập trả lời của bạn..."
+                                <textarea
+                                  value={replyText}
+                                  onChange={(e) => setReplyText(e.target.value)}
+                                  placeholder="Nhập trả lời của bạn..."
                                   className="w-full border border-gray-200 rounded p-2 text-sm focus:ring-primary focus:border-primary"
-                              rows={3}
-                              disabled={submittingReply}
-                            ></textarea>
+                                  rows={3}
+                                  disabled={submittingReply}
+                                ></textarea>
                                 <div className="flex justify-end gap-2 mt-2">
-                              <button
+                                  <button
                                     className="px-4 py-1 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition-colors"
-                                onClick={() => {
-                                  setReplyingTo(null);
-                                  setReplyText('');
-                                }}
-                                disabled={submittingReply}
-                              >
-                                Hủy
-                              </button>
+                                    onClick={() => {
+                                      setReplyingTo(null);
+                                      setReplyText('');
+                                    }}
+                                    disabled={submittingReply}
+                                  >
+                                    Hủy
+                                  </button>
                                   <button
                                     className="px-4 py-1 text-sm bg-primary hover:bg-primary-dark text-white rounded transition-colors"
                                     onClick={() => handleReplySubmit(review._id)}
@@ -516,26 +519,26 @@ const BranchDetail = () => {
                                   >
                                     {submittingReply ? 'Đang gửi...' : 'Gửi trả lời'}
                                   </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
+                                </div>
+                              </div>
+                            ) : (
+                              <button
                                 className="text-primary hover:text-primary-dark text-sm font-medium flex items-center"
-                            onClick={() => setReplyingTo(review._id)}
-                          >
+                                onClick={() => setReplyingTo(review._id)}
+                              >
                                 <FaReply className="mr-1" /> Trả lời
-                          </button>
-                        )}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
-                  
-                  {reviews.length > 3 && (
+
+                {reviews.length > 3 && (
                   <div className="text-center mt-6">
-                    <Link 
+                    <Link
                       to={`/reviews/hospital/${id}`}
                       className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-6 py-2 rounded-lg font-medium transition-colors inline-flex items-center"
                     >
@@ -564,7 +567,7 @@ const BranchDetail = () => {
                 className="w-full bg-primary hover:bg-primary-dark text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center"
               >
                 <FaCalendarAlt className="mr-2" /> Đặt lịch ngay
-                </button>
+              </button>
             </div>
 
             {/* Contact info card */}
@@ -586,7 +589,7 @@ const BranchDetail = () => {
                   <div>
                     <h4 className="font-semibold text-gray-800 mb-1">Số điện thoại</h4>
                     <p className="text-gray-600">{branch.phone || 'Không có thông tin'}</p>
-            </div>
+                  </div>
                 </div>
                 <div className="flex items-start">
                   <FaEnvelope className="text-primary mt-1 mr-3 flex-shrink-0" />
@@ -615,7 +618,7 @@ const BranchDetail = () => {
                             <div key={day} className="flex justify-between">
                               <span>{dayNames[day]}:</span>
                               <span>{hours.isOpen ? `${hours.open} - ${hours.close}` : 'Đóng cửa'}</span>
-                          </div>
+                            </div>
                           ) : null;
                         })}
                       </div>
@@ -634,13 +637,13 @@ const BranchDetail = () => {
                 Bản đồ
               </h3>
               <div className="rounded-lg overflow-hidden border border-gray-200">
-                <img 
-                  src="https://developers.google.com/static/maps/images/landing/hero_maps_static_api.png" 
+                <img
+                  src="https://developers.google.com/static/maps/images/landing/hero_maps_static_api.png"
                   alt="Map location"
                   className="w-full h-48 object-cover"
                 />
                 <div className="p-3 bg-gray-50 text-center">
-                  <a 
+                  <a
                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(branch.address || '')}`}
                     className="text-primary hover:text-primary-dark font-medium text-sm flex items-center justify-center"
                     target="_blank"
@@ -664,10 +667,10 @@ const BranchDetail = () => {
                   <FaStar className="text-primary mr-2" />
                   Đánh giá nổi bật
                 </h2>
-            </div>
-            
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {topReviews.map((review, index) => (
+                {topReviews.map((review, index) => (
                   <div key={review._id} className="border border-gray-100 rounded-lg p-5 relative hover:shadow-md transition-all">
                     {index === 0 && (
                       <div className="absolute -top-3 -right-3 bg-primary text-white text-xs px-2 py-1 rounded-full shadow-md">
@@ -675,8 +678,8 @@ const BranchDetail = () => {
                       </div>
                     )}
                     <div className="flex items-start mb-3">
-                      <img 
-                        src={review.userId?.avatarUrl || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'} 
+                      <img
+                        src={review.userId?.avatarUrl || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
                         alt={review.userId?.fullName || 'Ẩn danh'}
                         className="w-10 h-10 rounded-full mr-3 object-cover border border-gray-200"
                         onError={(e) => {
@@ -688,20 +691,20 @@ const BranchDetail = () => {
                         <h4 className="font-semibold text-gray-800">{review.userId?.fullName || 'Ẩn danh'}</h4>
                         <div className="flex items-center">
                           {renderStars(review.rating || 0)}
-                    </div>
+                        </div>
                         <div className="text-sm text-gray-500 mt-1">{formatDate(review.createdAt)}</div>
                       </div>
                     </div>
                     <p className="text-gray-700 mb-3 line-clamp-3">{review.comment || 'Không có nội dung đánh giá.'}</p>
-                  
+
                     {/* Show number of replies if any */}
-                  {review.replies && review.replies.length > 0 && (
+                    {review.replies && review.replies.length > 0 && (
                       <div className="text-sm text-primary font-medium">
                         {review.replies.length} phản hồi
-                    </div>
-                  )}
-                </div>
-              ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </div>

@@ -191,21 +191,27 @@ const SpecialtyDetail = () => {
   }, [specialtyId]);
   
   const handleBookAppointment = (doctorId) => {
+    // Include specialtyId in the URL
+    const appointmentUrl = `/appointment?doctor=${doctorId}&specialty=${specialtyId}`;
+    
     if (!isAuthenticated) {
-      navigate('/auth', { state: { from: `/appointment?doctor=${doctorId}` } });
+      navigate('/auth', { state: { from: appointmentUrl } });
       return;
     }
     
-    navigate(`/appointment?doctor=${doctorId}`);
+    navigate(appointmentUrl);
   };
   
   const handleBookService = (serviceId) => {
+    // Include specialtyId in the URL
+    const appointmentUrl = `/appointment?service=${serviceId}&specialty=${specialtyId}`;
+    
     if (!isAuthenticated) {
-      navigate('/auth', { state: { from: `/appointment?service=${serviceId}` } });
+      navigate('/auth', { state: { from: appointmentUrl } });
       return;
     }
     
-    navigate(`/appointment?service=${serviceId}`);
+    navigate(appointmentUrl);
   };
   
   if (loading) {
@@ -317,10 +323,19 @@ const SpecialtyDetail = () => {
                   <FaStethoscope className="text-green-500" />
                   <span className="font-medium">{services.length} dịch vụ</span>
                 </div>
-                <Link to="/appointment" className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors shadow-sm">
+                <button 
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      navigate('/auth', { state: { from: `/appointment?specialty=${specialtyId}` } });
+                      return;
+                    }
+                    navigate(`/appointment?specialty=${specialtyId}`);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors shadow-sm"
+                >
                   <FaCalendarAlt />
                   <span className="font-medium">Đặt lịch khám</span>
-                </Link>
+                </button>
               </div>
             </div>
           </div>

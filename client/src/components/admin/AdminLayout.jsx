@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
   FaTachometerAlt, FaUsers, FaUserMd, FaHospital,
   FaFileAlt, FaCalendarAlt, FaPercentage, FaCreditCard,
-  FaStar, FaProcedures, FaDoorOpen, FaChartBar, FaSignOutAlt,
-  FaClock, FaCog, FaSearch, FaBars, FaTimes,
-  FaUserShield, FaLock, FaExclamationTriangle, FaMedkit, FaVideo, FaHistory, FaRobot
+  FaStar, FaProcedures, FaDoorOpen, FaSignOutAlt,
+  FaClock, FaSearch, FaBars, FaTimes,
+  FaUserShield, FaLock, FaMedkit, FaVideo, FaHistory, FaRobot,
+  FaPills, FaBed, FaBoxes
 } from 'react-icons/fa';
-import toast from 'react-hot-toast';
 
 const AdminLayout = ({ children }) => {
   const location = useLocation();
@@ -21,6 +21,7 @@ const AdminLayout = ({ children }) => {
     '/admin/dashboard',
     '/admin/users',
     '/admin/doctors',
+    '/admin/pharmacists',
     '/admin/doctor-schedules',
     '/admin/hospitals',
     '/admin/specialties',
@@ -31,8 +32,12 @@ const AdminLayout = ({ children }) => {
     '/admin/payments',
     '/admin/reviews',
     '/admin/medications',
+    '/admin/medication-inventory',
+    '/admin/prescription-templates',
+    '/admin/inpatient-rooms',
     '/admin/news',
     '/admin/video-rooms',
+    '/admin/doctor-meetings',
     '/admin/video-call-history',
     '/admin/history-ai',
   ];
@@ -116,18 +121,23 @@ const AdminLayout = ({ children }) => {
     { path: '/admin/dashboard', label: 'Tổng quan', icon: <FaTachometerAlt /> },
     { path: '/admin/users', label: 'Người dùng', icon: <FaUsers /> },
     { path: '/admin/doctors', label: 'Bác sĩ', icon: <FaUserMd /> },
+    { path: '/admin/pharmacists', label: 'Dược sĩ', icon: <FaPills /> },
     { path: '/admin/doctor-schedules', label: 'Lịch bác sĩ', icon: <FaClock /> },
     { path: '/admin/hospitals', label: 'Cơ sở y tế', icon: <FaHospital /> },
     { path: '/admin/specialties', label: 'Chuyên khoa', icon: <FaFileAlt /> },
     { path: '/admin/services', label: 'Dịch vụ', icon: <FaProcedures /> },
-    { path: '/admin/rooms', label: 'Phòng', icon: <FaDoorOpen /> },
-    { path: '/admin/medications', label: 'Quản lý thuốc', icon: <FaMedkit /> },
+    { path: '/admin/rooms', label: 'Phòng khám', icon: <FaDoorOpen /> },
+    { path: '/admin/medications', label: 'Danh sách thuốc', icon: <FaMedkit /> },
+    { path: '/admin/medication-inventory', label: 'Kho thuốc', icon: <FaBoxes /> },
+    { path: '/admin/prescription-templates', label: 'Đơn thuốc mẫu', icon: <FaPills /> },
+    { path: '/admin/inpatient-rooms', label: 'Phòng nội trú', icon: <FaBed /> },
     { path: '/admin/appointments', label: 'Lịch hẹn', icon: <FaCalendarAlt /> },
     { path: '/admin/coupons', label: 'Mã giảm giá', icon: <FaPercentage /> },
     { path: '/admin/payments', label: 'Thanh toán', icon: <FaCreditCard /> },
     { path: '/admin/reviews', label: 'Đánh giá', icon: <FaStar /> },
     { path: '/admin/news', label: 'Tin tức', icon: <FaFileAlt /> },
-    { path: '/admin/video-rooms', label: 'Phòng Video', icon: <FaVideo /> },
+    { path: '/admin/video-rooms', label: 'Phòng Video Khám', icon: <FaVideo /> },
+    { path: '/admin/doctor-meetings', label: 'Cuộc Họp Bác Sĩ', icon: <FaUsers /> },
     { path: '/admin/video-call-history', label: 'Lịch sử Video Call', icon: <FaHistory /> },
     { path: '/admin/history-ai', label: 'Lịch sử AI', icon: <FaRobot /> },
   ] : [];
@@ -135,12 +145,12 @@ const AdminLayout = ({ children }) => {
   // Group the navigation items for admin
   const groupedNavItems = {
     main: [navItems[0]].filter(Boolean), // Dashboard
-    users: navItems.length > 2 ? [navItems[1], navItems[2]].filter(Boolean) : [], // Users, Doctors
-    scheduling: navItems.length > 9 ? [navItems[3], navItems[9]].filter(Boolean) : [], // Doctor schedules, Appointments
-    facilities: navItems.length > 8 ? [navItems[4], navItems[5], navItems[6], navItems[7], navItems[8]].filter(Boolean) : [], // Hospitals, Specialties, Services, Rooms, Medications
-    business: navItems.length > 16
-      ? [navItems[10], navItems[11], navItems[12], navItems[13], navItems[14], navItems[15], navItems[16], navItems[17]].filter(Boolean)
-      : [] // Coupons, Payments, Reviews, News, Video Rooms, Video Call History, History AI
+    users: navItems.length > 3 ? [navItems[1], navItems[2], navItems[3]].filter(Boolean) : [], // Users, Doctors, Pharmacists
+    scheduling: navItems.length > 13 ? [navItems[4], navItems[13]].filter(Boolean) : [], // Doctor schedules, Appointments
+    facilities: navItems.length > 12 ? [navItems[5], navItems[6], navItems[7], navItems[8], navItems[9], navItems[10], navItems[11], navItems[12]].filter(Boolean) : [], // Hospitals, Specialties, Services, Rooms, Medications, Inventory, Templates, Inpatient Rooms
+    business: navItems.length > 21
+      ? [navItems[14], navItems[15], navItems[16], navItems[17], navItems[18], navItems[19], navItems[20], navItems[21]].filter(Boolean)
+      : [] // Coupons, Payments, Reviews, News, Video Rooms, Doctor Meetings, Video Call History, History AI
   };
 
   // Get the current page name for header

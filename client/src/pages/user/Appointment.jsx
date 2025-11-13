@@ -45,7 +45,7 @@ const Appointment = () => {
     medicalHistory: '',
     notes: '',
     discountCode: '',
-    paymentMethod: 'cash',
+    paymentMethod: 'momo', // Users can only pay online, not cash
     roomId: '',
   });
 
@@ -78,11 +78,85 @@ const Appointment = () => {
 
   // Thêm vào phần state của component
   const [currentDoctorPage, setCurrentDoctorPage] = useState(0);
+  const [previousServiceId, setPreviousServiceId] = useState('');
 
   // Reset trang về 0 khi chọn chuyên khoa/bệnh viện mới
   useEffect(() => {
     setCurrentDoctorPage(0);
   }, [formData.hospitalId, formData.specialtyId]);
+
+  // Set currentDoctorIndex to pre-filled doctor when doctors list loads
+  useEffect(() => {
+    if (formData.doctorId && doctors.length > 0) {
+      const doctorIndex = doctors.findIndex(d => d._id === formData.doctorId);
+      if (doctorIndex !== -1) {
+        setCurrentDoctorIndex(doctorIndex);
+      }
+    }
+  }, [formData.doctorId, doctors]);
+
+  // Fetch doctor services when doctor is pre-filled
+  useEffect(() => {
+    if (formData.doctorId && currentStep === 2) {
+      // Fetch doctor-specific services
+      fetchDoctorServices(formData.doctorId);
+    }
+  }, [formData.doctorId, currentStep]);
+
+  // Auto-advance to Step 3 when service is selected at Step 2
+  useEffect(() => {
+    // Only auto-advance if:
+    // 1. We're at Step 2
+    // 2. Have all required info
+    // 3. Service has actually CHANGED (not just re-rendering with same service)
+    if (currentStep === 2 &&
+      formData.doctorId &&
+      formData.serviceId &&
+      formData.specialtyId &&
+      formData.hospitalId &&
+      formData.serviceId !== previousServiceId) {
+
+      // Update previous service ID
+      setPreviousServiceId(formData.serviceId);
+
+      // Small delay to allow user to see the selection
+      const timer = setTimeout(() => {
+        setCurrentStep(3);
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [formData.serviceId, currentStep, formData.doctorId, formData.specialtyId, formData.hospitalId, previousServiceId]);
+
+  // Auto-advance to appropriate step based on pre-filled data
+  useEffect(() => {
+    // Don't auto-advance if we're rescheduling or editing
+    if (isRescheduling || isEditing) return;
+
+    // Determine the appropriate step based on what's filled
+    // Flow: Hospital → Specialty → Doctor → Service → Date → Time
+
+    // If we have doctor, specialty, hospital AND service, go to date selection (step 3)
+    if (formData.doctorId && formData.specialtyId && formData.hospitalId && formData.serviceId) {
+      setCurrentStep(3);
+    }
+    // If we have doctor, specialty, and hospital (but no service), stay at step 2 to select service
+    else if (formData.doctorId && formData.specialtyId && formData.hospitalId) {
+      setCurrentStep(2);
+    }
+    // If we have specialty and hospital, go to doctor selection (step 2)
+    else if (formData.specialtyId && formData.hospitalId) {
+      setCurrentStep(2);
+    }
+    // If we only have hospital, stay on step 1 but specialty might be pre-filled
+    else if (formData.hospitalId) {
+      setCurrentStep(1);
+    }
+    // If we only have specialty or service (no hospital), stay on step 1
+    else if (formData.specialtyId || formData.serviceId) {
+      setCurrentStep(1);
+    }
+  }, [formData.doctorId, formData.specialtyId, formData.hospitalId, formData.serviceId, isRescheduling, isEditing]);
 
   // Parse URL query parameters and check for reschedule path
   useEffect(() => {
@@ -91,7 +165,7 @@ const Appointment = () => {
     if (pathParts.length === 4 && pathParts[1] === 'appointments' && pathParts[3] === 'reschedule') {
       const appointmentId = pathParts[2];
       setIsRescheduling(true);
-      
+
       // Fetch the original appointment to get details
       fetchAppointmentDetails(appointmentId);
     } else {
@@ -100,28 +174,28 @@ const Appointment = () => {
       const hospitalId = queryParams.get('hospital');
       const doctorId = queryParams.get('doctor');
       const specialtyId = queryParams.get('specialty');
+      const serviceId = queryParams.get('service'); // NEW: Parse serviceId
       const editId = queryParams.get('edit');
-      
+
       if (editId) {
         // We're editing an existing appointment
         setIsEditing(true);
         fetchAppointmentDetails(editId);
       } else {
-        // Regular new appointment
-        if (hospitalId) {
-          setFormData(prev => ({ ...prev, hospitalId }));
-        }
-        
-        if (doctorId) {
-          setFormData(prev => ({ ...prev, doctorId }));
-        }
-        
-        if (specialtyId) {
-          setFormData(prev => ({ ...prev, specialtyId }));
-        }
+        // Regular new appointment with pre-fill
+        // Initialize pre-fill data object
+        const preFillData = {
+          hospitalId: hospitalId || '',
+          doctorId: doctorId || '',
+          specialtyId: specialtyId || '',
+          serviceId: serviceId || '' // NEW: Include serviceId
+        };
+
+        // Apply pre-fill with validation
+        handlePreFill(preFillData);
       }
     }
-    
+
     fetchInitialData();
   }, [location.pathname, location.search]);
 
@@ -130,11 +204,11 @@ const Appointment = () => {
     try {
       setLoading(true);
       const response = await api.get(`/appointments/${appointmentId}`);
-      
+
       if (response.data.success && response.data.data) {
         const appointment = response.data.data;
         setOriginalAppointment(appointment);
-        
+
         // Pre-fill form data with original appointment details
         setFormData(prev => ({
           ...prev,
@@ -161,6 +235,528 @@ const Appointment = () => {
     }
   };
 
+  // Handle pre-fill from URL parameters
+  const handlePreFill = async (preFillData) => {
+    try {
+      setLoading(true);
+
+      // Priority order: doctor > service > specialty > hospital
+      // This ensures most specific information takes precedence
+
+      if (preFillData.doctorId) {
+        await preFillFromDoctor(preFillData.doctorId);
+      } else if (preFillData.serviceId) {
+        await preFillFromService(preFillData.serviceId);
+      } else if (preFillData.specialtyId) {
+        await preFillFromSpecialty(preFillData.specialtyId);
+      } else if (preFillData.hospitalId) {
+        await preFillFromHospital(preFillData.hospitalId);
+      }
+
+      // If multiple params provided, validate consistency
+      if (Object.values(preFillData).filter(Boolean).length > 1) {
+        await validatePreFillConsistency(preFillData);
+      }
+
+    } catch (error) {
+      console.error('Error in pre-fill:', error);
+      handlePreFillError(error, 'thông tin');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Pre-fill from doctor
+  const preFillFromDoctor = async (doctorId) => {
+    try {
+      const response = await api.get(`/doctors/doctors/${doctorId}`);
+      const doctor = response.data.data;
+
+      if (!doctor) {
+        throw new Error('Doctor not found');
+      }
+
+      // Extract IDs
+      const specialtyId = typeof doctor.specialtyId === 'object'
+        ? doctor.specialtyId._id
+        : doctor.specialtyId;
+      const hospitalId = typeof doctor.hospitalId === 'object'
+        ? doctor.hospitalId._id
+        : doctor.hospitalId;
+
+      // Update form data
+      setFormData(prev => ({
+        ...prev,
+        doctorId: doctorId,
+        specialtyId: specialtyId,
+        hospitalId: hospitalId
+      }));
+
+      // Fetch related data with explicit IDs
+      if (hospitalId) {
+        // Fetch specialties for the hospital
+        try {
+          const specialtiesResponse = await api.get(`/hospitals/${hospitalId}/specialties`);
+          let specialtiesData = [];
+          if (specialtiesResponse.data) {
+            if (Array.isArray(specialtiesResponse.data.data)) {
+              specialtiesData = specialtiesResponse.data.data;
+            } else if (specialtiesResponse.data.data && specialtiesResponse.data.data.specialties) {
+              specialtiesData = specialtiesResponse.data.data.specialties;
+            }
+          }
+          setSpecialties(specialtiesData);
+        } catch (err) {
+          console.error('Error fetching specialties:', err);
+        }
+      }
+
+      if (specialtyId) {
+        // Fetch services for the specialty
+        try {
+          const servicesResponse = await api.get(`/appointments/specialties/${specialtyId}/services`);
+          let servicesData = [];
+          if (servicesResponse.data) {
+            if (Array.isArray(servicesResponse.data.data)) {
+              servicesData = servicesResponse.data.data;
+            } else if (servicesResponse.data.data && servicesResponse.data.data.services) {
+              servicesData = servicesResponse.data.data.services;
+            }
+          }
+          setServices(servicesData);
+        } catch (err) {
+          console.error('Error fetching services:', err);
+        }
+      }
+
+      // Fetch schedules for the doctor
+      try {
+        const schedulesResponse = await api.get(`/appointments/doctors/${doctorId}/schedules`);
+        let scheduleData = [];
+        if (schedulesResponse.data) {
+          if (Array.isArray(schedulesResponse.data.data)) {
+            scheduleData = schedulesResponse.data.data;
+          } else if (schedulesResponse.data.data && schedulesResponse.data.data.schedules) {
+            scheduleData = schedulesResponse.data.data.schedules;
+          }
+        }
+
+        // Filter out inactive schedules
+        scheduleData = scheduleData.filter(schedule => schedule.isActive !== false);
+
+        // Normalize schedule data
+        if (scheduleData && scheduleData.length > 0) {
+          scheduleData = scheduleData.map(schedule => {
+            if (schedule.timeSlots && Array.isArray(schedule.timeSlots)) {
+              const normalizedTimeSlots = schedule.timeSlots.map(slot => ({
+                ...slot,
+                bookedCount: slot.bookedCount || 0,
+                maxBookings: slot.maxBookings || 3,
+                appointmentIds: slot.appointmentIds || [],
+                isBooked: slot.bookedCount >= (slot.maxBookings || 3)
+              }));
+
+              return {
+                ...schedule,
+                timeSlots: normalizedTimeSlots
+              };
+            }
+            return schedule;
+          });
+        }
+
+        setSchedules(scheduleData);
+
+        // Extract available dates
+        if (scheduleData.length > 0) {
+          const dates = [...new Set(
+            scheduleData.map(schedule => {
+              const scheduleDate = new Date(schedule.date);
+              const utcDate = new Date(Date.UTC(
+                scheduleDate.getFullYear(),
+                scheduleDate.getMonth(),
+                scheduleDate.getDate(),
+                12, 0, 0
+              ));
+              return utcDate.toISOString().split('T')[0];
+            })
+          )].sort();
+
+          setAvailableDates(dates);
+        }
+      } catch (err) {
+        console.error('Error fetching schedules:', err);
+      }
+
+    } catch (error) {
+      console.error('Error pre-filling from doctor:', error);
+      handlePreFillError(error, 'bác sĩ');
+      throw error;
+    }
+  };
+
+  // Pre-fill from service
+  const preFillFromService = async (serviceId) => {
+    try {
+      const response = await api.get(`/services/${serviceId}`);
+      const service = response.data.data;
+
+      if (!service) {
+        throw new Error('Service not found');
+      }
+
+      // Extract specialty ID
+      const specialtyId = typeof service.specialtyId === 'object'
+        ? service.specialtyId._id
+        : service.specialtyId;
+
+      // Set the service in services array so it shows in summary
+      setServices([service]);
+
+      // Fetch related data with explicit specialty ID
+      let selectedHospitalId = null;
+      let selectedDoctorId = null;
+      let doctorsData = [];
+
+      if (specialtyId) {
+        // Fetch specialty details
+        try {
+          const specialtyResponse = await api.get(`/specialties/${specialtyId}`);
+          const specialtyData = specialtyResponse.data.data;
+          if (specialtyData) {
+            setSpecialties([specialtyData]);
+          }
+        } catch (err) {
+          console.error('Error fetching specialty:', err);
+        }
+
+        // Fetch doctors for this specialty
+        try {
+          const doctorsResponse = await api.get(`/appointments/specialties/${specialtyId}/doctors`);
+          if (doctorsResponse.data) {
+            if (Array.isArray(doctorsResponse.data.data)) {
+              doctorsData = doctorsResponse.data.data;
+            } else if (doctorsResponse.data.data && doctorsResponse.data.data.doctors) {
+              doctorsData = doctorsResponse.data.data.doctors;
+            }
+          }
+          setDoctors(doctorsData);
+
+          // Auto-select first doctor and their hospital
+          if (doctorsData.length > 0) {
+            const firstDoctor = doctorsData[0];
+            selectedDoctorId = firstDoctor._id;
+            selectedHospitalId = typeof firstDoctor.hospitalId === 'object'
+              ? firstDoctor.hospitalId._id
+              : firstDoctor.hospitalId;
+
+            // Fetch hospital details
+            if (selectedHospitalId) {
+              try {
+                const hospitalResponse = await api.get(`/hospitals/${selectedHospitalId}`);
+                const hospital = hospitalResponse.data.data;
+                if (hospital) {
+                  setHospitals([hospital]);
+                }
+              } catch (err) {
+                console.error('Error fetching hospital:', err);
+              }
+            }
+
+            // Fetch schedules for the selected doctor
+            try {
+              const schedulesResponse = await api.get(`/appointments/doctors/${selectedDoctorId}/schedules`);
+              let scheduleData = [];
+              if (schedulesResponse.data) {
+                if (Array.isArray(schedulesResponse.data.data)) {
+                  scheduleData = schedulesResponse.data.data;
+                } else if (schedulesResponse.data.data && schedulesResponse.data.data.schedules) {
+                  scheduleData = schedulesResponse.data.data.schedules;
+                }
+              }
+
+              // Filter and normalize schedules
+              scheduleData = scheduleData.filter(schedule => schedule.isActive !== false);
+              if (scheduleData && scheduleData.length > 0) {
+                scheduleData = scheduleData.map(schedule => {
+                  if (schedule.timeSlots && Array.isArray(schedule.timeSlots)) {
+                    const normalizedTimeSlots = schedule.timeSlots.map(slot => ({
+                      ...slot,
+                      bookedCount: slot.bookedCount || 0,
+                      maxBookings: slot.maxBookings || 3,
+                      appointmentIds: slot.appointmentIds || [],
+                      isBooked: slot.bookedCount >= (slot.maxBookings || 3)
+                    }));
+
+                    return {
+                      ...schedule,
+                      timeSlots: normalizedTimeSlots
+                    };
+                  }
+                  return schedule;
+                });
+              }
+
+              setSchedules(scheduleData);
+
+              // Extract available dates
+              if (scheduleData.length > 0) {
+                const dates = [...new Set(
+                  scheduleData.map(schedule => {
+                    const scheduleDate = new Date(schedule.date);
+                    const utcDate = new Date(Date.UTC(
+                      scheduleDate.getFullYear(),
+                      scheduleDate.getMonth(),
+                      scheduleDate.getDate(),
+                      12, 0, 0
+                    ));
+                    return utcDate.toISOString().split('T')[0];
+                  })
+                )].sort();
+
+                setAvailableDates(dates);
+              }
+            } catch (err) {
+              console.error('Error fetching schedules:', err);
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching doctors:', err);
+        }
+      }
+
+      // Update form data
+      setFormData(prev => ({
+        ...prev,
+        serviceId: serviceId,
+        specialtyId: specialtyId,
+        hospitalId: selectedHospitalId || '',
+        doctorId: selectedDoctorId || ''
+      }));
+
+    } catch (error) {
+      console.error('Error pre-filling from service:', error);
+      handlePreFillError(error, 'dịch vụ');
+      throw error;
+    }
+  };
+
+  // Pre-fill from specialty
+  const preFillFromSpecialty = async (specialtyId) => {
+    try {
+      // Validate specialty exists
+      const response = await api.get(`/specialties/${specialtyId}`);
+      const specialty = response.data.data;
+
+      if (!specialty) {
+        throw new Error('Specialty not found');
+      }
+
+      // Set specialty in array for summary display
+      setSpecialties([specialty]);
+
+      // Fetch doctors for this specialty to find a hospital
+      let doctorsData = [];
+      try {
+        const doctorsResponse = await api.get(`/appointments/specialties/${specialtyId}/doctors`);
+        if (doctorsResponse.data) {
+          if (Array.isArray(doctorsResponse.data.data)) {
+            doctorsData = doctorsResponse.data.data;
+          } else if (doctorsResponse.data.data && doctorsResponse.data.data.doctors) {
+            doctorsData = doctorsResponse.data.data.doctors;
+          }
+        }
+        setDoctors(doctorsData);
+      } catch (err) {
+        console.error('Error fetching doctors:', err);
+      }
+
+      // Auto-select first hospital that has this specialty (from first doctor)
+      let selectedHospitalId = null;
+      if (doctorsData.length > 0) {
+        const firstDoctor = doctorsData[0];
+        selectedHospitalId = typeof firstDoctor.hospitalId === 'object'
+          ? firstDoctor.hospitalId._id
+          : firstDoctor.hospitalId;
+
+        // Fetch hospital details
+        if (selectedHospitalId) {
+          try {
+            const hospitalResponse = await api.get(`/hospitals/${selectedHospitalId}`);
+            const hospital = hospitalResponse.data.data;
+            if (hospital) {
+              setHospitals([hospital]);
+            }
+          } catch (err) {
+            console.error('Error fetching hospital:', err);
+          }
+        }
+      }
+
+      // Fetch services for this specialty
+      try {
+        const servicesResponse = await api.get(`/appointments/specialties/${specialtyId}/services`);
+        let servicesData = [];
+        if (servicesResponse.data) {
+          if (Array.isArray(servicesResponse.data.data)) {
+            servicesData = servicesResponse.data.data;
+          } else if (servicesResponse.data.data && servicesResponse.data.data.services) {
+            servicesData = servicesResponse.data.data.services;
+          }
+        }
+        setServices(servicesData);
+      } catch (err) {
+        console.error('Error fetching services:', err);
+      }
+
+      // Update form data with specialty and auto-selected hospital
+      setFormData(prev => ({
+        ...prev,
+        specialtyId: specialtyId,
+        hospitalId: selectedHospitalId || ''
+      }));
+
+    } catch (error) {
+      console.error('Error pre-filling from specialty:', error);
+      handlePreFillError(error, 'chuyên khoa');
+      throw error;
+    }
+  };
+
+  // Pre-fill from hospital
+  const preFillFromHospital = async (hospitalId) => {
+    try {
+      // Validate hospital exists
+      const response = await api.get(`/hospitals/${hospitalId}`);
+      const hospital = response.data.data;
+
+      if (!hospital) {
+        throw new Error('Hospital not found');
+      }
+
+      // Update form data
+      setFormData(prev => ({
+        ...prev,
+        hospitalId: hospitalId
+      }));
+
+      // Set hospital in array for summary display
+      setHospitals([hospital]);
+
+      // Fetch specialties for this hospital
+      try {
+        const specialtiesResponse = await api.get(`/hospitals/${hospitalId}/specialties`);
+        let specialtiesData = [];
+        if (specialtiesResponse.data) {
+          if (Array.isArray(specialtiesResponse.data.data)) {
+            specialtiesData = specialtiesResponse.data.data;
+          } else if (specialtiesResponse.data.data && specialtiesResponse.data.data.specialties) {
+            specialtiesData = specialtiesResponse.data.data.specialties;
+          }
+        }
+        setSpecialties(specialtiesData);
+      } catch (err) {
+        console.error('Error fetching specialties:', err);
+      }
+
+    } catch (error) {
+      console.error('Error pre-filling from hospital:', error);
+      handlePreFillError(error, 'chi nhánh');
+      throw error;
+    }
+  };
+
+  // Validate pre-fill consistency
+  const validatePreFillConsistency = async (preFillData) => {
+    try {
+      // Check if doctor belongs to specified specialty
+      if (preFillData.doctorId && preFillData.specialtyId) {
+        const doctor = await api.get(`/doctors/doctors/${preFillData.doctorId}`);
+        const doctorSpecialtyId = typeof doctor.data.data.specialtyId === 'object'
+          ? doctor.data.data.specialtyId._id
+          : doctor.data.data.specialtyId;
+
+        if (doctorSpecialtyId !== preFillData.specialtyId) {
+          console.warn('Doctor specialty mismatch, using doctor specialty');
+          // Doctor info takes precedence
+          setFormData(prev => ({
+            ...prev,
+            specialtyId: doctorSpecialtyId
+          }));
+        }
+      }
+
+      // Check if service belongs to specified specialty
+      if (preFillData.serviceId && preFillData.specialtyId) {
+        const service = await api.get(`/services/${preFillData.serviceId}`);
+        const serviceSpecialtyId = typeof service.data.data.specialtyId === 'object'
+          ? service.data.data.specialtyId._id
+          : service.data.data.specialtyId;
+
+        if (serviceSpecialtyId !== preFillData.specialtyId) {
+          console.warn('Service specialty mismatch, using service specialty');
+          // Service info takes precedence
+          setFormData(prev => ({
+            ...prev,
+            specialtyId: serviceSpecialtyId
+          }));
+        }
+      }
+
+      // Check if doctor works at specified hospital
+      if (preFillData.doctorId && preFillData.hospitalId) {
+        const doctor = await api.get(`/doctors/doctors/${preFillData.doctorId}`);
+        const doctorHospitalId = typeof doctor.data.data.hospitalId === 'object'
+          ? doctor.data.data.hospitalId._id
+          : doctor.data.data.hospitalId;
+
+        if (doctorHospitalId !== preFillData.hospitalId) {
+          console.warn('Doctor hospital mismatch, using doctor hospital');
+          // Doctor info takes precedence
+          setFormData(prev => ({
+            ...prev,
+            hospitalId: doctorHospitalId
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error validating pre-fill consistency:', error);
+      // Don't throw, just log - validation errors shouldn't block the flow
+    }
+  };
+
+  // Handle pre-fill errors
+  const handlePreFillError = (error, context) => {
+    console.error(`Pre-fill error in ${context}:`, error);
+
+    // Determine error type
+    if (error.response?.status === 404) {
+      toast.error(`Không tìm thấy ${context}. Vui lòng chọn lại.`);
+    } else if (error.response?.status === 403) {
+      toast.error(`Không có quyền truy cập ${context}.`);
+    } else if (error.code === 'ECONNABORTED') {
+      toast.error('Kết nối timeout. Vui lòng thử lại.');
+    } else {
+      toast.error(`Lỗi khi tải ${context}. Vui lòng thử lại sau.`);
+    }
+
+    // Clear invalid pre-fill data based on context
+    const contextMap = {
+      'bác sĩ': 'doctorId',
+      'dịch vụ': 'serviceId',
+      'chuyên khoa': 'specialtyId',
+      'chi nhánh': 'hospitalId'
+    };
+
+    const fieldToClear = contextMap[context];
+    if (fieldToClear) {
+      setFormData(prev => ({
+        ...prev,
+        [fieldToClear]: ''
+      }));
+    }
+  };
+
   // Fetch initial data
   const fetchInitialData = async (preselectedHospitalId) => {
     setLoading(true);
@@ -171,7 +767,7 @@ const Appointment = () => {
           isActive: true // Chỉ lấy các bệnh viện đang hoạt động
         }
       });
-      
+
       // Xử lý dữ liệu hospitals
       let hospitalsData = [];
       if (hospitalsResponse.data) {
@@ -181,10 +777,10 @@ const Appointment = () => {
           hospitalsData = hospitalsResponse.data.data.hospitals;
         }
       }
-      
+
       // Lọc bệnh viện chỉ lấy những cơ sở đang hoạt động
       hospitalsData = hospitalsData.filter(hospital => hospital.isActive === true);
-      
+
       setHospitals(hospitalsData);
 
       // If there's a preselected hospital, fetch its specialties
@@ -206,7 +802,7 @@ const Appointment = () => {
     setLoading(true);
     try {
       const response = await api.get(`/hospitals/${hospitalId}/specialties`);
-      
+
       // Xử lý dữ liệu specialties
       let specialtiesData = [];
       if (response.data) {
@@ -237,7 +833,7 @@ const Appointment = () => {
           specialtyId: formData.specialtyId
         }
       });
-      
+
       // Xử lý dữ liệu doctors
       let doctorsData = [];
       if (response.data) {
@@ -263,7 +859,7 @@ const Appointment = () => {
     setLoading(true);
     try {
       const response = await api.get(`/appointments/specialties/${formData.specialtyId}/services`);
-      
+
       // Xử lý dữ liệu services
       let servicesData = [];
       if (response.data) {
@@ -291,23 +887,23 @@ const Appointment = () => {
       // Get doctor details to ensure we have specialtyId
       const doctorResponse = await api.get(`/doctors/doctors/${formData.doctorId}`);
       const doctorData = doctorResponse.data.data;
-      
+
       // Set specialtyId from doctor data if it's not already set
       if (doctorData && doctorData.specialtyId && !formData.specialtyId) {
         // Update formData with specialtyId
         setFormData(prev => ({
           ...prev,
-          specialtyId: typeof doctorData.specialtyId === 'object' ? 
+          specialtyId: typeof doctorData.specialtyId === 'object' ?
             doctorData.specialtyId._id : doctorData.specialtyId
         }));
       }
-      
+
       // Updated endpoint to match the API response format shown
       const response = await api.get(`/appointments/doctors/${formData.doctorId}/schedules`);
-      
+
       // Enhanced debugging for the API response
       console.log('Raw API response:', response.data);
-      
+
       // Handle different data structures
       let scheduleData = [];
       if (response.data) {
@@ -317,10 +913,10 @@ const Appointment = () => {
           scheduleData = response.data.data.schedules;
         }
       }
-      
+
       // Filter out inactive schedules - only show schedules where isActive is true
       scheduleData = scheduleData.filter(schedule => schedule.isActive !== false);
-      
+
       // Fix any potential issues with the data structure
       if (scheduleData && scheduleData.length > 0) {
         // Normalize the schedule data to ensure all properties exist
@@ -335,7 +931,7 @@ const Appointment = () => {
               // Force isBooked to be false for new slots with bookedCount of 0
               isBooked: slot.bookedCount >= (slot.maxBookings || 3)
             }));
-            
+
             return {
               ...schedule,
               timeSlots: normalizedTimeSlots
@@ -344,7 +940,7 @@ const Appointment = () => {
           return schedule;
         });
       }
-      
+
       console.log('Normalized Doctor schedules data:', scheduleData);
       setSchedules(scheduleData);
 
@@ -364,9 +960,9 @@ const Appointment = () => {
             return utcDate.toISOString().split('T')[0];
           })
         )].sort();
-        
+
         setAvailableDates(dates);
-        
+
         // If there are dates available, clear any previous selection
         setFormData(prev => ({
           ...prev,
@@ -396,12 +992,12 @@ const Appointment = () => {
       12, 0, 0
     ));
     const utcDateString = utcDate.toISOString().split('T')[0];
-    
+
     // Find all schedules for the selected date using the standardized UTC date
     const schedulesForDate = schedules.filter(schedule => {
       // Only include active schedules
       if (schedule.isActive === false) return false;
-      
+
       // Convert schedule date to standardized UTC format for comparison
       const scheduleDate = new Date(schedule.date);
       const scheduleUtcDate = new Date(Date.UTC(
@@ -412,11 +1008,11 @@ const Appointment = () => {
       ));
       return scheduleUtcDate.toISOString().split('T')[0] === utcDateString;
     });
-    
+
     if (schedulesForDate.length > 0) {
       // Get all time slots (both available and booked)
       const allSlots = [];
-      
+
       // Process each schedule
       schedulesForDate.forEach(schedule => {
         // If schedule has timeSlots array
@@ -425,10 +1021,10 @@ const Appointment = () => {
           const slotsFromThisSchedule = schedule.timeSlots.map(slot => {
             // Check if we need to override the isBooked property based on bookedCount
             // This handles the case where isBooked might be true but bookedCount is 0
-            const isFullyBooked = (slot.bookedCount !== undefined && 
-                                 slot.maxBookings !== undefined && 
-                                 slot.bookedCount >= slot.maxBookings);
-            
+            const isFullyBooked = (slot.bookedCount !== undefined &&
+              slot.maxBookings !== undefined &&
+              slot.bookedCount >= slot.maxBookings);
+
             return {
               scheduleId: schedule._id,
               startTime: slot.startTime,
@@ -441,30 +1037,30 @@ const Appointment = () => {
               isBooked: isFullyBooked
             };
           });
-          
+
           allSlots.push(...slotsFromThisSchedule);
         }
       });
-      
+
       // Sort slots by start time
       allSlots.sort((a, b) => {
         const timeA = a.startTime.split(':').map(Number);
         const timeB = b.startTime.split(':').map(Number);
-        
+
         // Compare hours
         if (timeA[0] !== timeB[0]) {
           return timeA[0] - timeB[0];
         }
-        
+
         // If hours are equal, compare minutes
         return timeA[1] - timeB[1];
       });
-      
+
       // Debug log showing the exact data that will be used for displaying slots
       console.log("Time slots before rendering:", JSON.stringify(allSlots, null, 2));
-      
+
       setTimeSlots(allSlots);
-      
+
       // Set the schedule ID if available slots exist
       const availableSlots = allSlots.filter(slot => !slot.isBooked);
       if (schedulesForDate.length > 0 && availableSlots.length > 0) {
@@ -474,9 +1070,9 @@ const Appointment = () => {
           ...prev,
           scheduleId: firstAvailableSlot.scheduleId,
           // Clear any previously selected time slot
-          timeSlot: { 
-            startTime: '', 
-            endTime: '' 
+          timeSlot: {
+            startTime: '',
+            endTime: ''
           }
         }));
       }
@@ -486,9 +1082,9 @@ const Appointment = () => {
       setFormData(prev => ({
         ...prev,
         scheduleId: '',
-        timeSlot: { 
-          startTime: '', 
-          endTime: '' 
+        timeSlot: {
+          startTime: '',
+          endTime: ''
         }
       }));
     }
@@ -500,12 +1096,12 @@ const Appointment = () => {
       setCouponInfo(null);
       return;
     }
-    
+
     setValidatingCoupon(true);
     try {
       // Calculate total before discount to check against minPurchase
       const totalBeforeDiscount = priceDetails.totalBeforeDiscount;
-      
+
       const response = await api.get(`/coupons/validate`, {
         params: {
           code: code.trim(),
@@ -514,17 +1110,17 @@ const Appointment = () => {
           totalAmount: totalBeforeDiscount // Send total amount to validate minPurchase on backend
         }
       });
-      
+
       if (response.data.success) {
         const coupon = response.data.data;
-        
+
         // Check minPurchase requirement on the frontend too
         if (coupon.minPurchase && totalBeforeDiscount < coupon.minPurchase) {
           setCouponInfo(null);
           toast.error(`Mã giảm giá yêu cầu đơn hàng tối thiểu ${coupon.minPurchase.toLocaleString('vi-VN')} VNĐ`);
           return;
         }
-        
+
         setCouponInfo(coupon);
         toast.success('Mã giảm giá hợp lệ!');
       } else {
@@ -534,7 +1130,7 @@ const Appointment = () => {
     } catch (err) {
       console.error('Error validating coupon:', err);
       setCouponInfo(null);
-      
+
       // Show specific error message if available
       if (err.response && err.response.data && err.response.data.message) {
         toast.error(err.response.data.message);
@@ -552,62 +1148,74 @@ const Appointment = () => {
       toast.error('Vui lòng nhập mã giảm giá');
       return;
     }
-    
+
     // Check if required fields are selected
     if (!formData.hospitalId) {
       toast.error('Vui lòng chọn bệnh viện trước khi kiểm tra mã giảm giá');
       return;
     }
-    
+
     if (!formData.specialtyId) {
       toast.error('Vui lòng chọn chuyên khoa trước khi kiểm tra mã giảm giá');
       return;
     }
-    
+
     if (!formData.doctorId) {
       toast.error('Vui lòng chọn bác sĩ trước khi kiểm tra mã giảm giá');
       return;
     }
-    
+
     // Make sure prices are calculated before validating coupon
     if (priceDetails.totalBeforeDiscount === 0) {
       toast.error('Vui lòng chọn dịch vụ trước khi kiểm tra mã giảm giá');
       return;
     }
-    
+
     validateCoupon(formData.discountCode.trim());
   };
 
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
+
     // Update form data
     setFormData(prev => ({ ...prev, [name]: value }));
-    
+
     // Reset error message
     setError('');
-    
+
     // Additional logic for specific fields
     if (name === 'hospitalId') {
+      // Check if specialty was pre-filled (exists before hospital selection)
+      const hasPreFilledSpecialty = formData.specialtyId && !formData.hospitalId;
+
       // Reset fields that depend on hospital selection
+      // But keep specialty if it was pre-filled
       setFormData(prev => ({
         ...prev,
-        specialtyId: '',
+        specialtyId: hasPreFilledSpecialty ? prev.specialtyId : '',
         doctorId: '',
-        serviceId: '',
+        serviceId: hasPreFilledSpecialty ? prev.serviceId : '',
         appointmentDate: '',
         scheduleId: '',
         timeSlot: { startTime: '', endTime: '' }
       }));
-      
+
       setAvailableDates([]);
       setSchedules([]);
       setTimeSlots([]);
-      
+
       // Fetch specialties for the selected hospital
       if (value) {
         fetchSpecialties(value);
+
+        // If we have pre-filled specialty, also fetch doctors and services
+        if (hasPreFilledSpecialty) {
+          setTimeout(() => {
+            fetchDoctors();
+            fetchServices();
+          }, 500); // Small delay to ensure specialties are loaded first
+        }
       }
     } else if (name === 'specialtyId') {
       // Reset fields that depend on specialty selection
@@ -619,11 +1227,11 @@ const Appointment = () => {
         scheduleId: '',
         timeSlot: { startTime: '', endTime: '' }
       }));
-      
+
       setAvailableDates([]);
       setSchedules([]);
       setTimeSlots([]);
-      
+
       // Fetch doctors and services for the selected specialty
       if (value) {
         fetchDoctors();
@@ -631,17 +1239,17 @@ const Appointment = () => {
       }
     } else if (name === 'doctorId') {
       // Reset fields that depend on doctor selection
-      setFormData(prev => ({ 
-        ...prev, 
+      setFormData(prev => ({
+        ...prev,
         appointmentDate: '',
         scheduleId: '',
         timeSlot: { startTime: '', endTime: '' },
         serviceId: ''
       }));
-      
+
       setAvailableDates([]);
       setTimeSlots([]);
-      
+
       // Fetch schedules for the selected doctor
       if (value) {
         fetchSchedules();
@@ -649,11 +1257,11 @@ const Appointment = () => {
       }
     } else if (name === 'appointmentDate') {
       // Reset time slot when date changes
-      setFormData(prev => ({ 
-        ...prev, 
+      setFormData(prev => ({
+        ...prev,
         timeSlot: { startTime: '', endTime: '' }
       }));
-      
+
       // Find time slots for the selected date
       if (value) {
         findTimeSlots(value);
@@ -669,16 +1277,12 @@ const Appointment = () => {
   // Handle hospital change
   useEffect(() => {
     if (formData.hospitalId) {
+      // Fetch specialties for the hospital
       fetchSpecialties(formData.hospitalId);
-      setFormData(prev => ({
-        ...prev,
-        specialtyId: '',
-        doctorId: '',
-        serviceId: '',
-        scheduleId: '',
-        appointmentDate: '',
-        timeSlot: { startTime: '', endTime: '' }
-      }));
+
+      // Only reset if this is a manual change (not from pre-fill)
+      // We can detect this by checking if specialty was already set
+      // If specialty exists and we're changing hospital, keep the specialty if it's valid for this hospital
     }
   }, [formData.hospitalId]);
 
@@ -705,12 +1309,12 @@ const Appointment = () => {
         try {
           const doctorResponse = await api.get(`/doctors/doctors/${formData.doctorId}`);
           const doctorData = doctorResponse.data.data;
-          
+
           if (doctorData && doctorData.specialtyId) {
             // Extract specialtyId from doctor data
-            const specialtyId = typeof doctorData.specialtyId === 'object' ? 
+            const specialtyId = typeof doctorData.specialtyId === 'object' ?
               doctorData.specialtyId._id : doctorData.specialtyId;
-              
+
             // If specialtyId from doctor is different from current selection, update it
             if (specialtyId && (!formData.specialtyId || formData.specialtyId !== specialtyId)) {
               console.log('Updating specialtyId from doctor:', specialtyId);
@@ -724,7 +1328,7 @@ const Appointment = () => {
           console.error('Error fetching doctor details:', err);
         }
       };
-      
+
       getDoctor();
       fetchSchedules();
       setFormData(prev => ({
@@ -743,16 +1347,16 @@ const Appointment = () => {
     }
   }, [formData.appointmentDate]);
 
-    // Add function to calculate prices
+  // Add function to calculate prices
   const calculatePrices = async () => {
     if (!formData.doctorId) return;
-    
+
     try {
       // Fetch doctor details to get consultation fee
       const doctorResponse = await api.get(`/doctors/doctors/${formData.doctorId}`);
       const doctor = doctorResponse.data.data;
       const consultationFee = doctor.consultationFee || 0;
-      
+
       // Fetch service details if selected
       let serviceFee = 0;
       if (formData.serviceId) {
@@ -760,9 +1364,9 @@ const Appointment = () => {
         const service = serviceResponse.data.data;
         serviceFee = service.price || 0;
       }
-      
+
       const totalBeforeDiscount = consultationFee + serviceFee;
-      
+
       // Calculate discount if coupon is valid
       let discountAmount = 0;
       if (couponInfo) {
@@ -788,9 +1392,9 @@ const Appointment = () => {
           }
         }
       }
-      
+
       const finalTotal = totalBeforeDiscount - discountAmount;
-      
+
       setPriceDetails({
         consultationFee,
         serviceFee,
@@ -814,24 +1418,24 @@ const Appointment = () => {
   // Handle form submission - Update for rescheduling
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!isAuthenticated) {
       // Redirect to login if not authenticated
-      navigate('/login', { 
-        state: { 
+      navigate('/login', {
+        state: {
           from: location.pathname,
-          message: 'Vui lòng đăng nhập để đặt lịch khám.' 
-        } 
+          message: 'Vui lòng đăng nhập để đặt lịch khám.'
+        }
       });
       return;
     }
-    
+
     // Check if user is available
     if (!user) {
       toast.error('Không thể xác định thông tin người dùng. Vui lòng đăng nhập lại.');
       return;
     }
-    
+
     // Collect missing fields to show a more specific error message
     const missingFields = [];
     if (!formData.hospitalId) missingFields.push('Bệnh viện');
@@ -841,65 +1445,65 @@ const Appointment = () => {
     if (!formData.timeSlot?.startTime) missingFields.push('Giờ khám');
     if (!formData.scheduleId) missingFields.push('Lịch khám');
     if (!formData.paymentMethod) missingFields.push('Phương thức thanh toán');
-      
+
     if (missingFields.length > 0) {
       const missingFieldsText = missingFields.join(', ');
       toast.error(`Vui lòng điền đầy đủ thông tin: ${missingFieldsText}`);
       return;
     }
-    
+
     try {
       setLoading(true);
-      
+
       // Get the correct user ID field - it could be in different properties
       const patientId = user._id || user.id;
-      
+
       if (!patientId) {
         toast.error('Không thể xác định ID người dùng. Vui lòng đăng nhập lại.');
         setLoading(false);
         return;
       }
-      
+
       // Create request data for API
       const requestData = {
         patientId: patientId, // Use the correctly identified patientId
         doctorId: formData.doctorId,
         hospitalId: formData.hospitalId,
         specialtyId: formData.specialtyId,
-          scheduleId: formData.scheduleId,
-          appointmentDate: formData.appointmentDate,
+        scheduleId: formData.scheduleId,
+        appointmentDate: formData.appointmentDate,
         timeSlot: formData.timeSlot,
-          appointmentType: formData.appointmentType,
-          symptoms: formData.symptoms,
-          medicalHistory: formData.medicalHistory,
+        appointmentType: formData.appointmentType,
+        symptoms: formData.symptoms,
+        medicalHistory: formData.medicalHistory,
         notes: formData.notes,
         paymentMethod: formData.paymentMethod
       };
-      
+
       // Log the user info for debugging
       console.log('Current user info:', user);
       console.log('Patient ID being used:', patientId);
-      
+
       // Rest of the function remains the same...
       // Add coupon code if provided
       if (formData.discountCode) {
         requestData.couponCode = formData.discountCode;
       }
-      
+
       // Add service ID if provided
       if (formData.serviceId) {
         requestData.serviceId = formData.serviceId;
       }
-      
+
       // Add room ID if a specific room was selected
       if (formData.roomId) {
         requestData.roomId = formData.roomId;
       }
-      
+
       console.log('Submitting appointment request:', JSON.stringify(requestData, null, 2));
-      
+
       let response;
-      
+
       // Handle rescheduling vs. new appointment
       if (isRescheduling && originalAppointment) {
         response = await api.put(`/appointments/${originalAppointment._id}/reschedule`, requestData);
@@ -908,27 +1512,27 @@ const Appointment = () => {
       } else {
         response = await api.post('/appointments', requestData);
       }
-      
+
       console.log('Appointment response:', response.data);
-      
+
       if (response.data.success) {
         // Show success message
         const actionText = isRescheduling ? 'đổi lịch' : isEditing ? 'cập nhật' : 'đặt lịch';
         toast.success(`Đã ${actionText} khám thành công!`);
-        
+
         // Handle PayPal redirect if needed
         if (formData.paymentMethod === 'paypal' && response.data.data.redirectUrl) {
           window.location.href = response.data.data.redirectUrl;
           return;
         }
-        
+
         // Navigate to the appointments page or display confirmation
-          navigate('/appointments', { 
-            state: { 
+        navigate('/appointments', {
+          state: {
             fromBooking: true,
             appointmentId: response.data.data.appointment._id,
-            message: `Đã ${actionText} khám thành công!` 
-          } 
+            message: `Đã ${actionText} khám thành công!`
+          }
         });
       } else {
         // Handle API error response
@@ -936,19 +1540,19 @@ const Appointment = () => {
       }
     } catch (error) {
       console.error('Error creating appointment:', error);
-      
+
       // Log detailed error information for debugging
       if (error.response) {
         console.log('Error response data:', error.response.data);
         console.log('Error response status:', error.response.status);
         console.log('Error response headers:', error.response.headers);
-      
+
         // Show detailed error message if available
         if (error.response.data.missingFields) {
           const missingFieldsStr = Object.keys(error.response.data.missingFields)
             .filter(field => error.response.data.missingFields[field])
             .join(', ');
-          
+
           toast.error(`Thiếu thông tin: ${missingFieldsStr}`);
         } else if (error.response.data.message) {
           toast.error(error.response.data.message);
@@ -971,8 +1575,8 @@ const Appointment = () => {
   const goToNextStep = () => {
     // Only validate if not on step 3 or if on step 3 and has appointmentDate
     if ((currentStep !== 3) || (currentStep === 3 && formData.appointmentDate)) {
-    if (canProceedToNextStep()) {
-      setCurrentStep(prev => prev + 1);
+      if (canProceedToNextStep()) {
+        setCurrentStep(prev => prev + 1);
       } else {
         // Only show error message if user has already selected a date
         if (currentStep === 3 && formData.appointmentDate && (!formData.timeSlot?.startTime || !formData.scheduleId)) {
@@ -986,7 +1590,7 @@ const Appointment = () => {
           } else if (currentStep === 2) {
             if (!formData.doctorId) missingFields.push('Bác sĩ');
           }
-          
+
           if (missingFields.length > 0) {
             const missingFieldsText = missingFields.join(', ');
             toast.error(`Vui lòng điền đầy đủ thông tin: ${missingFieldsText}`);
@@ -1008,10 +1612,10 @@ const Appointment = () => {
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return '';
-    
+
     // Tạo đối tượng Date từ chuỗi ngày
     const date = new Date(dateString);
-    
+
     // Điều chỉnh múi giờ bằng cách đặt giờ về giữa ngày UTC
     const utcDate = new Date(Date.UTC(
       date.getFullYear(),
@@ -1019,7 +1623,7 @@ const Appointment = () => {
       date.getDate(),
       12, 0, 0 // đặt giờ là 12:00:00 UTC để tránh vấn đề múi giờ
     ));
-    
+
     // Format ngày theo định dạng Việt Nam
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     return utcDate.toLocaleDateString('vi-VN', options);
@@ -1029,18 +1633,18 @@ const Appointment = () => {
   const handleTimeSlotSelect = (scheduleId, slot) => {
     // Don't allow selecting booked slots
     if (slot.isBooked) return;
-    
+
     // Check if slot is locked by another user
     const slotKey = `${scheduleId}_${slot.startTime}`;
     if (lockedSlots.has(slotKey) && lockedSlots.get(slotKey) !== user?.id) {
       toast.warning('Khung giờ này đang được người khác xử lý, vui lòng chọn khung giờ khác.');
       return;
     }
-    
+
     // If we had a different slot selected before, unlock it first
-    if (formData.scheduleId && formData.timeSlot?.startTime && 
-        (formData.scheduleId !== scheduleId || formData.timeSlot.startTime !== slot.startTime) &&
-        socket) {
+    if (formData.scheduleId && formData.timeSlot?.startTime &&
+      (formData.scheduleId !== scheduleId || formData.timeSlot.startTime !== slot.startTime) &&
+      socket) {
       socket.emit('unlock_time_slot', {
         scheduleId: formData.scheduleId,
         timeSlotId: formData.timeSlot.startTime,
@@ -1048,7 +1652,7 @@ const Appointment = () => {
         date: formData.appointmentDate
       });
     }
-    
+
     // Lock the new slot
     if (socket) {
       socket.emit('lock_time_slot', {
@@ -1058,7 +1662,7 @@ const Appointment = () => {
         date: formData.appointmentDate
       });
     }
-    
+
     setFormData(prev => ({
       ...prev,
       scheduleId: scheduleId,
@@ -1070,7 +1674,7 @@ const Appointment = () => {
       },
       roomId: slot.roomId // Also store roomId directly in formData
     }));
-    
+
     console.log("Selected time slot:", {
       scheduleId: scheduleId,
       startTime: slot.startTime,
@@ -1109,11 +1713,11 @@ const Appointment = () => {
       case 2:
         return formData.doctorId && formData.serviceId;
       case 3:
-        return formData.appointmentDate && 
-               formData.timeSlot && 
-               formData.timeSlot.startTime && 
-               formData.timeSlot.endTime &&
-               formData.scheduleId;
+        return formData.appointmentDate &&
+          formData.timeSlot &&
+          formData.timeSlot.startTime &&
+          formData.timeSlot.endTime &&
+          formData.scheduleId;
       case 4:
         // Payment validation already done separately
         return true;
@@ -1126,16 +1730,16 @@ const Appointment = () => {
   const goToPreviousMonth = (e) => {
     // Prevent default to avoid form submission
     if (e) e.preventDefault();
-    
+
     const prevMonth = new Date(currentMonth);
     prevMonth.setMonth(prevMonth.getMonth() - 1);
     setCurrentMonth(prevMonth);
-    
+
     // Check if the currently selected date is still visible in the calendar
     if (formData.appointmentDate) {
       const selectedDate = new Date(formData.appointmentDate);
-      if (selectedDate.getMonth() !== prevMonth.getMonth() || 
-          selectedDate.getFullYear() !== prevMonth.getFullYear()) {
+      if (selectedDate.getMonth() !== prevMonth.getMonth() ||
+        selectedDate.getFullYear() !== prevMonth.getFullYear()) {
         // Clear the selected date and time if it's not in the current view
         setFormData(prev => ({
           ...prev,
@@ -1150,16 +1754,16 @@ const Appointment = () => {
   const goToNextMonth = (e) => {
     // Prevent default to avoid form submission
     if (e) e.preventDefault();
-    
+
     const nextMonth = new Date(currentMonth);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setCurrentMonth(nextMonth);
-    
+
     // Check if the currently selected date is still visible in the calendar
     if (formData.appointmentDate) {
       const selectedDate = new Date(formData.appointmentDate);
-      if (selectedDate.getMonth() !== nextMonth.getMonth() || 
-          selectedDate.getFullYear() !== nextMonth.getFullYear()) {
+      if (selectedDate.getMonth() !== nextMonth.getMonth() ||
+        selectedDate.getFullYear() !== nextMonth.getFullYear()) {
         // Clear the selected date and time if it's not in the current view
         setFormData(prev => ({
           ...prev,
@@ -1174,32 +1778,32 @@ const Appointment = () => {
   // Add a function to generate calendar dates including empty spots for a proper grid
   const generateCalendarDays = () => {
     if (!availableDates.length) return [];
-    
+
     // First day of the month
     const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
     // Last day of the month
     const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
-    
+
     // Get the day of the week for the first day (0 is Sunday, 1 is Monday, etc.)
     // Convert to Monday-based (0 is Monday, 6 is Sunday)
     let firstDayOfWeek = firstDay.getDay() - 1;
     if (firstDayOfWeek < 0) firstDayOfWeek = 6; // Handle Sunday
-    
+
     // Calculate days from previous month to show
     const daysFromPrevMonth = firstDayOfWeek;
-    
+
     // Total days in the month
     const totalDaysInMonth = lastDay.getDate();
-    
+
     // Calculate total grid spaces needed (6 rows x 7 columns max)
     const totalDaysToShow = 42;
-    
+
     // Days from next month to show
     const daysFromNextMonth = totalDaysToShow - daysFromPrevMonth - totalDaysInMonth;
-    
+
     // Generate the calendar days
     const days = [];
-    
+
     // Add days from previous month (as empty placeholders)
     const prevMonthLastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 0).getDate();
     for (let i = 0; i < daysFromPrevMonth; i++) {
@@ -1211,9 +1815,9 @@ const Appointment = () => {
         date.getDate(),
         12, 0, 0
       ));
-      
+
       const dateString = utcDate.toISOString().split('T')[0];
-      
+
       days.push({
         date: utcDate,
         dateString,
@@ -1221,7 +1825,7 @@ const Appointment = () => {
         isEmpty: true
       });
     }
-    
+
     // Add days from current month
     for (let i = 1; i <= totalDaysInMonth; i++) {
       // Create date with noon UTC timestamp to prevent day shifting
@@ -1232,12 +1836,12 @@ const Appointment = () => {
         date.getDate(),
         12, 0, 0
       ));
-      
+
       const dateString = utcDate.toISOString().split('T')[0];
-      
+
       // Check if this date is in availableDates
       const isAvailable = availableDates.includes(dateString);
-      
+
       days.push({
         date: utcDate,
         dateString,
@@ -1245,7 +1849,7 @@ const Appointment = () => {
         isAvailable
       });
     }
-    
+
     // Add days from next month (as empty placeholders)
     for (let i = 1; i <= daysFromNextMonth; i++) {
       // Create date with noon UTC timestamp to prevent day shifting
@@ -1256,9 +1860,9 @@ const Appointment = () => {
         date.getDate(),
         12, 0, 0
       ));
-      
+
       const dateString = utcDate.toISOString().split('T')[0];
-      
+
       days.push({
         date: utcDate,
         dateString,
@@ -1266,7 +1870,7 @@ const Appointment = () => {
         isEmpty: true
       });
     }
-    
+
     return days;
   };
 
@@ -1293,11 +1897,11 @@ const Appointment = () => {
   // Fetch doctor specific services
   const fetchDoctorServices = async (doctorId) => {
     if (!doctorId) return;
-    
+
     setLoading(true);
     try {
       const response = await api.get(`/doctors/${doctorId}/services`);
-      
+
       let servicesData = [];
       if (response.data) {
         if (Array.isArray(response.data.data)) {
@@ -1306,14 +1910,12 @@ const Appointment = () => {
           servicesData = response.data.data.services;
         }
       }
-      
+
       setDoctorServices(servicesData);
-      
-      // Clear any previously selected service since we're showing doctor-specific services now
-      setFormData(prev => ({
-        ...prev,
-        serviceId: ''
-      }));
+
+      // Preserve pre-filled serviceId regardless of whether it's in doctor's services
+      // This allows booking any service from the specialty with the selected doctor
+      // The backend will validate if the combination is valid
     } catch (err) {
       console.error('Error fetching doctor services:', err);
       setError('Không thể tải danh sách dịch vụ của bác sĩ. Vui lòng thử lại sau.');
@@ -1337,8 +1939,8 @@ const Appointment = () => {
 
   // Handle doctor selection from the carousel
   const handleDoctorSelect = (doctor) => {
-    setFormData(prev => ({ 
-      ...prev, 
+    setFormData(prev => ({
+      ...prev,
       doctorId: doctor._id,
       appointmentDate: '',
       scheduleId: '',
@@ -1360,7 +1962,7 @@ const Appointment = () => {
   // Initialize socket connection
   useEffect(() => {
     if (isAuthenticated && user) {
-      const apiBaseUrl = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+      const apiBaseUrl = import.meta.env?.VITE_API_URL;
       // Extract base server URL (without /api)
       const socketUrl = apiBaseUrl.replace(/\/api$/, '');
 
@@ -1408,15 +2010,15 @@ const Appointment = () => {
             autoClose: 3000,
           });
         }
-        
+
         // Nếu đây là khung giờ mà người dùng đang chọn, thông báo rằng nó vừa bị người khác chọn
-        if (formData.scheduleId === scheduleId && 
-            formData.timeSlot.startTime === timeSlotId && 
-            userId !== user?.id) {
+        if (formData.scheduleId === scheduleId &&
+          formData.timeSlot.startTime === timeSlotId &&
+          userId !== user?.id) {
           toast.warning('Khung giờ bạn đang chọn vừa được người khác chọn. Vui lòng chọn khung giờ khác.', {
             autoClose: 5000,
           });
-          
+
           // Reset the time slot selection
           setFormData(prev => ({
             ...prev,
@@ -1432,7 +2034,7 @@ const Appointment = () => {
           newMap.delete(`${scheduleId}_${timeSlotId}`);
           return newMap;
         });
-        
+
         // Thông báo khi khung giờ được mở khóa (có thể có người vừa hủy đặt lịch)
         if (formData.scheduleId === scheduleId) {
           toast.info('Một khung giờ vừa được mở khóa và có thể đặt lịch.', {
@@ -1444,7 +2046,7 @@ const Appointment = () => {
       // Listen for time slot booking status changes
       socketInstance.on('time_slot_status_changed', ({ scheduleId, timeSlotInfo, updateType }) => {
         console.log(`Time slot booking status changed: ${scheduleId}, slot: ${timeSlotInfo.startTime}`, timeSlotInfo);
-        
+
         // Update the time slots with the new booking information
         setTimeSlots(prev => {
           return prev.map(slot => {
@@ -1461,7 +2063,7 @@ const Appointment = () => {
             return slot;
           });
         });
-        
+
         // Show toast notification about the change
         if (formData.scheduleId === scheduleId) {
           if (updateType === 'booking_changed') {
@@ -1487,8 +2089,8 @@ const Appointment = () => {
         toast.warning('Khung giờ này đang được người khác xử lý, vui lòng chọn khung giờ khác.');
 
         // Reset the time slot selection if our selection was rejected
-        if (formData.scheduleId === scheduleId && 
-            formData.timeSlot?.startTime === timeSlotId) {
+        if (formData.scheduleId === scheduleId &&
+          formData.timeSlot?.startTime === timeSlotId) {
           setFormData(prev => ({
             ...prev,
             timeSlot: { startTime: '', endTime: '' }
@@ -1518,7 +2120,7 @@ const Appointment = () => {
             date: formData.appointmentDate
           });
         }
-        
+
         socketInstance.disconnect();
       };
     }
@@ -1550,25 +2152,97 @@ const Appointment = () => {
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-10 px-4 sm:px-6 lg:px-8 relative">
       {/* Add subtle pattern overlay */}
       <div className="absolute inset-0 z-0 pattern-dots pattern-blue-500 pattern-bg-white pattern-size-2 pattern-opacity-5 pointer-events-none"></div>
-      
+
       {/* Add decorative elements */}
       <div className="absolute top-0 left-0 w-32 h-32 bg-blue-500 rounded-br-full opacity-10 -translate-x-1/2 -translate-y-1/2"></div>
       <div className="absolute bottom-0 right-0 w-64 h-64 bg-green-500 rounded-tl-full opacity-5"></div>
-      
+
       <div className="relative z-10 max-w-4xl mx-auto">
         {/* Remove local ToastContainer as we'll use the global one from App.jsx */}
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {isRescheduling ? 'Đổi lịch hẹn' : 
-             isEditing ? 'Chỉnh sửa lịch hẹn' : 
-             'Đặt lịch khám'}
+            {isRescheduling ? 'Đổi lịch hẹn' :
+              isEditing ? 'Chỉnh sửa lịch hẹn' :
+                'Đặt lịch khám'}
           </h1>
           <p className="text-lg text-gray-600">
-            {isRescheduling ? 'Chọn ngày và giờ mới cho lịch hẹn của bạn' : 
-             isEditing ? 'Cập nhật thông tin cho lịch hẹn của bạn' : 
-             'Đặt lịch khám nhanh chóng và dễ dàng'}
+            {isRescheduling ? 'Chọn ngày và giờ mới cho lịch hẹn của bạn' :
+              isEditing ? 'Cập nhật thông tin cho lịch hẹn của bạn' :
+                'Đặt lịch khám nhanh chóng và dễ dàng'}
           </p>
         </div>
+
+        {/* Show pre-filled information summary */}
+        {!isRescheduling && !isEditing && (formData.hospitalId || formData.specialtyId || formData.doctorId || formData.serviceId) && (
+          <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 shadow-md">
+            <div className="flex items-center mb-4">
+              <FaInfoCircle className="text-blue-600 mr-2 text-xl" />
+              <h2 className="text-lg font-semibold text-gray-800">Thông tin đã chọn</h2>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {formData.hospitalId && (
+                  <div className="flex items-start">
+                    <FaHospital className="text-blue-500 mt-1 mr-3 flex-shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-500 font-medium uppercase">Chi nhánh</span>
+                      <span className="text-gray-800 font-medium">
+                        {hospitals.find(h => h._id === formData.hospitalId)?.name || 'Đang tải...'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {formData.specialtyId && (
+                  <div className="flex items-start">
+                    <FaClipboardList className="text-green-500 mt-1 mr-3 flex-shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-500 font-medium uppercase">Chuyên khoa</span>
+                      <span className="text-gray-800 font-medium">
+                        {specialties.find(s => s._id === formData.specialtyId)?.name || 'Đang tải...'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {formData.doctorId && doctors.find(d => d._id === formData.doctorId) && (
+                  <div className="flex items-start">
+                    <FaUserMd className="text-purple-500 mt-1 mr-3 flex-shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-500 font-medium uppercase">Bác sĩ</span>
+                      <span className="text-gray-800 font-medium">
+                        {doctors.find(d => d._id === formData.doctorId)?.user?.fullName}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {formData.serviceId && (
+                  <div className="flex items-start">
+                    <FaNotesMedical className="text-orange-500 mt-1 mr-3 flex-shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-xs text-gray-500 font-medium uppercase">Dịch vụ</span>
+                      <span className="text-gray-800 font-medium">
+                        {services.find(s => s._id === formData.serviceId)?.name ||
+                          doctorServices.find(s => s._id === formData.serviceId)?.name ||
+                          'Đang tải...'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <p className="text-sm text-gray-600 flex items-center">
+                  <svg className="w-4 h-4 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Thông tin đã được điền sẵn từ trang chi tiết. Bạn có thể thay đổi bất kỳ thông tin nào bên dưới.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Show original appointment details when rescheduling */}
         {isRescheduling && originalAppointment && (
@@ -1617,8 +2291,8 @@ const Appointment = () => {
             <div className="flex-1">
               <p className="text-red-800 font-medium">Lỗi: {error}</p>
             </div>
-            <button 
-              onClick={() => setError(null)} 
+            <button
+              onClick={() => setError(null)}
               className="text-gray-500 hover:text-gray-700"
             >
               &times;
@@ -1629,49 +2303,44 @@ const Appointment = () => {
         <div className="relative mb-10">
           <div className="overflow-hidden mb-2 flex">
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500 shadow-sm" 
+              <div
+                className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500 shadow-sm"
                 style={{ width: `${(currentStep / 5) * 100}%` }}
               ></div>
             </div>
           </div>
           <div className="flex justify-between relative">
             <div className={`flex flex-col items-center ${currentStep >= 1 ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${
-                currentStep >= 1 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
-              }`}>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${currentStep >= 1 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
+                }`}>
                 <FaHospital className="text-lg" />
               </div>
               <span className="text-xs font-medium">Bệnh viện</span>
             </div>
             <div className={`flex flex-col items-center ${currentStep >= 2 ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${
-                currentStep >= 2 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
-              }`}>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${currentStep >= 2 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
+                }`}>
                 <FaUserMd className="text-lg" />
               </div>
               <span className="text-xs font-medium">Bác sĩ</span>
             </div>
             <div className={`flex flex-col items-center ${currentStep >= 3 ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${
-                currentStep >= 3 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
-              }`}>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${currentStep >= 3 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
+                }`}>
                 <FaCalendarAlt className="text-lg" />
               </div>
               <span className="text-xs font-medium">Lịch khám</span>
             </div>
             <div className={`flex flex-col items-center ${currentStep >= 4 ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${
-                currentStep >= 4 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
-              }`}>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${currentStep >= 4 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
+                }`}>
                 <FaCreditCard className="text-lg" />
               </div>
               <span className="text-xs font-medium">Thanh toán</span>
             </div>
             <div className={`flex flex-col items-center ${currentStep >= 5 ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${
-                currentStep >= 5 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
-              }`}>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-300 shadow-md ${currentStep >= 5 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white transform scale-110' : 'bg-white border border-gray-200 text-gray-500'
+                }`}>
                 <FaClipboardList className="text-lg" />
               </div>
               <span className="text-xs font-medium">Xác nhận</span>
@@ -1687,16 +2356,16 @@ const Appointment = () => {
                 <span className="w-1.5 h-6 bg-gradient-to-b from-blue-500 to-blue-600 rounded-full mr-3 inline-block"></span>
                 Chọn bệnh viện và chuyên khoa
               </h2>
-              
+
               <div className="mb-6">
                 <label htmlFor="hospitalId" className="block text-sm font-medium text-gray-700 mb-2">
                   Bệnh viện
                 </label>
                 <div className="relative">
-                  <select 
-                    id="hospitalId" 
-                    name="hospitalId" 
-                    value={formData.hospitalId} 
+                  <select
+                    id="hospitalId"
+                    name="hospitalId"
+                    value={formData.hospitalId}
                     onChange={handleInputChange}
                     required
                     className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-3 px-4 bg-white appearance-none"
@@ -1722,10 +2391,10 @@ const Appointment = () => {
                     Chuyên khoa
                   </label>
                   <div className="relative">
-                    <select 
-                      id="specialtyId" 
-                      name="specialtyId" 
-                      value={formData.specialtyId} 
+                    <select
+                      id="specialtyId"
+                      name="specialtyId"
+                      value={formData.specialtyId}
                       onChange={handleInputChange}
                       required
                       className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-3 px-4 bg-white appearance-none"
@@ -1745,15 +2414,14 @@ const Appointment = () => {
                   </div>
                 </div>
               )}
-              
+
               <div className="flex justify-end pt-4">
-                <button 
-                  type="button" 
-                  className={`flex items-center px-6 py-3 rounded-lg text-white font-medium transition-all ${
-                    canProceedToNextStep() 
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5' 
-                      : 'bg-gray-400 cursor-not-allowed'
-                  }`}
+                <button
+                  type="button"
+                  className={`flex items-center px-6 py-3 rounded-lg text-white font-medium transition-all ${canProceedToNextStep()
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                    : 'bg-gray-400 cursor-not-allowed'
+                    }`}
                   onClick={goToNextStep}
                   disabled={!canProceedToNextStep()}
                 >
@@ -1771,12 +2439,12 @@ const Appointment = () => {
                 <span className="w-1.5 h-6 bg-gradient-to-b from-blue-500 to-blue-600 rounded-full mr-3 inline-block"></span>
                 Chọn bác sĩ và dịch vụ
               </h2>
-              
+
               <div className="mb-8">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Bác sĩ
                 </label>
-                
+
                 {/* Hiển thị bác sĩ dạng slideshow */}
                 {Array.isArray(doctors) && doctors.length > 0 ? (
                   <div className="relative">
@@ -1788,40 +2456,39 @@ const Appointment = () => {
                       >
                         {(() => {
                           const doctor = doctors[currentDoctorIndex];
-                          
+
                           // Xác định rating từ các nguồn dữ liệu khác nhau
-                          const rating = doctor.ratings?.average || 
-                                        doctor.averageRating || 
-                                        doctor.avgRating?.value || 
-                                        0;
-                          
+                          const rating = doctor.ratings?.average ||
+                            doctor.averageRating ||
+                            doctor.avgRating?.value ||
+                            0;
+
                           // Xác định số năm kinh nghiệm
-                          const experience = doctor.experience || 
-                                             doctor.yearsOfExperience || 
-                                             Math.floor(Math.random() * 15) + 5;
-                          
+                          const experience = doctor.experience ||
+                            doctor.yearsOfExperience ||
+                            Math.floor(Math.random() * 15) + 5;
+
                           // Xác định chuyên khoa
                           const specialtyName = getSpecialtyName(
-                            typeof doctor.specialtyId === 'object' ? 
-                            doctor.specialtyId._id : doctor.specialtyId
+                            typeof doctor.specialtyId === 'object' ?
+                              doctor.specialtyId._id : doctor.specialtyId
                           );
-                          
+
                           return (
-                            <div 
-                              className={`bg-white rounded-xl shadow-md overflow-hidden border-2 transition-all hover:shadow-xl cursor-pointer ${
-                                formData.doctorId === doctor._id 
-                                  ? 'border-blue-500 ring-2 ring-blue-200 transform scale-[1.01]' 
-                                  : 'border-gray-200 hover:border-blue-300'
-                              }`}
+                            <div
+                              className={`bg-white rounded-xl shadow-md overflow-hidden border-2 transition-all hover:shadow-xl cursor-pointer ${formData.doctorId === doctor._id
+                                ? 'border-blue-500 ring-2 ring-blue-200 transform scale-[1.01]'
+                                : 'border-gray-200 hover:border-blue-300'
+                                }`}
                               onClick={() => handleDoctorSelect(doctor)}
                             >
                               <div className="relative p-1">
                                 {/* Avatar với tỷ lệ cố định nhưng nhỏ hơn */}
                                 <div className="aspect-[3/2] rounded-t-lg bg-gray-100 overflow-hidden">
                                   <div className="w-full h-full flex items-center justify-center">
-                                    <img 
+                                    <img
                                       className="h-64 w-auto max-h-full object-contain"
-                                      src={doctor.user?.avatarUrl || '/avatars/default-avatar.png'} 
+                                      src={doctor.user?.avatarUrl || '/avatars/default-avatar.png'}
                                       alt={doctor.user?.fullName || 'Doctor'}
                                       onError={(e) => {
                                         e.target.src = '/avatars/default-avatar.png';
@@ -1829,43 +2496,43 @@ const Appointment = () => {
                                     />
                                   </div>
                                 </div>
-                                
+
                                 {/* Specialty Badge */}
                                 <div className="absolute top-2 right-2 bg-blue-100 text-blue-800 text-xs font-medium py-1 px-2 rounded-full">
                                   {specialtyName}
                                 </div>
-                                
+
                                 <div className="p-4">
                                   <h3 className="text-lg font-bold text-gray-900 mb-1 truncate">
                                     {doctor.user?.fullName || 'Bác sĩ'}
                                   </h3>
-                                  
+
                                   {/* Hospital Name */}
                                   {doctor.hospitalId && (
                                     <p className="text-sm text-gray-600 mb-2 flex items-center">
-                                      <FaHospital className="text-primary mr-1 flex-shrink-0" /> 
+                                      <FaHospital className="text-primary mr-1 flex-shrink-0" />
                                       <span className="truncate">{typeof doctor.hospitalId === 'object' ? doctor.hospitalId.name : getHospitalName(doctor.hospitalId)}</span>
                                     </p>
                                   )}
-                                  
+
                                   {/* Ratings and Experience - Always Show */}
                                   <div className="flex flex-col space-y-2">
                                     {/* Rating Stars */}
                                     <div className="flex items-center">
                                       {[1, 2, 3, 4, 5].map((star) => (
-                                        <FaStar 
+                                        <FaStar
                                           key={`star-${doctor._id}-${star}`}
-                                          className={`w-4 h-4 ${star <= Math.round(rating) 
-                                            ? 'text-yellow-400' 
+                                          className={`w-4 h-4 ${star <= Math.round(rating)
+                                            ? 'text-yellow-400'
                                             : 'text-gray-300'
-                                          }`} 
+                                            }`}
                                         />
                                       ))}
                                       <span className="ml-2 text-sm font-medium text-gray-600">
                                         {rating ? rating.toFixed(1) : '0.0'}
                                       </span>
                                     </div>
-                                    
+
                                     {/* Experience */}
                                     <p className="text-sm text-gray-700 flex items-center">
                                       <span className="font-medium text-primary">
@@ -1880,9 +2547,9 @@ const Appointment = () => {
                         })()}
                       </div>
                     </div>
-                    
+
                     {/* Nút điều hướng qua trái */}
-                    <button 
+                    <button
                       type="button"
                       className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-110"
                       onClick={() => {
@@ -1892,9 +2559,9 @@ const Appointment = () => {
                     >
                       <FaAngleLeft className="text-lg" />
                     </button>
-                    
+
                     {/* Nút điều hướng qua phải */}
-                    <button 
+                    <button
                       type="button"
                       className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-12 h-12 flex items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-110"
                       onClick={() => {
@@ -1904,18 +2571,18 @@ const Appointment = () => {
                     >
                       <FaAngleRight className="text-lg" />
                     </button>
-                    
+
                     {/* Thông tin phân trang */}
                     <div className="text-center mt-4 text-sm text-gray-600 flex items-center justify-center gap-2">
                       {currentDoctorIndex > 0 && (
                         <span className="text-blue-600 cursor-pointer hover:underline" onClick={() => setCurrentDoctorIndex(prev => prev - 1)}>
-                         
+
                         </span>
                       )}
                       <span className="px-2">Bác sĩ {currentDoctorIndex + 1} / {doctors.length}</span>
                       {currentDoctorIndex < doctors.length - 1 && (
                         <span className="text-blue-600 cursor-pointer hover:underline" onClick={() => setCurrentDoctorIndex(prev => prev + 1)}>
-                          
+
                         </span>
                       )}
                     </div>
@@ -1942,23 +2609,57 @@ const Appointment = () => {
                     Dịch vụ
                   </label>
                   <div className="relative">
-                    <select 
-                      id="serviceId" 
-                      name="serviceId" 
-                      value={formData.serviceId} 
+                    <select
+                      id="serviceId"
+                      name="serviceId"
+                      value={formData.serviceId}
                       onChange={handleInputChange}
                       className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-3 px-4 bg-white appearance-none"
                     >
                       <option value="">-- Chọn dịch vụ --</option>
-                      {Array.isArray(doctorServices) && doctorServices.length > 0 ? (
-                        doctorServices.map(service => (
-                          <option key={service._id} value={service._id}>
-                            {service.name} - {service.price?.toLocaleString('vi-VN') || '0'} VNĐ
-                          </option>
-                        ))
-                      ) : (
-                        <option value="" disabled>Bác sĩ này không có dịch vụ nào</option>
-                      )}
+                      {(() => {
+                        // Combine doctorServices and services, prioritizing doctorServices
+                        // But ensure pre-filled service is always included
+                        const availableServices = [];
+                        const serviceIds = new Set();
+
+                        // Add doctor-specific services first
+                        if (Array.isArray(doctorServices) && doctorServices.length > 0) {
+                          doctorServices.forEach(service => {
+                            availableServices.push(service);
+                            serviceIds.add(service._id);
+                          });
+                        }
+
+                        // If there's a pre-filled service that's not in doctorServices, add it from services array
+                        if (formData.serviceId && !serviceIds.has(formData.serviceId)) {
+                          const preFilledService = services.find(s => s._id === formData.serviceId);
+                          if (preFilledService) {
+                            availableServices.push(preFilledService);
+                            serviceIds.add(preFilledService._id);
+                          }
+                        }
+
+                        // If no services available at all, fall back to all specialty services
+                        if (availableServices.length === 0 && Array.isArray(services) && services.length > 0) {
+                          services.forEach(service => {
+                            if (!serviceIds.has(service._id)) {
+                              availableServices.push(service);
+                              serviceIds.add(service._id);
+                            }
+                          });
+                        }
+
+                        return availableServices.length > 0 ? (
+                          availableServices.map(service => (
+                            <option key={service._id} value={service._id}>
+                              {service.name} - {service.price?.toLocaleString('vi-VN') || '0'} VNĐ
+                            </option>
+                          ))
+                        ) : (
+                          <option value="" disabled>Không có dịch vụ nào</option>
+                        );
+                      })()}
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
                       <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
@@ -1968,23 +2669,22 @@ const Appointment = () => {
                   </div>
                 </div>
               )}
-              
+
               <div className="flex justify-between pt-4">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="flex items-center px-6 py-3 rounded-lg border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 font-medium transition-all shadow-sm hover:shadow transform hover:-translate-y-0.5"
                   onClick={goToPreviousStep}
                 >
                   <FaAngleLeft className="mr-2" />
                   <span>Quay lại</span>
                 </button>
-                <button 
-                  type="button" 
-                  className={`flex items-center px-6 py-3 rounded-lg text-white font-medium transition-all ${
-                    canProceedToNextStep() 
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:text-white shadow-md hover:shadow-lg transform hover:-translate-y-0.5' 
-                      : 'bg-gray-400 cursor-not-allowed'
-                  }`}
+                <button
+                  type="button"
+                  className={`flex items-center px-6 py-3 rounded-lg text-white font-medium transition-all ${canProceedToNextStep()
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:text-white shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                    : 'bg-gray-400 cursor-not-allowed'
+                    }`}
                   onClick={goToNextStep}
                   disabled={!canProceedToNextStep()}
                 >
@@ -2002,13 +2702,13 @@ const Appointment = () => {
                 <span className="w-1.5 h-6 bg-gradient-to-b from-blue-500 to-blue-600 rounded-full mr-3 inline-block"></span>
                 Chọn ngày và giờ khám
               </h2>
-              
+
               <div className="mb-8">
                 <label htmlFor="appointmentDate" className="flex items-center text-sm font-medium text-gray-700 mb-3">
                   <FaCalendarAlt className="mr-2 text-blue-500" />
                   Ngày khám
                 </label>
-                
+
                 {loading ? (
                   <div className="flex flex-col items-center justify-center h-48 bg-gray-50 rounded-lg border border-gray-200">
                     <div className="w-10 h-10 border-4 border-t-blue-500 border-blue-200 rounded-full animate-spin mb-3"></div>
@@ -2017,8 +2717,8 @@ const Appointment = () => {
                 ) : (
                   <div className="bg-white/90 rounded-lg shadow-md border border-blue-100 max-w-md mx-auto backdrop-blur-sm hover:shadow-lg transition-all">
                     <div className="p-3 flex items-center justify-between border-b border-gray-100">
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         className="p-1 hover:bg-gray-100 rounded-full transition-colors"
                         onClick={goToPreviousMonth}
                       >
@@ -2027,8 +2727,8 @@ const Appointment = () => {
                       <h3 className="text-sm font-medium text-gray-800">
                         Tháng {currentMonth.getMonth() + 1} / {currentMonth.getFullYear()}
                       </h3>
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         className="p-1 hover:bg-gray-100 rounded-full transition-colors"
                         onClick={goToNextMonth}
                       >
@@ -2040,7 +2740,7 @@ const Appointment = () => {
                       <span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1"></span>
                       <span>Ngày bác sĩ có lịch khám</span>
                     </div>
-                    
+
                     <div className="grid grid-cols-7 gap-1 text-center py-1 bg-gray-50 text-xs">
                       {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(day => (
                         <div key={day} className="text-xs font-medium text-gray-500 py-1">
@@ -2048,25 +2748,25 @@ const Appointment = () => {
                         </div>
                       ))}
                     </div>
-                    
+
                     {availableDates.length > 0 ? (
                       <div className="grid grid-cols-7 gap-0.5 p-1.5">
                         {generateCalendarDays().map((day, index) => {
                           if (day.isEmpty) {
                             return <div key={`empty-${day.dateString || index}`} className="aspect-square w-8 h-8 sm:w-9 sm:h-9"></div>;
                           }
-                          
+
                           const today = new Date();
                           today.setHours(0, 0, 0, 0);
-                          
+
                           // Check if this is today
                           const isToday = day.date.getTime() === today.getTime();
-                          
+
                           // Check if this day is selected
                           const isSelected = formData.appointmentDate === day.dateString;
-                          
+
                           return (
-                            <div 
+                            <div
                               key={day.dateString}
                               className={`w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full text-xs font-medium
                                 ${!day.isCurrentMonth ? 'text-gray-300' : 'text-gray-800'}
@@ -2100,7 +2800,7 @@ const Appointment = () => {
                     <FaClock className="mr-2 text-blue-500" />
                     Giờ khám
                   </label>
-                  
+
                   {loading ? (
                     <div className="flex flex-col items-center justify-center h-24 bg-gray-50 rounded-lg border border-gray-200">
                       <div className="w-6 h-6 border-3 border-t-blue-500 border-blue-200 rounded-full animate-spin mb-2"></div>
@@ -2113,14 +2813,14 @@ const Appointment = () => {
                           const slotKey = `${formData.scheduleId}_${slot.startTime}`;
                           const isLockedByOther = lockedSlots.has(slotKey) && lockedSlots.get(slotKey) !== user?.id;
                           const isLockedByMe = lockedSlots.has(slotKey) && lockedSlots.get(slotKey) === user?.id;
-                          
+
                           return (
-                            <div 
+                            <div
                               key={`timeslot-${slot._id || index}`}
                               className={`
                                 rounded-lg border p-2 text-center cursor-pointer transition-all relative
-                                ${slot.isBooked 
-                                  ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' 
+                                ${slot.isBooked
+                                  ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
                                   : isLockedByOther
                                     ? 'bg-yellow-50 border-yellow-300 text-yellow-700 cursor-not-allowed animate-pulse'
                                     : formData.timeSlot.startTime === slot.startTime
@@ -2131,22 +2831,21 @@ const Appointment = () => {
                               onClick={() => !slot.isBooked && !isLockedByOther && handleTimeSlotSelect(formData.scheduleId, slot)}
                             >
                               <div className="text-xs font-medium">{slot.startTime} - {slot.endTime}</div>
-                              <div className={`text-xs ${
-                                slot.isBooked 
-                                  ? 'text-red-400' 
-                                  : isLockedByOther 
-                                    ? 'text-yellow-600 font-semibold' 
-                                    : 'text-green-500'
-                              }`}>
-                                {slot.isBooked 
-                                  ? 'Đã đầy' 
-                                  : isLockedByOther 
-                                    ? 'Đang có người chọn' 
+                              <div className={`text-xs ${slot.isBooked
+                                ? 'text-red-400'
+                                : isLockedByOther
+                                  ? 'text-yellow-600 font-semibold'
+                                  : 'text-green-500'
+                                }`}>
+                                {slot.isBooked
+                                  ? 'Đã đầy'
+                                  : isLockedByOther
+                                    ? 'Đang có người chọn'
                                     : slot.bookedCount > 0
                                       ? `Còn ${slot.maxBookings - slot.bookedCount}/${slot.maxBookings}`
                                       : 'Còn trống'}
                               </div>
-                              
+
                               {(isLockedByOther || isLockedByMe) && (
                                 <div className="absolute top-1 right-1 text-xs">
                                   <FaLock className={isLockedByOther ? 'text-yellow-500' : 'text-blue-500'} />
@@ -2156,14 +2855,14 @@ const Appointment = () => {
                           );
                         })}
                       </div>
-                      
+
                       {/* Thêm chú thích trạng thái khung giờ */}
                       <div className="mt-4 bg-blue-50 rounded-lg p-3 text-sm text-blue-700 flex items-start">
                         <FaInfoCircle className="text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
                         <div>
                           <p className="font-medium mb-1">Chú thích trạng thái khung giờ:</p>
                           <ul className="list-disc pl-5 space-y-1">
-                            <li><span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span> <span className="font-medium">Còn trống:</span> Khung giờ có thể đặt lịch</li> 
+                            <li><span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span> <span className="font-medium">Còn trống:</span> Khung giờ có thể đặt lịch</li>
                             <li><span className="inline-block w-3 h-3 bg-yellow-500 rounded-full mr-1"></span> <span className="font-medium">Đang có người chọn:</span> Khung giờ đang được người khác xử lý (tự động mở khóa sau 5 phút)</li>
                             <li><span className="inline-block w-3 h-3 bg-red-400 rounded-full mr-1"></span> <span className="font-medium">Đã đầy:</span> Khung giờ đã đạt giới hạn tối đa (3 lịch hẹn)</li>
                             <li><span className="inline-block w-3 h-3 bg-blue-400 rounded-full mr-1"></span> <span className="font-medium">Còn X/3:</span> Khung giờ đã có người đặt nhưng vẫn còn chỗ trống</li>
@@ -2187,23 +2886,22 @@ const Appointment = () => {
                   )}
                 </div>
               )}
-              
+
               <div className="flex justify-between pt-4">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="flex items-center px-6 py-3 rounded-lg border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 font-medium transition-all shadow-sm hover:shadow transform hover:-translate-y-0.5"
                   onClick={goToPreviousStep}
                 >
                   <FaAngleLeft className="mr-2" />
                   <span>Quay lại</span>
                 </button>
-                <button 
-                  type="button" 
-                  className={`flex items-center px-6 py-3 rounded-lg text-white font-medium transition-all ${
-                    canProceedToNextStep() 
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:text-white shadow-md hover:shadow-lg transform hover:-translate-y-0.5' 
-                      : 'bg-gray-400 cursor-not-allowed'
-                  }`}
+                <button
+                  type="button"
+                  className={`flex items-center px-6 py-3 rounded-lg text-white font-medium transition-all ${canProceedToNextStep()
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:text-white shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                    : 'bg-gray-400 cursor-not-allowed'
+                    }`}
                   onClick={goToNextStep}
                   disabled={!canProceedToNextStep()}
                 >
@@ -2221,7 +2919,7 @@ const Appointment = () => {
                 <span className="w-1.5 h-6 bg-gradient-to-b from-blue-500 to-blue-600 rounded-full mr-3 inline-block"></span>
                 Thông tin thanh toán
               </h2>
-              
+
               <div className="bg-blue-50/70 rounded-xl p-6 border border-blue-100/80 shadow-sm backdrop-blur-sm">
                 <h3 className="text-lg font-medium text-gray-800 mb-3">Thông tin lịch hẹn</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2253,7 +2951,7 @@ const Appointment = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
                 <h3 className="text-lg font-medium text-gray-800 mb-3">Chi phí dự kiến</h3>
                 <div className="space-y-2">
@@ -2286,34 +2984,33 @@ const Appointment = () => {
                 <div className="mt-4 p-3 bg-blue-50 rounded-lg flex items-start border border-blue-100">
                   <FaInfoCircle className="text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
                   <span className="text-sm text-gray-700">
-                    Bạn có thể thanh toán trực tuyến bằng PayPal , MOMO sau khi đặt lịch trong phần lịch sử đặt lịch hoặc thanh toán tiền mặt tại bệnh viện.
+                    Bạn có thể thanh toán trực tuyến bằng PayPal hoặc MOMO sau khi đặt lịch trong phần lịch sử đặt lịch.
                   </span>
                 </div>
               </div>
-              
+
               <div className="mb-6">
                 <label htmlFor="discountCode" className="block text-sm font-medium text-gray-700 mb-2">
                   Mã giảm giá (nếu có)
                 </label>
                 <div className="flex space-x-2">
                   <div className="flex-1">
-                    <input 
-                      type="text" 
-                      id="discountCode" 
-                      name="discountCode" 
-                      value={formData.discountCode} 
+                    <input
+                      type="text"
+                      id="discountCode"
+                      name="discountCode"
+                      value={formData.discountCode}
                       onChange={handleInputChange}
                       placeholder="Nhập mã giảm giá"
                       className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-3 px-4"
                     />
                   </div>
-                  <button 
-                    type="button" 
-                    className={`px-4 py-3 rounded-lg font-medium transition-all ${
-                      validatingCoupon
-                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                        : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                    }`}
+                  <button
+                    type="button"
+                    className={`px-4 py-3 rounded-lg font-medium transition-all ${validatingCoupon
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                      }`}
                     onClick={handleValidateCoupon}
                     disabled={validatingCoupon}
                   >
@@ -2324,18 +3021,18 @@ const Appointment = () => {
                     )}
                   </button>
                 </div>
-                              {couponInfo && (                  <div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded-md flex items-center">                    <FaInfoCircle className="mr-2 text-green-500" />                    <div className="flex flex-col">                      <span>                        {couponInfo.discountType === 'percentage'                           ? `Giảm ${couponInfo.discountValue}% (tối đa ${couponInfo.maxDiscount?.toLocaleString('vi-VN') || 'không giới hạn'} VNĐ)`                           : `Giảm ${couponInfo.discountValue.toLocaleString('vi-VN')} VNĐ`}                      </span>                      {couponInfo.minPurchase > 0 && (                        <span className="text-xs mt-1">                          Yêu cầu đơn hàng tối thiểu: {couponInfo.minPurchase.toLocaleString('vi-VN')} VNĐ                        </span>                      )}                      {couponInfo.endDate && (                        <span className="text-xs mt-1">                          Hạn sử dụng: {new Date(couponInfo.endDate).toLocaleDateString('vi-VN')}                        </span>                      )}                    </div>                  </div>                )}
+                {couponInfo && (<div className="mt-2 p-2 bg-green-50 text-green-800 text-sm rounded-md flex items-center">                    <FaInfoCircle className="mr-2 text-green-500" />                    <div className="flex flex-col">                      <span>                        {couponInfo.discountType === 'percentage' ? `Giảm ${couponInfo.discountValue}% (tối đa ${couponInfo.maxDiscount?.toLocaleString('vi-VN') || 'không giới hạn'} VNĐ)` : `Giảm ${couponInfo.discountValue.toLocaleString('vi-VN')} VNĐ`}                      </span>                      {couponInfo.minPurchase > 0 && (<span className="text-xs mt-1">                          Yêu cầu đơn hàng tối thiểu: {couponInfo.minPurchase.toLocaleString('vi-VN')} VNĐ                        </span>)}                      {couponInfo.endDate && (<span className="text-xs mt-1">                          Hạn sử dụng: {new Date(couponInfo.endDate).toLocaleDateString('vi-VN')}                        </span>)}                    </div>                  </div>)}
               </div>
-              
+
               <div className="mb-6">
                 <label htmlFor="appointmentType" className="block text-sm font-medium text-gray-700 mb-2">
                   Loại khám
                 </label>
                 <div className="relative">
-                  <select 
-                    id="appointmentType" 
-                    name="appointmentType" 
-                    value={formData.appointmentType} 
+                  <select
+                    id="appointmentType"
+                    name="appointmentType"
+                    value={formData.appointmentType}
                     onChange={handleInputChange}
                     className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-3 px-4 bg-white appearance-none"
                   >
@@ -2355,10 +3052,10 @@ const Appointment = () => {
                 <label htmlFor="symptoms" className="block text-sm font-medium text-gray-700 mb-2">
                   Triệu chứng
                 </label>
-                <textarea 
-                  id="symptoms" 
-                  name="symptoms" 
-                  value={formData.symptoms} 
+                <textarea
+                  id="symptoms"
+                  name="symptoms"
+                  value={formData.symptoms}
                   onChange={handleInputChange}
                   placeholder="Mô tả triệu chứng của bạn"
                   rows={3}
@@ -2370,10 +3067,10 @@ const Appointment = () => {
                 <label htmlFor="medicalHistory" className="block text-sm font-medium text-gray-700 mb-2">
                   Tiền sử bệnh (nếu có)
                 </label>
-                <textarea 
-                  id="medicalHistory" 
-                  name="medicalHistory" 
-                  value={formData.medicalHistory} 
+                <textarea
+                  id="medicalHistory"
+                  name="medicalHistory"
+                  value={formData.medicalHistory}
                   onChange={handleInputChange}
                   placeholder="Các bệnh đã mắc, dị ứng, thuốc đang sử dụng..."
                   rows={3}
@@ -2385,10 +3082,10 @@ const Appointment = () => {
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
                   Ghi chú thêm
                 </label>
-                <textarea 
-                  id="notes" 
-                  name="notes" 
-                  value={formData.notes} 
+                <textarea
+                  id="notes"
+                  name="notes"
+                  value={formData.notes}
                   onChange={handleInputChange}
                   placeholder="Các yêu cầu đặc biệt hoặc thông tin khác..."
                   rows={3}
@@ -2397,16 +3094,16 @@ const Appointment = () => {
               </div>
 
               <div className="flex justify-between pt-4">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="flex items-center px-6 py-3 rounded-lg border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 font-medium transition-all shadow-sm hover:shadow transform hover:-translate-y-0.5"
                   onClick={goToPreviousStep}
                 >
                   <FaAngleLeft className="mr-2" />
                   <span>Quay lại</span>
                 </button>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="flex items-center px-6 py-3 rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 shadow-md hover:shadow-lg transition-all"
                   onClick={goToNextStep}
                 >
@@ -2424,7 +3121,7 @@ const Appointment = () => {
                 <span className="w-1.5 h-6 bg-gradient-to-b from-blue-500 to-blue-600 rounded-full mr-3 inline-block"></span>
                 Xác nhận đặt lịch
               </h2>
-              
+
               <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-6">
                 <div className="p-5 border-b border-gray-100">
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">Xác nhận thông tin lịch hẹn</h3>
@@ -2432,7 +3129,7 @@ const Appointment = () => {
                     Vui lòng kiểm tra lại thông tin lịch hẹn trước khi hoàn tất. Bạn có thể thanh toán trực tuyến bằng PayPal trong lịch sử đặt lịch.
                   </p>
                 </div>
-                
+
                 <div className="divide-y divide-gray-100">
                   <div className="p-5">
                     <h4 className="flex items-center text-gray-800 font-medium mb-3">
@@ -2450,7 +3147,7 @@ const Appointment = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="p-5">
                     <h4 className="flex items-center text-gray-800 font-medium mb-3">
                       <FaUserMd className="mr-2 text-blue-500" />
@@ -2479,8 +3176,8 @@ const Appointment = () => {
                       <div className="flex flex-col">
                         <span className="text-sm text-gray-500 font-medium">Loại khám</span>
                         <span className="text-gray-800">
-                          {formData.appointmentType === 'first-visit' ? 'Khám lần đầu' : 
-                           formData.appointmentType === 'follow-up' ? 'Tái khám' : 'Tư vấn'}
+                          {formData.appointmentType === 'first-visit' ? 'Khám lần đầu' :
+                            formData.appointmentType === 'follow-up' ? 'Tái khám' : 'Tư vấn'}
                         </span>
                       </div>
                     </div>
@@ -2521,7 +3218,7 @@ const Appointment = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600">Phương thức</span>
-                        <span className="font-medium">Tiền mặt tại bệnh viện</span>
+                        <span className="font-medium">Thanh toán trực tuyến (PayPal/MoMo)</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600">Tổng chi phí</span>
@@ -2541,18 +3238,18 @@ const Appointment = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex justify-between pt-4">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="flex items-center px-6 py-3 rounded-lg border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 font-medium transition-all shadow-sm hover:shadow transform hover:-translate-y-0.5"
                   onClick={goToPreviousStep}
                 >
                   <FaAngleLeft className="mr-2" />
                   <span>Quay lại</span>
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="flex items-center px-8 py-3 rounded-lg text-white font-medium bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 hover:text-white shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5"
                   disabled={loading}
                 >
@@ -2563,9 +3260,9 @@ const Appointment = () => {
                     </>
                   ) : (
                     <>
-                      {isRescheduling ? 'Xác nhận đổi lịch' : 
-                       isEditing ? 'Cập nhật lịch hẹn' : 
-                       'Hoàn tất đặt lịch'}
+                      {isRescheduling ? 'Xác nhận đổi lịch' :
+                        isEditing ? 'Cập nhật lịch hẹn' :
+                          'Hoàn tất đặt lịch'}
                     </>
                   )}
                 </button>

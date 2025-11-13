@@ -37,6 +37,9 @@ router.use(protect);
 // Kiểm tra trạng thái khóa của khung giờ
 router.get('/schedules/:scheduleId/time-slots/:timeSlotId/availability', appointmentController.checkTimeSlotAvailability);
 
+// Lấy lịch hẹn phục vụ tính năng chat (giữa bác sĩ và bệnh nhân)
+router.get('/chat/shared', appointmentController.getSharedAppointmentsForChat);
+
 // === ROUTES DÀNH CHO BỆNH NHÂN ===
 
 // POST /api/appointments – Đặt lịch khám
@@ -76,9 +79,17 @@ router.put('/:id/confirmed', authorize('doctor'), appointmentController.confirmA
 router.put('/:id/reject', authorize('doctor'), appointmentController.rejectAppointment);
 
 // PUT /api/appointments/:id/complete – Bác sĩ hoàn thành lịch hẹn
-router.put('/:id/complete', authorize('doctor'), appointmentController.completeAppointment);
+router.put('/:id/complete', authorize('doctor','admin'), appointmentController.completeAppointment);
 
 // PUT /api/appointments/:id/no-show – Bác sĩ đánh dấu bệnh nhân không đến khám
 router.put('/:id/no-show', authorize('doctor'), appointmentController.markAsNoShow);
+
+// === ROUTES DÀNH CHO DƯỢC SĨ ===
+
+// GET /api/appointments/pharmacist - Lấy danh sách lịch hẹn cho dược sĩ (có đơn thuốc)
+router.get('/pharmacist', authorize('pharmacist', 'admin'), appointmentController.getPharmacistAppointments);
+
+// GET /api/appointments/pharmacist/:id - Chi tiết lịch hẹn cho dược sĩ
+router.get('/pharmacist/:id', authorize('pharmacist', 'admin'), appointmentController.getPharmacistAppointmentDetail);
 
 module.exports = router; 

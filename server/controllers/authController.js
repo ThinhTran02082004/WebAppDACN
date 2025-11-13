@@ -8,8 +8,8 @@ const axios = require('axios');
 // Generate JWT token
 const generateToken = async (userId) => {
   try {
-    // Tìm thông tin user
-    const user = await User.findById(userId).select('roleType');
+    // Tìm thông tin user và populate hospitalId nếu là pharmacist
+    const user = await User.findById(userId).select('roleType hospitalId').populate('hospitalId', 'name');
     
     if (!user) {
       throw new Error('User not found');
@@ -17,14 +17,23 @@ const generateToken = async (userId) => {
     
     console.log('Generating token for user:', {
       userId,
-      roleType: user.roleType
+      roleType: user.roleType,
+      hospitalId: user.hospitalId
     });
     
+    // Prepare token payload
+    const tokenPayload = {
+      id: userId,
+      role: user.roleType // Sử dụng roleType từ database thay vì 'user'
+    };
+    
+    // Include hospitalId in token for pharmacist
+    if (user.roleType === 'pharmacist' && user.hospitalId) {
+      tokenPayload.hospitalId = user.hospitalId._id || user.hospitalId;
+    }
+    
     // JWT_SECRET được đảm bảo tồn tại vì đã kiểm tra trong server.js
-    const token = jwt.sign({ 
-      id: userId, 
-      role: user.roleType, // Sử dụng roleType từ database thay vì 'user'
-    }, process.env.JWT_SECRET, {
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
       expiresIn: '1d' // Changed from 30d to 15m - 15 minutes
     });
     
@@ -182,6 +191,14 @@ exports.login = async (req, res) => {
         success: false,
         field: 'email',
         message: 'Tài khoản hoặc mật khẩu không chính xác  '
+      });
+    }
+    
+    // Validate pharmacist has hospitalId
+    if (user.roleType === 'pharmacist' && !user.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dược sĩ chưa được gán vào chi nhánh. Vui lòng liên hệ quản trị viên.'
       });
     }
     
@@ -783,7 +800,7 @@ exports.socialLoginSuccess = async (req, res) => {
     const token = await generateToken(req.user._id);
     
     // Get the frontend URL from environment variables
-    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendURL = process.env.FRONTEND_URL ;
     
     // Determine if user is new and needs password
     const isNewUser = req.user.createdAt && 
@@ -831,7 +848,7 @@ exports.socialLoginSuccess = async (req, res) => {
     return res.redirect(`${frontendURL}/auth/social-callback?data=${userDataParam}`);
   } catch (error) {
     console.error('Social login success error:', error);
-    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendURL = process.env.FRONTEND_URL;
     res.redirect(`${frontendURL}/login?error=social-login-failed`);
   }
 };

@@ -36,6 +36,14 @@ const medicalRecordRoutes = require('./routes/medicalRecordRoutes');
 const medicationRoutes = require('./routes/medicationRoutes');
 const newsRoutes = require('./routes/newsRoutes');
 const videoRoomRoutes = require('./routes/videoRoomRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const doctorMeetingRoutes = require('./routes/doctorMeetingRoutes');
+const prescriptionTemplateRoutes = require('./routes/prescriptionTemplateRoutes');
+const prescriptionRoutes = require('./routes/prescriptionRoutes');
+const medicationInventoryRoutes = require('./routes/medicationInventoryRoutes');
+const hospitalizationRoutes = require('./routes/hospitalizationRoutes');
+const inpatientRoomRoutes = require('./routes/inpatientRoomRoutes');
+const billingRoutes = require('./routes/billingRoutes');
 
 // Load environment variables
 console.log('Loading environment variables from .env file');
@@ -51,23 +59,18 @@ if (result.error) {
 }
 
 // Import email service after environment variables are loaded
-const { initializeEmailTransport } = require('./services/emailService');
+// SendGrid is initialized automatically when the module is imported
+try {
+  require('./services/emailService');
+  console.log('Email service (SendGrid) initialized successfully');
+} catch (error) {
+  console.error('Failed to initialize email service:', error);
+  console.error('Email notifications will not be available');
+  console.error('Please check your SENDGRID_API_KEY and EMAIL_USER in .env file');
+}
 
 // Import cron jobs
 const { initCronJobs } = require('./utils/cron');
-
-// Initialize email service with more robust handling
-(async () => {
-  try {
-    console.log('Initializing email service...');
-    // false for Gmail, true for Ethereal
-    await initializeEmailTransport(false);
-    console.log('Email service initialized successfully');
-  } catch (error) {
-    console.error('Failed to initialize email service:', error);
-    console.error('Email notifications will not be available');
-  }
-})();
 
 // Kiểm tra biến môi trường bắt buộc
 if (!process.env.JWT_SECRET) {
@@ -121,7 +124,7 @@ const io = initializeSocket(server);
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'http://localhost'],
+  origin: process.env.FRONTEND_URL ,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -185,7 +188,15 @@ app.use('/api/news', newsRoutes);
 app.use('/api/medications', medicationRoutes);
 app.use('/api/doctor-auth', doctorAuthRoutes);
 app.use('/api/video-rooms', videoRoomRoutes);
+app.use('/api/doctor-meetings', doctorMeetingRoutes);
+app.use('/api/prescription-templates', prescriptionTemplateRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/medication-inventory', medicationInventoryRoutes);
+app.use('/api/hospitalizations', hospitalizationRoutes);
+app.use('/api/inpatient-rooms', inpatientRoomRoutes);
+app.use('/api/billing', billingRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 
 

@@ -12,6 +12,7 @@ const Service = require('../models/Service');
 const Specialty = require('../models/Specialty');
 const Coupon = require('../models/Coupon');
 const MedicalRecord = require('../models/MedicalRecord');
+const { checkCompletionEligibility, finalizeAppointmentCompletion } = require('../utils/appointmentCompletionHelper');
 // Import socket functions for time slot locking and real-time updates
 const { 
   isTimeSlotLocked, 
@@ -135,7 +136,7 @@ exports.createAppointment = async (req, res) => {
     }
     
     // Validate payment method
-    const validPaymentMethods = ['cash', 'paypal'];
+    const validPaymentMethods = ['cash', 'paypal', 'momo'];
     if (!validPaymentMethods.includes(paymentMethod)) {
       return res.status(400).json({
         success: false,
@@ -555,9 +556,10 @@ exports.createAppointment = async (req, res) => {
     }
     
     let discount = 0;
+    let coupon = null; // Khai báo coupon bên ngoài để có thể sử dụng sau
     // Apply coupon if provided
     if (couponCode) {
-      const coupon = await Coupon.findOne({ 
+      coupon = await Coupon.findOne({ 
         code: couponCode.toUpperCase().trim()
       });
       
@@ -786,60 +788,66 @@ exports.createAppointment = async (req, res) => {
     // Unlock the time slot after it has been successfully booked
     unlockTimeSlot(scheduleId, timeSlot.startTime, req.user.id);
     
-    // Tạo bản ghi thanh toán tương ứng
-    let payment;
+    // Tạo bản ghi thanh toán tương ứng sử dụng Bill và BillPayment
     let redirectUrl = null;
     
+    // Create Bill instead of Payment
+    const Bill = require('../models/Bill');
+    const BillPayment = require('../models/BillPayment');
+    let bill = await Bill.findOne({ appointmentId: appointment._id });
+    
+    if (!bill) {
+      bill = await Bill.create({
+        appointmentId: appointment._id,
+        patientId: req.user.id,
+        doctorId,
+        serviceId: serviceId || null,
+        consultationBill: {
+          amount: totalAmount,
+          originalAmount: consultationFee + additionalFees,
+          discount: discount || 0,
+          couponId: coupon?._id || null,
+          status: paymentMethod === 'cash' ? 'paid' : 'pending',
+          paymentMethod: paymentMethod,
+          paymentDate: paymentMethod === 'cash' ? new Date() : null
+        }
+      });
+      console.log(`Created Bill for appointment: ${bill._id}, discount: ${discount}, couponId: ${coupon?._id || 'none'}`);
+    } else {
+      // Update existing bill
+      bill.consultationBill = {
+        amount: totalAmount,
+        originalAmount: consultationFee + additionalFees,
+        discount: discount || 0,
+        couponId: coupon?._id || null,
+        status: paymentMethod === 'cash' ? 'paid' : 'pending',
+        paymentMethod: paymentMethod,
+        paymentDate: paymentMethod === 'cash' ? new Date() : null
+      };
+      await bill.save();
+      console.log(`Updated Bill for appointment: ${bill._id}, discount: ${discount}, couponId: ${coupon?._id || 'none'}`);
+    }
+    
+    // Create BillPayment for history
     if (paymentMethod === 'cash') {
-      // Tạo bản ghi thanh toán tiền mặt
-      const Payment = require('../models/Payment');
-      payment = new Payment({
+      // Cash payment - create completed BillPayment immediately
+      await BillPayment.create({
+        billId: bill._id,
         appointmentId: appointment._id,
-        userId: req.user.id,
-        doctorId,
-        serviceId: serviceId || null,
+        patientId: req.user.id,
+        billType: 'consultation',
         amount: totalAmount,
-        originalAmount: consultationFee + additionalFees,
-        discount: discount || 0,
         paymentMethod: 'cash',
-        paymentStatus: 'pending',
-        notes: 'Thanh toán tiền mặt khi đến khám'
+        paymentStatus: 'completed',
+        transactionId: `CASH-${Date.now()}`,
+        notes: 'Thanh toán tiền mặt khi đặt lịch'
       });
-      
-      await payment.save();
-      
-      // Cập nhật ID thanh toán vào cuộc hẹn
-      await Appointment.findByIdAndUpdate(
-        appointment._id,
-        { $set: { paymentId: payment._id } }
-      );
-    } else if (paymentMethod === 'paypal') {
-      // Tạo bản ghi thanh toán PayPal
-      const Payment = require('../models/Payment');
-      payment = new Payment({
-        appointmentId: appointment._id,
-        userId: req.user.id,
-        doctorId,
-        serviceId: serviceId || null,
-        amount: totalAmount,
-        originalAmount: consultationFee + additionalFees,
-        discount: discount || 0,
-        paymentMethod: 'paypal',
-        paymentStatus: 'pending',
-        notes: 'Thanh toán qua PayPal'
-      });
-      
-      await payment.save();
-      
-      // Cập nhật ID thanh toán vào cuộc hẹn
-      await Appointment.findByIdAndUpdate(
-        appointment._id,
-        { $set: { paymentId: payment._id } }
-      );
-      
-      // Tạo URL redirect đến PayPal
-      const PaymentController = require('./paymentController');
-      redirectUrl = await PaymentController.createPayPalPayment(payment, req.headers.origin);
+      console.log(`Created BillPayment for cash payment`);
+    } else if (paymentMethod === 'paypal' || paymentMethod === 'momo') {
+      // Online payments - will create BillPayment when payment is initiated
+      // Bill is already created with pending status, so payment handlers can update it
+      // No need to create BillPayment here, it will be created in paypalController/momoController
+      // User will pay after appointment is created
     }
     
     // Send confirmation email to patient
@@ -976,41 +984,31 @@ exports.createAppointment = async (req, res) => {
     }
     
     // Return response based on payment method
-    if (paymentMethod === 'paypal' && redirectUrl) {
-      res.status(201).json({
-        success: true,
-        message: 'Đặt lịch thành công. Vui lòng thanh toán qua PayPal',
-        data: {
-          appointment,
-          payment,
-          room: room ? {
-            name: room.name,
-            number: room.number,
-            floor: room.floor,
-            block: room.block
-          } : null,
-          redirectUrl
-        }
-      });
-    } else {
-      res.status(201).json({
-        success: true,
-        message: room 
+    res.status(201).json({
+      success: true,
+      message: paymentMethod === 'paypal' || paymentMethod === 'momo'
+        ? 'Đặt lịch thành công. Vui lòng thanh toán để hoàn tất đặt lịch.'
+        : (room 
           ? `Đặt lịch thành công. Bạn đã được phân công vào phòng ${room.name} (${room.number}).` 
-          : 'Đặt lịch thành công',
-        data: {
-          appointment,
-          payment,
-          room: room ? {
-            name: room.name,
-            number: room.number,
-            floor: room.floor,
-            block: room.block
-          } : null,
-          instructions: paymentMethod === 'cash' ? 'Vui lòng thanh toán tại quầy khi đến khám' : null
-        }
-      });
-    }
+          : 'Đặt lịch thành công'),
+      data: {
+        appointment,
+        bill: bill ? {
+          _id: bill._id,
+          billNumber: bill.billNumber,
+          consultationBill: bill.consultationBill,
+          overallStatus: bill.overallStatus
+        } : null,
+        room: room ? {
+          name: room.name,
+          number: room.number,
+          floor: room.floor,
+          block: room.block
+        } : null,
+        redirectUrl: redirectUrl || null,
+        instructions: paymentMethod === 'cash' ? 'Vui lòng thanh toán tại quầy khi đến khám' : null
+      }
+    });
     
   } catch (error) {
     console.error('Create appointment error:', error);
@@ -1085,35 +1083,92 @@ exports.getAppointmentById = async (req, res) => {
       });
     }
 
-    // Tìm hồ sơ y tế liên quan đến lịch hẹn nếu có
-    if (appointment.status === 'completed') {
-      const medicalRecord = await MedicalRecord.findOne({ appointmentId: id })
+    // Thu thập dữ liệu liên quan: hồ sơ y tế (nếu có), đơn thuốc, nội trú, hóa đơn
+    const [
+      medicalRecord,
+      prescriptions,
+      hospitalizationRaw,
+      bill
+    ] = await Promise.all([
+      appointment.status === 'completed'
+        ? (require('../models/MedicalRecord')
+            .findOne({ appointmentId: id })
         .populate({
           path: 'doctorId',
           select: 'user title',
-          populate: {
-            path: 'user',
-            select: 'fullName avatarUrl'
-          }
-        });
+              populate: { path: 'user', select: 'fullName avatarUrl' }
+            }))
+        : Promise.resolve(null),
+      require('../models/Prescription')
+        .find({ appointmentId: id })
+        .populate('medications.medicationId', 'name unitTypeDisplay')
+        .populate('templateId', 'name category')
+        .populate('doctorId', 'title')
+        .populate({ path: 'doctorId', populate: { path: 'user', select: 'fullName' } })
+        .sort({ createdAt: -1 }),
+      require('../models/Hospitalization')
+        .findOne({ appointmentId: id })
+        .populate('inpatientRoomId', 'roomNumber roomName type floor hourlyRate amenities equipment')
+        .populate('patientId', 'fullName email phoneNumber dateOfBirth gender address')
+        .populate('doctorId', 'title')
+        .populate({ path: 'doctorId', populate: { path: 'user', select: 'fullName' } })
+        .populate('dischargedBy', 'title')
+        .populate({ path: 'dischargedBy', populate: { path: 'user', select: 'fullName' } })
+        .populate('roomHistory.inpatientRoomId', 'roomNumber type hourlyRate'),
+      require('../models/Bill')
+        .findOne({ appointmentId: id })
+        .populate({ 
+          path: 'medicationBill.prescriptionIds', 
+          select: 'totalAmount status createdAt prescriptionOrder isHospitalization diagnosis'
+        })
+        .populate('medicationBill.prescriptionPayments.prescriptionId')
+        .populate({ path: 'hospitalizationBill.hospitalizationId', select: 'status totalHours totalAmount' })
+    ]);
 
-      if (medicalRecord) {
-        // Thêm thông tin MedicalRecord vào kết quả trả về
         const result = appointment.toObject();
-        result.medicalRecord = medicalRecord;
-        
-        // Trả về dữ liệu đầy đủ
-        return res.status(200).json({
-          success: true,
-          data: result
-        });
+    if (medicalRecord) result.medicalRecord = medicalRecord;
+    if (prescriptions && prescriptions.length) result.prescriptions = prescriptions;
+    if (hospitalizationRaw) {
+      const hosp = hospitalizationRaw.toObject();
+      if (hosp.status !== 'discharged') {
+        // Tính currentInfo nếu chưa xuất viện
+        try {
+          const getCurrentDuration = hospitalizationRaw.getCurrentDuration?.bind(hospitalizationRaw);
+          const getCurrentCost = hospitalizationRaw.getCurrentCost?.bind(hospitalizationRaw);
+          hosp.currentInfo = {
+            currentHours: getCurrentDuration ? getCurrentDuration() : undefined,
+            currentCost: getCurrentCost ? getCurrentCost() : undefined
+          };
+        } catch (_) {}
+      }
+      result.hospitalization = hosp;
+    }
+    if (bill) {
+      result.bill = bill;
+      // Ensure bill is populated with prescriptionPayments
+      if (!bill.medicationBill?.prescriptionPayments) {
+        result.bill.medicationBill.prescriptionPayments = [];
+      }
+    } else {
+      // Auto-generate bill if doesn't exist
+      try {
+        const billingController = require('./billingController');
+        const mockReq = { params: { appointmentId: id }, user: req.user };
+        const mockRes = {
+          json: (data) => {
+            if (data.success && data.data) {
+              result.bill = data.data;
+            }
+          },
+          status: () => mockRes
+        };
+        await billingController.getBillByAppointment(mockReq, mockRes);
+      } catch (err) {
+        console.error('Error auto-generating bill:', err);
       }
     }
-    
-    return res.status(200).json({
-      success: true,
-      data: appointment
-    });
+
+    return res.status(200).json({ success: true, data: result });
     
   } catch (error) {
     console.error('Get appointment detail error:', error);
@@ -2577,20 +2632,50 @@ exports.getAppointmentDetailAdmin = async (req, res) => {
       });
     }
 
-    // Lấy thông tin thanh toán nếu có
-    const Payment = require('../models/Payment');
-    const payment = await Payment.findOne({ appointmentId: id });
-    
-    // Thêm thông tin thanh toán vào response
-    appointment._doc.payment = payment;
+    // Gộp dữ liệu liên quan cho admin: prescriptions, hospitalization (kèm currentInfo), bill
+    const [prescriptions, hospitalizationRaw, bill] = await Promise.all([
+      require('../models/Prescription')
+        .find({ appointmentId: id })
+        .populate('medications.medicationId', 'name unitTypeDisplay')
+        .populate('templateId', 'name category')
+        .populate('doctorId', 'title')
+        .populate({ path: 'doctorId', populate: { path: 'user', select: 'fullName' } })
+        .sort({ createdAt: -1 }),
+      require('../models/Hospitalization')
+        .findOne({ appointmentId: id })
+        .populate('inpatientRoomId', 'roomNumber roomName type floor hourlyRate amenities equipment')
+        .populate('patientId', 'fullName email phoneNumber dateOfBirth gender address')
+        .populate('doctorId', 'title')
+        .populate({ path: 'doctorId', populate: { path: 'user', select: 'fullName' } })
+        .populate('dischargedBy', 'title')
+        .populate({ path: 'dischargedBy', populate: { path: 'user', select: 'fullName' } })
+        .populate('roomHistory.inpatientRoomId', 'roomNumber type hourlyRate'),
+      require('../models/Bill')
+        .findOne({ appointmentId: id })
+        .populate({ path: 'medicationBill.prescriptionIds', select: 'totalAmount status createdAt' })
+        .populate({ path: 'hospitalizationBill.hospitalizationId', select: 'status totalHours totalAmount' })
+    ]);
 
-    // Lấy lịch sử thay đổi trạng thái
-    appointment._doc.statusHistory = appointment.statusHistory || [];
+    const result = appointment.toObject();
+    if (prescriptions && prescriptions.length) result.prescriptions = prescriptions;
+    if (hospitalizationRaw) {
+      const hosp = hospitalizationRaw.toObject();
+      if (hosp.status !== 'discharged') {
+        try {
+          const getCurrentDuration = hospitalizationRaw.getCurrentDuration?.bind(hospitalizationRaw);
+          const getCurrentCost = hospitalizationRaw.getCurrentCost?.bind(hospitalizationRaw);
+          hosp.currentInfo = {
+            currentHours: getCurrentDuration ? getCurrentDuration() : undefined,
+            currentCost: getCurrentCost ? getCurrentCost() : undefined
+          };
+        } catch (_) {}
+      }
+      result.hospitalization = hosp;
+    }
+    if (bill) result.bill = bill;
+    result.statusHistory = appointment.statusHistory || [];
 
-    return res.status(200).json({
-      success: true,
-      data: appointment
-    });
+    return res.status(200).json({ success: true, data: result });
     
   } catch (error) {
     console.error('Get appointment detail error:', error);
@@ -3196,7 +3281,6 @@ exports.rejectAppointment = async (req, res) => {
 exports.completeAppointment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { diagnosis, treatment, prescription, notes } = req.body;
     const userId = req.user.id;
     
     // Validate appointmentId
@@ -3207,31 +3291,11 @@ exports.completeAppointment = async (req, res) => {
       });
     }
     
-    // Xác thực prescription là mảng nếu được cung cấp
-    if (prescription && !Array.isArray(prescription)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Đơn thuốc phải là một mảng các loại thuốc'
-      });
-    }
-    
-    // Validate dữ liệu đơn thuốc
-    if (prescription && Array.isArray(prescription)) {
-      for (const med of prescription) {
-        if (!med.medicine) {
-          return res.status(400).json({
-            success: false,
-            message: 'Mỗi thuốc trong đơn thuốc phải có tên thuốc'
-          });
-        }
-      }
-    }
-    
     // Tìm doctor record dựa vào user id
     const Doctor = require('../models/Doctor');
     const doctor = await Doctor.findOne({ user: userId });
     
-    if (!doctor) {
+    if (!doctor && req.user.role !== 'admin') {
       return res.status(404).json({
         success: false,
         message: 'Không tìm thấy thông tin bác sĩ'
@@ -3248,8 +3312,8 @@ exports.completeAppointment = async (req, res) => {
       });
     }
     
-    // Kiểm tra lịch hẹn có phải của bác sĩ này không
-    if (appointment.doctorId.toString() !== doctor._id.toString()) {
+    // Kiểm tra lịch hẹn có phải của bác sĩ này không (hoặc admin)
+    if (req.user.role !== 'admin' && appointment.doctorId.toString() !== doctor._id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Bạn không có quyền hoàn thành lịch hẹn này'
@@ -3257,65 +3321,77 @@ exports.completeAppointment = async (req, res) => {
     }
     
     // Kiểm tra trạng thái hiện tại của lịch hẹn
-    if (appointment.status !== 'confirmed') {
+    const allowedStatuses = ['confirmed', 'hospitalized', 'pending_payment'];
+    if (!allowedStatuses.includes(appointment.status)) {
       return res.status(400).json({
         success: false,
         message: `Không thể hoàn thành lịch hẹn vì trạng thái hiện tại là ${appointment.status}`
       });
     }
     
-    // Cập nhật trạng thái lịch hẹn
-    appointment.status = 'completed';
-    appointment.completionDate = new Date();
+    const Prescription = require('../models/Prescription');
+    const prescriptions = await Prescription.find({ appointmentId: id });
     
-    // Cập nhật thông tin y tế
-    appointment.medicalRecord = {
-      diagnosis: diagnosis || '',
-      treatment: treatment || '',
-      prescription: prescription || [],
-      notes: notes || '',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    const Bill = require('../models/Bill');
+    let bill = await Bill.findOne({ appointmentId: id });
     
-    await appointment.save();
-    
-    // Tạo hoặc cập nhật hồ sơ bệnh án
-    const MedicalRecord = require('../models/MedicalRecord');
-    
-    // Kiểm tra nếu đã có hồ sơ từ lịch hẹn này
-    let medicalRecord = await MedicalRecord.findOne({ appointmentId: id });
-    
-    if (medicalRecord) {
-      // Cập nhật hồ sơ hiện có
-      medicalRecord.diagnosis = diagnosis || medicalRecord.diagnosis;
-      medicalRecord.treatment = treatment || medicalRecord.treatment;
-      if (prescription) medicalRecord.prescription = prescription;
-      medicalRecord.notes = notes || medicalRecord.notes;
-      await medicalRecord.save();
-    } else {
-      // Tạo hồ sơ mới
-      medicalRecord = new MedicalRecord({
+    if (!bill) {
+      bill = await Bill.create({
+        appointmentId: id,
         patientId: appointment.patientId,
-        doctorId: doctor._id,
-        appointmentId: appointment._id,
-        diagnosis: diagnosis || '',
-        treatment: treatment || '',
-        prescription: prescription || [],
-        notes: notes || ''
+        consultationBill: {
+          amount: appointment.fee?.totalAmount || 0,
+          status: 'pending'
+        }
       });
-      await medicalRecord.save();
+      
+      if (prescriptions.length > 0) {
+        bill.medicationBill.prescriptionIds = prescriptions.map(p => p._id);
+        bill.medicationBill.amount = prescriptions.reduce((sum, p) => sum + p.totalAmount, 0);
+      }
+      
+      if (appointment.hospitalizationId) {
+        const Hospitalization = require('../models/Hospitalization');
+        const hospitalization = await Hospitalization.findById(appointment.hospitalizationId);
+        if (hospitalization) {
+          bill.hospitalizationBill.hospitalizationId = hospitalization._id;
+          bill.hospitalizationBill.amount = hospitalization.totalAmount || 0;
+        }
+      }
+      
+      await bill.save();
     }
     
-
+    const eligibility = await checkCompletionEligibility({
+      appointmentId: id,
+      appointmentDoc: appointment,
+      billDoc: bill,
+      prescriptions
+    });
     
+    if (!eligibility.canComplete) {
+      const statusCode = eligibility.code === 'APPOINTMENT_NOT_FOUND' ? 404 : 400;
+      const response = {
+        success: false,
+        message: eligibility.message || 'Không thể hoàn thành lịch hẹn.'
+      };
+      
+      if (eligibility.code === 'UNPAID' && eligibility.unpaidParts) {
+        response.unpaidParts = eligibility.unpaidParts;
+      }
+      
+      return res.status(statusCode).json(response);
+    }
+    
+    await finalizeAppointmentCompletion(eligibility);
+      
+
     return res.status(200).json({
       success: true,
       data: {
-        appointment,
-        medicalRecord
+        appointment: eligibility.appointment
       },
-      message: 'Hoàn thành lịch hẹn và cập nhật hồ sơ bệnh án thành công'
+      message: 'Hoàn thành lịch hẹn thành công'
     });
   } catch (error) {
     console.error('Complete appointment error:', error);
@@ -3703,6 +3779,49 @@ exports.getPatientAppointments = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
     
+    // Fetch bills for all appointments with full prescriptionPayments
+    const Bill = require('../models/Bill');
+    const appointmentIds = appointments.map(a => a._id);
+    const bills = await Bill.find({ appointmentId: { $in: appointmentIds } })
+      .populate('medicationBill.prescriptionPayments.prescriptionId');
+    const billMap = {};
+    bills.forEach(bill => {
+      billMap[bill.appointmentId.toString()] = bill;
+    });
+    
+    // Attach bill status to each appointment
+    const appointmentsWithBill = appointments.map(appointment => {
+      const appointmentObj = appointment.toObject();
+      const bill = billMap[appointment._id.toString()];
+      
+      if (bill) {
+        appointmentObj.bill = {
+          _id: bill._id,
+          billNumber: bill.billNumber,
+          consultationStatus: bill.consultationBill?.status || 'pending',
+          medicationStatus: bill.medicationBill?.status || 'pending',
+          hospitalizationStatus: bill.hospitalizationBill?.status || 'pending',
+          overallStatus: bill.overallStatus || 'pending',
+          consultationAmount: bill.consultationBill?.amount || 0,
+          medicationAmount: bill.medicationBill?.amount || 0,
+          hospitalizationAmount: bill.hospitalizationBill?.amount || 0,
+          totalAmount: bill.totalAmount || 0,
+          paidAmount: bill.paidAmount || 0,
+          remainingAmount: bill.remainingAmount || 0,
+          medicationBill: {
+            amount: bill.medicationBill?.amount || 0,
+            status: bill.medicationBill?.status || 'pending',
+            prescriptionIds: bill.medicationBill?.prescriptionIds || [],
+            prescriptionPayments: bill.medicationBill?.prescriptionPayments || []
+          }
+        };
+      } else {
+        appointmentObj.bill = null;
+      }
+      
+      return appointmentObj;
+    });
+    
     // Add debug logging to verify the fix
     console.log(`Found ${appointments.length} appointments with these statuses:`, 
                 appointments.map(a => a.status).join(', '));
@@ -3713,13 +3832,358 @@ exports.getPatientAppointments = async (req, res) => {
       total: total,
       totalPages: Math.ceil(total / parseInt(limit)),
       currentPage: parseInt(page),
-      data: appointments
+      data: appointmentsWithBill
     });
   } catch (error) {
     console.error('Get patient appointments error:', error);
     return res.status(500).json({
       success: false,
       message: 'Lỗi khi lấy danh sách lịch hẹn',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Get appointments shared between logged-in user and the other participant for chat
+ * @route   GET /api/appointments/chat/shared?otherUserId={id}
+ * @access  Private (doctor, patient)
+ */
+exports.getSharedAppointmentsForChat = async (req, res) => {
+  try {
+    const { otherUserId } = req.query;
+    const currentUserId = req.user.id;
+    const currentUserRole = req.user.roleType || req.user.role;
+
+    if (!otherUserId || !mongoose.Types.ObjectId.isValid(otherUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'otherUserId is required'
+      });
+    }
+
+    if (!['doctor', 'user'].includes(currentUserRole)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only doctors and patients can use this feature'
+      });
+    }
+
+    const otherUser = await User.findById(otherUserId).select('roleType fullName');
+
+    if (!otherUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Other user not found'
+      });
+    }
+
+    if (!['doctor', 'user'].includes(otherUser.roleType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid participant combination'
+      });
+    }
+
+    let doctorUserId;
+    let patientUserId;
+
+    if (currentUserRole === 'doctor' && otherUser.roleType === 'user') {
+      doctorUserId = currentUserId;
+      patientUserId = otherUserId;
+    } else if (currentUserRole === 'user' && otherUser.roleType === 'doctor') {
+      doctorUserId = otherUserId;
+      patientUserId = currentUserId;
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: 'Chat appointments are only available between doctors and patients'
+      });
+    }
+
+    const doctor = await Doctor.findOne({ user: doctorUserId }).select('_id');
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Doctor information not found'
+      });
+    }
+
+    const appointments = await Appointment.find({
+      doctorId: doctor._id,
+      patientId: patientUserId,
+      status: { $nin: ['cancelled', 'rejected'] }
+    })
+      .populate({
+        path: 'doctorId',
+        select: 'fullName user',
+        populate: {
+          path: 'user',
+          select: 'fullName avatarUrl profileImage'
+        }
+      })
+      .populate({
+        path: 'patientId',
+        select: 'fullName avatarUrl profileImage phone email'
+      })
+      .populate('hospitalId', 'name')
+      .populate('serviceId', 'name')
+      .sort({ appointmentDate: -1, 'timeSlot.startTime': -1 })
+      .limit(50)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: appointments.length,
+      data: appointments
+    });
+  } catch (error) {
+    console.error('Error fetching chat appointments:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error while fetching appointments for chat',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Get appointments for pharmacist (with prescriptions)
+ * @route   GET /api/appointments/pharmacist
+ * @access  Private (pharmacist)
+ */
+exports.getPharmacistAppointments = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.roleType || req.user.role;
+
+    if (userRole !== 'pharmacist' && userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ dược sĩ mới có quyền truy cập'
+      });
+    }
+
+    // Get pharmacist's hospitalId
+    const pharmacist = await User.findById(userId);
+    if (!pharmacist || !pharmacist.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dược sĩ chưa được gán vào chi nhánh'
+      });
+    }
+
+    const { page = 1, limit = 10, status, fromDate, toDate, search } = req.query;
+    const Prescription = require('../models/Prescription');
+
+    // Build query for appointments in pharmacist's hospital
+    const query = {
+      hospitalId: pharmacist.hospitalId
+    };
+
+    // Filter by status if provided
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    // Date range filter
+    if (fromDate || toDate) {
+      query.appointmentDate = {};
+      if (fromDate) {
+        const startDate = new Date(fromDate);
+        startDate.setHours(0, 0, 0, 0);
+        query.appointmentDate.$gte = startDate;
+      }
+      if (toDate) {
+        const endDate = new Date(toDate);
+        endDate.setHours(23, 59, 59, 999);
+        query.appointmentDate.$lte = endDate;
+      }
+    }
+
+    // Search filter
+    if (search) {
+      const users = await User.find({
+        fullName: { $regex: search, $options: 'i' }
+      }).select('_id');
+      const userIds = users.map(user => user._id);
+      query.$or = [
+        { patientId: { $in: userIds } },
+        { bookingCode: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get appointments
+    const appointments = await Appointment.find(query)
+      .populate('patientId', 'fullName phoneNumber email gender dateOfBirth avatarUrl')
+      .populate('hospitalId', 'name address')
+      .populate('specialtyId', 'name')
+      .populate({
+        path: 'doctorId',
+        populate: {
+          path: 'user',
+          select: 'fullName email avatarUrl'
+        }
+      })
+      .sort({ appointmentDate: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get prescriptions for each appointment
+    const appointmentIds = appointments.map(a => a._id);
+    const prescriptions = await Prescription.find({
+      appointmentId: { $in: appointmentIds }
+    })
+      .select('appointmentId status prescriptionOrder totalAmount diagnosis createdAt')
+      .sort({ prescriptionOrder: 1, createdAt: 1 });
+
+    // Group prescriptions by appointment
+    const prescriptionMap = {};
+    prescriptions.forEach(pres => {
+      const apptId = pres.appointmentId.toString();
+      if (!prescriptionMap[apptId]) {
+        prescriptionMap[apptId] = [];
+      }
+      prescriptionMap[apptId].push(pres);
+    });
+
+    // Add prescriptions to appointments and filter by having prescriptions with status not dispensed/completed
+    const filteredAppointments = appointments.filter(appt => {
+      const apptPrescriptions = prescriptionMap[appt._id.toString()] || [];
+      // Show appointments that have at least one prescription not yet dispensed
+      return apptPrescriptions.some(p => 
+        !['dispensed', 'completed', 'cancelled'].includes(p.status)
+      );
+    }).map(appt => {
+      const apptPrescriptions = prescriptionMap[appt._id.toString()] || [];
+      return {
+        ...appt.toObject(),
+        prescriptions: apptPrescriptions,
+        prescriptionsCount: apptPrescriptions.length,
+        pendingPrescriptionsCount: apptPrescriptions.filter(p => 
+          !['dispensed', 'completed', 'cancelled'].includes(p.status)
+        ).length
+      };
+    });
+
+    const total = filteredAppointments.length;
+
+    return res.status(200).json({
+      success: true,
+      count: filteredAppointments.length,
+      total: total,
+      totalPages: Math.ceil(total / parseInt(limit)),
+      currentPage: parseInt(page),
+      data: filteredAppointments
+    });
+  } catch (error) {
+    console.error('Get pharmacist appointments error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi lấy danh sách lịch hẹn',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Get appointment detail for pharmacist
+ * @route   GET /api/appointments/pharmacist/:id
+ * @access  Private (pharmacist)
+ */
+exports.getPharmacistAppointmentDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.roleType || req.user.role;
+
+    if (userRole !== 'pharmacist' && userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ dược sĩ mới có quyền truy cập'
+      });
+    }
+
+    // Get pharmacist's hospitalId
+    const pharmacist = await User.findById(userId);
+    if (!pharmacist || !pharmacist.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dược sĩ chưa được gán vào chi nhánh'
+      });
+    }
+
+    // Get appointment
+    const appointment = await Appointment.findById(id)
+      .populate('patientId', 'fullName phoneNumber email gender dateOfBirth avatarUrl address')
+      .populate('hospitalId', 'name address imageUrl')
+      .populate('specialtyId', 'name')
+      .populate('serviceId', 'name price')
+      .populate({
+        path: 'doctorId',
+        populate: {
+          path: 'user',
+          select: 'fullName email avatarUrl'
+        }
+      });
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy lịch hẹn'
+      });
+    }
+
+    // Validate appointment belongs to pharmacist's hospital
+    if (appointment.hospitalId.toString() !== pharmacist.hospitalId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn chỉ có thể xem lịch hẹn của chi nhánh mình'
+      });
+    }
+
+    // Get prescriptions
+    const Prescription = require('../models/Prescription');
+    const prescriptions = await Prescription.find({ appointmentId: id })
+      .populate('medications.medicationId', 'name unitTypeDisplay')
+      .sort({ prescriptionOrder: 1, createdAt: 1 });
+
+    // Get bill
+    const Bill = require('../models/Bill');
+    const bill = await Bill.findOne({ appointmentId: id })
+      .populate({
+        path: 'medicationBill.prescriptionIds',
+        select: 'prescriptionOrder isHospitalization diagnosis totalAmount status createdAt dispensedAt',
+        populate: {
+          path: 'medications.medicationId',
+          select: 'name unitTypeDisplay'
+        }
+      })
+      .populate('medicationBill.prescriptionPayments.prescriptionId');
+
+    // Get medical records
+    const MedicalRecord = require('../models/MedicalRecord');
+    const medicalRecords = await MedicalRecord.find({ appointmentId: id })
+      .populate('createdBy', 'fullName')
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        appointment,
+        prescriptions,
+        bill,
+        medicalRecords
+      }
+    });
+  } catch (error) {
+    console.error('Get pharmacist appointment detail error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi lấy chi tiết lịch hẹn',
       error: error.message
     });
   }

@@ -117,12 +117,6 @@ const ServiceCard = ({ service }) => {
           >
             Xem chi tiết
           </Link>
-          <Link 
-            to={`/appointment?serviceId=${service._id}`} 
-            className="flex-1 text-center text-sm bg-primary text-white hover:bg-primary-dark hover:text-white px-4 py-2 rounded transition-colors"
-          >
-            Đặt lịch
-          </Link>
         </div>
       </div>
     </div>

@@ -1,97 +1,81 @@
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 
-// Khởi tạo transporter
-let transporter = null;
-
-// Tạo tài khoản test Ethereal để kiểm tra
-const createTestAccount = async () => {
-  try {
-    const testAccount = await nodemailer.createTestAccount();
-    console.log('Đã tạo tài khoản test Ethereal:', testAccount);
-    return testAccount;
-  } catch (error) {
-    console.error('Lỗi khi tạo tài khoản test:', error);
-    return null;
+/**
+ * Khởi tạo SendGrid client với API key
+ * Hàm này được gọi tự động khi module được import
+ */
+const initializeSendGrid = () => {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  
+  if (!apiKey || apiKey === 'your_sendgrid_api_key_here') {
+    throw new Error('SENDGRID_API_KEY không được cấu hình trong file .env. Vui lòng thêm API key hợp lệ từ SendGrid dashboard.');
   }
+  
+  if (!process.env.EMAIL_USER) {
+    throw new Error('EMAIL_USER không được cấu hình trong file .env. Vui lòng thêm địa chỉ email người gửi.');
+  }
+  
+  sgMail.setApiKey(apiKey);
+  console.log('SendGrid đã được khởi tạo thành công');
+  console.log('Email người gửi:', process.env.EMAIL_USER);
 };
 
-// Khởi tạo email transport (Gmail hoặc Ethereal)
-const initializeEmailTransport = async (useEthereal = false) => {
-  try {
-    if (useEthereal) {
-      const testAccount = await createTestAccount();
-      if (testAccount) {
-        transporter = nodemailer.createTransport({
-          host: 'smtp.ethereal.email',
-          port: 587,
-          secure: false,
-          auth: {
-            user: testAccount.user,
-            pass: testAccount.pass
-          }
-        });
-        console.log('Đã khởi tạo transporter Ethereal thành công');
-      }
-    } else {
-      // Sử dụng Gmail
-      // Kiểm tra xem biến môi trường đã được đọc chưa
-      console.log('Email configuration:');
-      console.log('- EMAIL_USER:', process.env.EMAIL_USER || 'Not set');
-      console.log('- EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? 'Password is set' : 'Password is not set');
-      
-      if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-        console.error('Thiếu thông tin đăng nhập email trong file .env');
-        
-        // Fallback to test account if no credentials
-        console.log('Falling back to Ethereal test email service...');
-        const testAccount = await createTestAccount();
-        if (testAccount) {
-          transporter = nodemailer.createTransport({
-            host: 'smtp.ethereal.email',
-            port: 587,
-            secure: false,
-            auth: {
-              user: testAccount.user,
-              pass: testAccount.pass
-            }
-          });
-          console.log('Đã khởi tạo transporter Ethereal (fallback) thành công');
-        } else {
-          throw new Error('Không thể tạo tài khoản test Ethereal');
-        }
-      } else {
-        transporter = nodemailer.createTransport({
-          service: 'gmail',
-          auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASSWORD
-          }
-        });
-        console.log('Đã khởi tạo transporter Gmail thành công');
-      }
-    }
+// Khởi tạo SendGrid khi module được import
+initializeSendGrid();
 
-    // Kiểm tra kết nối
-    await transporter.verify();
-    console.log('Email server sẵn sàng gửi tin nhắn');
-    return true;
+/**
+ * Helper function để gửi email qua SendGrid
+ * @param {Object} mailOptions - Tùy chọn email
+ * @param {string} mailOptions.to - Email người nhận
+ * @param {string} mailOptions.from - Email người gửi
+ * @param {string} mailOptions.subject - Tiêu đề email
+ * @param {string} mailOptions.html - Nội dung HTML
+ * @returns {Promise<Object>} - Response từ SendGrid với messageId và statusCode
+ */
+const sendEmailViaSendGrid = async (mailOptions) => {
+  try {
+    const msg = {
+      to: mailOptions.to,
+      from: mailOptions.from,
+      subject: mailOptions.subject,
+      html: mailOptions.html
+    };
+    
+    console.log(`Đang gửi email đến ${mailOptions.to} với subject: ${mailOptions.subject}`);
+    const response = await sgMail.send(msg);
+    
+    const messageId = response[0].headers['x-message-id'];
+    const statusCode = response[0].statusCode;
+    
+    console.log('Email gửi thành công qua SendGrid');
+    console.log('- Status Code:', statusCode);
+    console.log('- Message ID:', messageId);
+    
+    return {
+      success: true,
+      messageId: messageId,
+      statusCode: statusCode
+    };
   } catch (error) {
-    console.error('Lỗi khởi tạo email transport:', error);
+    console.error('Lỗi gửi email qua SendGrid:', error.message);
+    
+    if (error.response) {
+      console.error('SendGrid error details:');
+      console.error('- Status Code:', error.response.statusCode);
+      console.error('- Error Body:', JSON.stringify(error.response.body, null, 2));
+    }
+    
     throw error;
   }
 };
 
-// Khởi tạo transporter khi module được import
-// true để sử dụng Ethereal, false để sử dụng Gmail
-// Removed automatic initialization - this will be called from server.js
-
-// Gửi email OTP để đặt lại mật khẩu
+/**
+ * Gửi email OTP để đặt lại mật khẩu
+ * @param {string} email - Email người nhận
+ * @param {string} otp - Mã OTP
+ * @returns {Promise<boolean>} - Trạng thái gửi email
+ */
 const sendOtpEmail = async (email, otp) => {
-  if (!transporter) {
-    console.error('Email transporter chưa được khởi tạo');
-    throw new Error('Email transporter chưa được khởi tạo');
-  }
-
   try {
     const mailOptions = {
       from: `"Hệ thống Bệnh viện" <${process.env.EMAIL_USER}>`,
@@ -126,31 +110,27 @@ const sendOtpEmail = async (email, otp) => {
       `
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email gửi thành công: %s', info.messageId);
-    
-    // Khi sử dụng Ethereal, hiển thị URL để xem email đã gửi
-    if (info.messageId && transporter.options.host && transporter.options.host.includes('ethereal')) {
-      console.log('URL xem email: %s', nodemailer.getTestMessageUrl(info));
-    }
+    const result = await sendEmailViaSendGrid(mailOptions);
+    console.log('Email OTP gửi thành công:', result.messageId);
     
     return true;
   } catch (error) {
-    console.error('Lỗi gửi email:', error);
+    console.error('Lỗi gửi email OTP:', error);
     throw error;
   }
 };
 
-// Gửi email xác thực tài khoản
+/**
+ * Gửi email xác thực tài khoản
+ * @param {string} email - Email người nhận
+ * @param {string} verificationToken - Token xác thực
+ * @param {string} fullName - Tên đầy đủ của người dùng
+ * @returns {Promise<boolean>} - Trạng thái gửi email
+ */
 const sendVerificationEmail = async (email, verificationToken, fullName) => {
-  if (!transporter) {
-    console.error('Email transporter chưa được khởi tạo');
-    throw new Error('Email transporter chưa được khởi tạo');
-  }
-
   try {
     // Tạo link xác thực
-    const verificationUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
     
     const mailOptions = {
       from: `"Hệ thống Bệnh viện" <${process.env.EMAIL_USER}>`,
@@ -190,13 +170,8 @@ const sendVerificationEmail = async (email, verificationToken, fullName) => {
       `
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email xác thực gửi thành công: %s', info.messageId);
-    
-    // Khi sử dụng Ethereal, hiển thị URL để xem email đã gửi
-    if (info.messageId && transporter.options.host && transporter.options.host.includes('ethereal')) {
-      console.log('URL xem email: %s', nodemailer.getTestMessageUrl(info));
-    }
+    const result = await sendEmailViaSendGrid(mailOptions);
+    console.log('Email xác thực gửi thành công:', result.messageId);
     
     return true;
   } catch (error) {
@@ -213,23 +188,8 @@ const sendVerificationEmail = async (email, verificationToken, fullName) => {
  * @returns {Promise<boolean>} - Trạng thái gửi email
  */
 const sendAppointmentConfirmationEmail = async (email, patientName, appointmentInfo = {}) => {
-  if (!transporter) {
-    console.error('Email transporter chưa được khởi tạo');
-    // Attempt to re-initialize
-    try {
-      console.log('Attempting to re-initialize email transporter...');
-      await initializeEmailTransport(false);
-      if (!transporter) {
-        throw new Error('Không thể khởi tạo lại email transporter');
-      }
-    } catch (initError) {
-      console.error('Re-initialization failed:', initError);
-      throw new Error('Email transporter chưa được khởi tạo và không thể khởi tạo lại');
-    }
-  }
-
   try {
-    console.log(`Preparing to send appointment confirmation email to ${email}`);
+    console.log(`Chuẩn bị gửi email xác nhận đặt lịch đến ${email}`);
     
     // Đảm bảo appointmentInfo không bao giờ là undefined
     const {
@@ -340,24 +300,12 @@ const sendAppointmentConfirmationEmail = async (email, patientName, appointmentI
       `
     };
 
-    console.log(`Sending email to ${email} with subject: ${mailOptions.subject}`);
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email gửi thành công: %s', info.messageId);
-    
-    // Khi sử dụng Ethereal, hiển thị URL để xem email đã gửi
-    if (info.messageId && transporter.options.host && transporter.options.host.includes('ethereal')) {
-      console.log('URL xem email: %s', nodemailer.getTestMessageUrl(info));
-    }
+    const result = await sendEmailViaSendGrid(mailOptions);
+    console.log('Email xác nhận đặt lịch gửi thành công:', result.messageId);
     
     return true;
   } catch (error) {
     console.error('Lỗi chi tiết khi gửi email xác nhận đặt lịch:', error);
-    if (error.code) {
-      console.error('Error code:', error.code);
-    }
-    if (error.command) {
-      console.error('Error command:', error.command);
-    }
     throw error;
   }
 };
@@ -370,11 +318,6 @@ const sendAppointmentConfirmationEmail = async (email, patientName, appointmentI
  * @returns {Promise<boolean>} - Trạng thái gửi email
  */
 const sendAppointmentReminderEmail = async (email, patientName, appointmentInfo) => {
-  if (!transporter) {
-    console.error('Email transporter chưa được khởi tạo');
-    throw new Error('Email transporter chưa được khởi tạo');
-  }
-
   try {
     const { bookingCode, doctorName, hospitalName, appointmentDate, startTime, endTime, hospitalAddress } = appointmentInfo;
     
@@ -410,7 +353,7 @@ const sendAppointmentReminderEmail = async (email, patientName, appointmentInfo)
           </ul>
           
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}/appointments" style="display: inline-block; padding: 12px 24px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
+            <a href="${process.env.FRONTEND_URL}/appointments" style="display: inline-block; padding: 12px 24px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
               Quản lý lịch hẹn
             </a>
           </div>
@@ -426,13 +369,8 @@ const sendAppointmentReminderEmail = async (email, patientName, appointmentInfo)
       `
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email nhắc nhở lịch khám gửi thành công: %s', info.messageId);
-    
-    // Khi sử dụng Ethereal, hiển thị URL để xem email đã gửi
-    if (info.messageId && transporter.options.host && transporter.options.host.includes('ethereal')) {
-      console.log('URL xem email: %s', nodemailer.getTestMessageUrl(info));
-    }
+    const result = await sendEmailViaSendGrid(mailOptions);
+    console.log('Email nhắc nhở lịch khám gửi thành công:', result.messageId);
     
     return true;
   } catch (error) {
@@ -450,11 +388,6 @@ const sendAppointmentReminderEmail = async (email, patientName, appointmentInfo)
  * @returns {Promise<boolean>} - Trạng thái gửi email
  */
 const sendAppointmentRescheduleEmail = async (email, patientName, appointmentInfo, oldAppointmentInfo) => {
-  if (!transporter) {
-    console.error('Email transporter chưa được khởi tạo');
-    throw new Error('Email transporter chưa được khởi tạo');
-  }
-
   try {
     const {
       bookingCode,
@@ -590,13 +523,8 @@ const sendAppointmentRescheduleEmail = async (email, patientName, appointmentInf
       `
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email thông báo đổi lịch gửi thành công: %s', info.messageId);
-    
-    // Khi sử dụng Ethereal, hiển thị URL để xem email đã gửi
-    if (info.messageId && transporter.options.host && transporter.options.host.includes('ethereal')) {
-      console.log('URL xem email: %s', nodemailer.getTestMessageUrl(info));
-    }
+    const result = await sendEmailViaSendGrid(mailOptions);
+    console.log('Email thông báo đổi lịch gửi thành công:', result.messageId);
     
     return true;
   } catch (error) {
@@ -611,26 +539,11 @@ const sendAppointmentRescheduleEmail = async (email, patientName, appointmentInf
  * @param {string} doctorName - Tên bác sĩ
  * @param {Object} appointmentInfo - Thông tin lịch hẹn
  * @param {Object} patientInfo - Thông tin bệnh nhân
- * @returns {Promise<boolean>} - Trạng thái gửi email
+ * @returns {Promise<Object>} - Object với success và messageId hoặc error
  */
 const sendDoctorAppointmentNotificationEmail = async (email, doctorName, appointmentInfo, patientInfo) => {
-  if (!transporter) {
-    console.error('Email transporter chưa được khởi tạo');
-    // Attempt to re-initialize
-    try {
-      console.log('Attempting to re-initialize email transporter...');
-      await initializeEmailTransport(false);
-      if (!transporter) {
-        throw new Error('Không thể khởi tạo lại email transporter');
-      }
-    } catch (initError) {
-      console.error('Re-initialization failed:', initError);
-      throw new Error('Email transporter chưa được khởi tạo và không thể khởi tạo lại');
-    }
-  }
-
   try {
-    console.log(`Preparing to send doctor notification email to ${email}`);
+    console.log(`Chuẩn bị gửi email thông báo cho bác sĩ đến ${email}`);
     
     // Determine if this is a new appointment or a rescheduled one
     const isRescheduled = appointmentInfo.isRescheduled;
@@ -753,18 +666,12 @@ const sendDoctorAppointmentNotificationEmail = async (email, doctorName, appoint
     };
 
     // Send email
-    console.log(`Sending doctor notification email to ${email} with subject: ${subject}`);
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Doctor appointment notification email sent:', info.messageId);
+    const result = await sendEmailViaSendGrid(mailOptions);
+    console.log('Email thông báo cho bác sĩ gửi thành công:', result.messageId);
     
-    // Khi sử dụng Ethereal, hiển thị URL để xem email đã gửi
-    if (info.messageId && transporter.options.host && transporter.options.host.includes('ethereal')) {
-      console.log('URL xem email: %s', nodemailer.getTestMessageUrl(info));
-    }
-    
-    return { success: true, messageId: info.messageId };
+    return { success: true, messageId: result.messageId };
   } catch (error) {
-    console.error('Error sending doctor appointment notification email:', error);
+    console.error('Lỗi gửi email thông báo cho bác sĩ:', error);
     return { success: false, error: error.message };
   }
 };
@@ -775,6 +682,5 @@ module.exports = {
   sendAppointmentConfirmationEmail,
   sendAppointmentReminderEmail,
   sendAppointmentRescheduleEmail,
-  sendDoctorAppointmentNotificationEmail,
-  initializeEmailTransport
-}; 
+  sendDoctorAppointmentNotificationEmail
+};

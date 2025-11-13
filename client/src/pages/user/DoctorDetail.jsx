@@ -91,14 +91,29 @@ const DoctorDetail = () => {
   }, [doctorId, isAuthenticated]);
   
   const handleAppointmentClick = () => {
+    // Extract specialtyId and hospitalId from doctor object
+    const specialtyId = doctor?.specialtyId?._id || doctor?.specialtyId;
+    const hospitalId = doctor?.hospitalId?._id || doctor?.hospitalId;
+    
+    // Build URL with all available parameters
+    let appointmentUrl = `/appointment?doctor=${doctorId}`;
+    
+    if (specialtyId) {
+      appointmentUrl += `&specialty=${specialtyId}`;
+    }
+    
+    if (hospitalId) {
+      appointmentUrl += `&hospital=${hospitalId}`;
+    }
+    
     // If not authenticated, redirect to login
     if (!isAuthenticated) {
-      navigate('/auth', { state: { from: `/appointment?doctor=${doctorId}` } });
+      navigate('/auth', { state: { from: appointmentUrl } });
       return;
     }
     
-    // If authenticated, redirect directly to appointment page with doctor preselected
-    navigate(`/appointment?doctor=${doctorId}`);
+    // If authenticated, redirect directly to appointment page with all parameters
+    navigate(appointmentUrl);
   };
 
   const toggleFavorite = async () => {

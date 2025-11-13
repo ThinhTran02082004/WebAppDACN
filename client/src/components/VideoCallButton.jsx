@@ -1,14 +1,24 @@
+<<<<<<< HEAD
 import React, { useState, useEffect } from 'react';
 import { FaVideo, FaSpinner, FaExclamationCircle } from 'react-icons/fa';
 import api from '../utils/api';
 import VideoRoom from './VideoRoom/VideoRoom';
 import { toast } from 'react-toastify';
+=======
+import React, { useState, useEffect, useCallback } from 'react';
+import { FaVideo, FaSpinner } from 'react-icons/fa';
+import api from '../utils/api';
+import VideoRoom from './VideoRoom/VideoRoom';
+import { toast } from 'react-toastify';
+import { useSocket } from '../context/SocketContext';
+>>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
 
 const VideoCallButton = ({ appointmentId, userRole, appointmentStatus }) => {
   const [showVideoRoom, setShowVideoRoom] = useState(false);
   const [loading, setLoading] = useState(false);
   const [roomInfo, setRoomInfo] = useState(null);
   const [checking, setChecking] = useState(false);
+<<<<<<< HEAD
 
   useEffect(() => {
     // Check if there's an active room for this appointment
@@ -28,10 +38,78 @@ const VideoCallButton = ({ appointmentId, userRole, appointmentStatus }) => {
       setChecking(false);
     }
   };
+=======
+  const { socket, on, off } = useSocket();
+
+  const fetchExistingRoom = useCallback(async () => {
+    try {
+      const response = await api.get(`/video-rooms/appointment/${appointmentId}`);
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+    } catch (error) {
+      console.error('Error checking existing room:', error);
+    }
+    return null;
+  }, [appointmentId]);
+
+  const checkExistingRoom = useCallback(async () => {
+    try {
+      setChecking(true);
+      const existingRoom = await fetchExistingRoom();
+      setRoomInfo(existingRoom);
+    } catch (error) {
+      console.error('Error checking existing room:', error);
+    } finally {
+      setChecking(false);
+    }
+  }, [fetchExistingRoom]);
+
+  useEffect(() => {
+    // Check if there's an active room for this appointment
+    checkExistingRoom();
+  }, [checkExistingRoom]);
+
+  useEffect(() => {
+    if (!socket || !appointmentId) return;
+
+    const handleRoomUpdate = (payload) => {
+      if (!payload?.appointmentId) return;
+      const incomingAppointmentId = payload.appointmentId.toString();
+      if (incomingAppointmentId !== appointmentId.toString()) return;
+
+      const room = payload.room;
+      if (room && ['waiting', 'active'].includes(room.status)) {
+        setRoomInfo(room);
+      } else {
+        setRoomInfo(null);
+        setShowVideoRoom(false);
+      }
+    };
+
+    on('video_room_updated', handleRoomUpdate);
+    return () => {
+      off('video_room_updated', handleRoomUpdate);
+    };
+  }, [socket, appointmentId, on, off]);
+>>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
 
   const handleStartVideoCall = async () => {
     try {
       setLoading(true);
+<<<<<<< HEAD
+=======
+
+      // Double-check if a room already exists to avoid race conditions
+      const existingRoom = await fetchExistingRoom();
+      if (existingRoom && ['waiting', 'active'].includes(existingRoom.status)) {
+        toast.info('Phòng video đã sẵn sàng, tham gia ngay!');
+        setRoomInfo(existingRoom);
+        setShowVideoRoom(true);
+        setLoading(false);
+        return;
+      }
+>>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
       
       // Create or get existing room
       const response = await api.post('/video-rooms/create', {
@@ -46,7 +124,22 @@ const VideoCallButton = ({ appointmentId, userRole, appointmentStatus }) => {
       }
     } catch (error) {
       console.error('Error starting video call:', error);
+<<<<<<< HEAD
       toast.error('Không thể bắt đầu cuộc gọi video');
+=======
+      const responseData = error?.response?.data;
+      if (responseData?.errorCode === 'VIDEO_ROOM_LIMIT_REACHED') {
+        const limit = responseData?.limit ?? 3;
+        const current = responseData?.current ?? limit;
+        toast.error(`${responseData.message} (Da tao ${current}/${limit} phong.)`);
+      } else {
+        const fallbackMessage =
+          responseData?.message ||
+          error?.message ||
+          'Không thể bắt đầu cuộc gọi video';
+        toast.error(fallbackMessage);
+      }
+>>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
     } finally {
       setLoading(false);
     }

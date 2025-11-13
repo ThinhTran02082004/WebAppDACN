@@ -7,3 +7,8 @@ node_modules/
 .env.test
 .env.test.*
 requests.log
+logs/
+*.log
+dist/
+.vscode/
+.kiro/specs/

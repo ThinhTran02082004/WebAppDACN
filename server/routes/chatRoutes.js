@@ -3,6 +3,7 @@ const router = express.Router();
 const chatController = require('../controllers/chatController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { check } = require('express-validator');
+const { upload } = require('../middlewares/uploadMiddleware');
 
 // Apply authentication middleware to all routes
 router.use(protect);
@@ -73,6 +74,21 @@ router.get(
   '/available-patients', 
   authorize('doctor'), 
   chatController.getAvailablePatients
+);
+
+// Upload media (image/video) to Cloudinary
+// POST /api/chat/upload-media
+router.post(
+  '/upload-media',
+  upload.single('media'),
+  chatController.uploadChatMedia
+);
+
+// Send appointment message in conversation
+// POST /api/chat/conversations/:conversationId/send-appointment
+router.post(
+  '/conversations/:conversationId/send-appointment',
+  chatController.sendAppointmentMessage
 );
 
 module.exports = router; 

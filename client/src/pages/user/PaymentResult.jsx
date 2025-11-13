@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import api from '../../utils/api';
 import { FaCheckCircle, FaTimesCircle, FaSpinner } from 'react-icons/fa';
@@ -8,6 +8,7 @@ const PaymentResult = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(true);
+  const toastShown = useRef(false); // Track if toast has been shown
   const [result, setResult] = useState({
     success: false,
     message: '',
@@ -16,6 +17,9 @@ const PaymentResult = () => {
   });
 
   useEffect(() => {
+    // Reset toast flag when location.search changes
+    toastShown.current = false;
+    
     const fetchPaymentResult = async () => {
       try {
         // Parse query parameters
@@ -35,18 +39,23 @@ const PaymentResult = () => {
             console.log('MoMo payment verification response:', response.data);
             
             if (response.data.success) {
+              const isCompleted = response.data.paymentStatus === 'completed';
+              
               setResult({
-                success: response.data.paymentStatus === 'completed',
+                success: isCompleted,
                 message: response.data.message,
                 appointmentId: response.data.appointmentId,
                 paymentStatus: response.data.paymentStatus
               });
               
-              // Show success or error toast
-              if (response.data.paymentStatus === 'completed') {
-                toast.success('Thanh toán thành công!');
-              } else {
-                toast.error('Thanh toán thất bại. Vui lòng thử lại!');
+              // Show success or error toast only once
+              if (!toastShown.current) {
+                if (isCompleted) {
+                  toast.success('Thanh toán thành công! Đang chuyển đến chi tiết lịch hẹn...');
+                } else {
+                  toast.error('Thanh toán thất bại. Vui lòng thử lại!');
+                }
+                toastShown.current = true;
               }
             } else {
               setResult({
@@ -54,7 +63,10 @@ const PaymentResult = () => {
                 message: response.data.message || 'Không thể xác minh trạng thái thanh toán',
                 paymentStatus: 'error'
               });
-              toast.error('Không thể xác minh trạng thái thanh toán');
+              if (!toastShown.current) {
+                toast.error('Không thể xác minh trạng thái thanh toán');
+                toastShown.current = true;
+              }
             }
           } catch (apiError) {
             console.error('API error during payment verification:', apiError);
@@ -66,7 +78,10 @@ const PaymentResult = () => {
               paymentStatus: 'pending'
             });
             
-            toast.info("Thanh toán đang được xử lý. Kiểm tra trạng thái sau vài phút.");
+            if (!toastShown.current) {
+              toast.info("Thanh toán đang được xử lý. Kiểm tra trạng thái sau vài phút.");
+              toastShown.current = true;
+            }
           }
         }
         // Check for PayPal payment result (if needed)
@@ -81,7 +96,10 @@ const PaymentResult = () => {
             message: 'Không tìm thấy thông tin thanh toán',
             paymentStatus: 'error'
           });
-          toast.error('Không tìm thấy thông tin thanh toán');
+          if (!toastShown.current) {
+            toast.error('Không tìm thấy thông tin thanh toán');
+            toastShown.current = true;
+          }
         }
       } catch (error) {
         console.error('Error processing payment result:', error);
@@ -93,7 +111,10 @@ const PaymentResult = () => {
           paymentStatus: 'pending'
         });
         
-        toast.info("Hệ thống đang cập nhật thanh toán. Vui lòng kiểm tra lại sau.");
+        if (!toastShown.current) {
+          toast.info("Hệ thống đang cập nhật thanh toán. Vui lòng kiểm tra lại sau.");
+          toastShown.current = true;
+        }
       } finally {
         setLoading(false);
       }
@@ -102,16 +123,24 @@ const PaymentResult = () => {
     fetchPaymentResult();
   }, [location.search]);
 
-  // Redirect to appointments page after 5 seconds
+  // Redirect to appointment detail page after successful payment, or appointments list after 3 seconds
+  // Only redirect if we have result data (not loading) and haven't already redirected
   useEffect(() => {
-    if (!loading) {
+    if (!loading && result.paymentStatus) {
       const timer = setTimeout(() => {
-        navigate('/appointments');
-      }, 5000);
+        // If payment successful and has appointmentId, redirect to appointment detail
+        if (result.success && result.appointmentId) {
+          navigate(`/appointments/${result.appointmentId}`);
+        } else if (!result.success) {
+          // Only redirect to appointments list if payment failed
+          navigate('/appointments');
+        }
+        // If success but no appointmentId, don't auto-redirect (let user choose)
+      }, 3000); // 3 seconds for better UX
       
       return () => clearTimeout(timer);
     }
-  }, [loading, navigate]);
+  }, [loading, navigate, result.success, result.appointmentId, result.paymentStatus]);
 
   if (loading) {
     return (
@@ -146,33 +175,47 @@ const PaymentResult = () => {
           <p className="text-gray-600 mb-6">{result.message}</p>
           
           <div className="text-sm text-gray-500 mb-6">
-            Bạn sẽ được chuyển hướng đến trang lịch hẹn sau 5 giây...
+            {result.success && result.appointmentId 
+              ? 'Bạn sẽ được chuyển hướng đến chi tiết lịch hẹn sau 3 giây...'
+              : 'Bạn sẽ được chuyển hướng đến trang lịch hẹn sau 3 giây...'
+            }
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link
-              to="/appointments"
-              className="bg-primary hover:bg-primary-dark text-white font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
-            >
-              Xem lịch hẹn
-            </Link>
-            
-            {result.appointmentId && (
-              <Link
-                to={`/appointments/${result.appointmentId}`}
-                className="bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
-              >
-                Chi tiết cuộc hẹn
-              </Link>
-            )}
-            
-            {!result.success && (
-              <Link
-                to="/"
-                className="bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
-              >
-                Trang chủ
-              </Link>
+            {result.success && result.appointmentId ? (
+              // If payment successful, prioritize appointment detail link
+              <>
+                <Link
+                  to={`/appointments/${result.appointmentId}`}
+                  className="bg-primary hover:bg-primary-dark text-white font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
+                >
+                  Xem chi tiết lịch hẹn
+                </Link>
+                <Link
+                  to="/appointments"
+                  className="bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
+                >
+                  Danh sách lịch hẹn
+                </Link>
+              </>
+            ) : (
+              // If payment failed or no appointmentId, show appointments list
+              <>
+                <Link
+                  to="/appointments"
+                  className="bg-primary hover:bg-primary-dark text-white font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
+                >
+                  Xem lịch hẹn
+                </Link>
+                {!result.success && (
+                  <Link
+                    to="/"
+                    className="bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium px-6 py-2 rounded-lg transition-colors inline-flex items-center justify-center"
+                  >
+                    Trang chủ
+                  </Link>
+                )}
+              </>
             )}
           </div>
         </div>

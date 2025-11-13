@@ -3,9 +3,10 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import { format } from 'date-fns';
+import { toast } from 'react-toastify';
 
 const MedicalRecordDetail = () => {
-  const [medicalRecord, setMedicalRecord] = useState(null);
+  const [prescription, setPrescription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { id } = useParams();
@@ -14,21 +15,29 @@ const MedicalRecordDetail = () => {
   const printRef = useRef();
 
   useEffect(() => {
-    const fetchMedicalRecord = async () => {
+    const fetchPrescription = async () => {
       try {
         setLoading(true);
-        const response = await api.get(`/medical-records/${id}`);
-        setMedicalRecord(response.data);
+        const response = await api.get(`/prescriptions/${id}`);
+        if (response.data.success) {
+          setPrescription(response.data.data);
+        } else {
+          const errorMsg = response.data.message || "Không thể tải đơn thuốc. Vui lòng thử lại sau.";
+          setError(errorMsg);
+          toast.error(errorMsg);
+        }
         setLoading(false);
       } catch (err) {
-        console.error("Failed to fetch medical record:", err);
-        setError("Không thể tải hồ sơ bệnh án. Vui lòng thử lại sau.");
+        console.error("Failed to fetch prescription:", err);
+        const errorMsg = err.response?.data?.message || "Không thể tải đơn thuốc. Vui lòng thử lại sau.";
+        setError(errorMsg);
+        toast.error(errorMsg);
         setLoading(false);
       }
     };
 
     if (id && user) {
-      fetchMedicalRecord();
+      fetchPrescription();
     }
   }, [id, user]);
 
@@ -87,6 +96,16 @@ const MedicalRecordDetail = () => {
         return 'Đang khám';
       case 'cancelled':
         return 'Đã hủy';
+      case 'hospitalized':
+        return 'Đang nằm viện';
+      case 'pending_payment':
+        return 'Chờ thanh toán';
+      case 'pending':
+        return 'Chờ xác nhận';
+      case 'confirmed':
+        return 'Đã xác nhận';
+      case 'rescheduled':
+        return 'Đã đổi lịch';
       default:
         return status;
     }
@@ -132,7 +151,7 @@ const MedicalRecordDetail = () => {
     );
   }
 
-  if (!medicalRecord) {
+  if (!prescription) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="container mx-auto px-4">
@@ -141,12 +160,12 @@ const MedicalRecordDetail = () => {
               <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 012-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <h2 className="text-2xl font-semibold mt-4">Không tìm thấy hồ sơ bệnh án</h2>
+              <h2 className="text-2xl font-semibold mt-4">Không tìm thấy đơn thuốc</h2>
               <button 
                 onClick={() => navigate('/medical-history')} 
                 className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
               >
-                Quay lại lịch sử khám bệnh
+                Quay lại lịch sử đơn thuốc
               </button>
             </div>
           </div>
@@ -172,14 +191,23 @@ const MedicalRecordDetail = () => {
             </Link>
           </div>
 
-          {/* Medical Record Card */}
+          {/* Prescription Detail Card */}
           <div className="bg-white rounded-lg shadow-sm overflow-hidden print:shadow-none" id="printable-content">
             {/* Header */}
             <div className="p-6 border-b border-gray-200">
               <div className="flex flex-col md:flex-row md:items-center justify-between">
-                <h1 className="text-2xl font-bold text-gray-800">Hồ sơ y tế và đơn thuốc</h1>
-                <div className="mt-2 md:mt-0 bg-blue-50 text-blue-600 px-3 py-1 rounded-full font-semibold text-sm">
-                  Mã: {medicalRecord._id.substring(0, 8).toUpperCase()}
+                <h1 className="text-2xl font-bold text-gray-800">
+                  Đơn thuốc {prescription.prescriptionOrder ? `đợt ${prescription.prescriptionOrder}` : ''}
+                </h1>
+                <div className="mt-2 md:mt-0 flex gap-2">
+                  <div className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full font-semibold text-sm">
+                    Mã: {prescription._id.substring(0, 8).toUpperCase()}
+                  </div>
+                  {prescription.isHospitalization && (
+                    <div className="bg-purple-50 text-purple-600 px-3 py-1 rounded-full font-semibold text-sm">
+                      Nội trú
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -192,8 +220,10 @@ const MedicalRecordDetail = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 <span className="text-gray-700">
-                  {formatAppointmentDate(medicalRecord.appointmentId?.appointmentDate || medicalRecord.createdAt)} 
-                  {medicalRecord.appointmentId?.appointmentTime && ` (Ngày khám: ${medicalRecord.appointmentId.appointmentTime})`}
+                  {formatAppointmentDate(prescription.appointmentId?.appointmentDate || prescription.createdAt)} 
+                </span>
+                <span className="ml-4 text-sm text-gray-500">
+                  Ngày kê đơn: {formatDate(prescription.createdAt)}
                 </span>
               </div>
 
@@ -208,67 +238,73 @@ const MedicalRecordDetail = () => {
                     Thông tin bác sĩ
                   </h2>
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <p><span className="font-medium">Bác sĩ:</span> {medicalRecord.doctor?.fullName || 'Không xác định'}</p>
-                    <p><span className="font-medium">Chức danh:</span> {medicalRecord.doctor?.title || 'Bác sĩ chuyên khoa II'}</p>
+                    <p><span className="font-medium">Bác sĩ:</span> {prescription.doctorId?.user?.fullName || 'Không xác định'}</p>
+                    <p><span className="font-medium">Chức danh:</span> {prescription.doctorId?.title || 'Bác sĩ'}</p>
                   </div>
                 </div>
 
-                {/* Hospital Info */}
+                {/* Status Info */}
                 <div>
                   <h2 className="text-sm font-medium text-blue-600 flex items-center mb-3">
                     <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Thông tin bệnh viện
+                    Trạng thái đơn thuốc
                   </h2>
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <p><span className="font-medium">Bệnh viện:</span> {medicalRecord.hospital?.name || 
-                      (medicalRecord.appointmentId?.hospitalId?.name) || 'Không có thông tin bệnh viện'}</p>
-                    <p><span className="font-medium">Thời gian:</span> {medicalRecord.appointmentId?.appointmentTime || '09:30 - 10:00'}</p>
-                    {medicalRecord.hospital?.address && (
-                      <p><span className="font-medium">Địa chỉ:</span> {medicalRecord.hospital.address}</p>
+                    <p><span className="font-medium">Trạng thái:</span> 
+                      <span className={`ml-2 px-2 py-1 rounded text-sm ${
+                        prescription.status === 'dispensed' ? 'bg-green-100 text-green-800' :
+                        prescription.status === 'verified' ? 'bg-emerald-100 text-emerald-800' :
+                        prescription.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {prescription.status === 'pending' ? 'Chờ xử lý' :
+                         prescription.status === 'approved' ? 'Đã kê đơn' :
+                         prescription.status === 'verified' ? 'Đã phê duyệt' :
+                         prescription.status === 'dispensed' ? 'Đã cấp thuốc' :
+                         prescription.status === 'completed' ? 'Hoàn thành' : prescription.status}
+                      </span>
+                    </p>
+                    {prescription.totalAmount > 0 && (
+                      <p className="mt-2"><span className="font-medium">Tổng tiền:</span> {new Intl.NumberFormat('vi-VN', { 
+                        style: 'currency', 
+                        currency: 'VND' 
+                      }).format(prescription.totalAmount)}</p>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Service Info */}
-              <div className="mb-6">
-                <h2 className="text-sm font-medium text-blue-600 flex items-center mb-3">
-                  <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-                  </svg>
-                  Thông tin dịch vụ
-                </h2>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p><span className="font-medium">Dịch vụ:</span> {medicalRecord.service?.name || 
-                    medicalRecord.appointmentId?.serviceName || 'Khám bệnh'}</p>
-                  {(medicalRecord.service?.price || medicalRecord.appointmentId?.fee?.totalAmount) && (
-                    <p><span className="font-medium">Chi phí:</span> {new Intl.NumberFormat('vi-VN', { 
-                      style: 'currency', 
-                      currency: 'VND' 
-                    }).format(medicalRecord.service?.price || medicalRecord.appointmentId?.fee?.totalAmount || 0)}</p>
-                  )}
-                  {medicalRecord.service?.description && (
-                    <p><span className="font-medium">Mô tả:</span> {medicalRecord.service.description}</p>
-                  )}
+              {/* Diagnosis */}
+              {prescription.diagnosis && (
+                <div className="mb-6">
+                  <h2 className="text-sm font-medium text-blue-600 flex items-center mb-3">
+                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Chẩn đoán
+                  </h2>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p><span className="font-medium">Chẩn đoán:</span> {prescription.diagnosis}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Diagnosis and Treatment */}
-              <div className="mb-6">
-                <h2 className="text-sm font-medium text-blue-600 flex items-center mb-3">
-                  <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Thông tin chẩn đoán
-                </h2>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="mb-2"><span className="font-medium">Chẩn đoán:</span> {medicalRecord.diagnosis || 'Không có thông tin'}</p>
-                  <p className="mb-2"><span className="font-medium">Phương pháp điều trị:</span> {medicalRecord.treatment || 'Không có thông tin'}</p>
-                  <p><span className="font-medium">Ghi chú:</span> {medicalRecord.notes || 'Không có thông tin'}</p>
+              {/* Notes */}
+              {prescription.notes && (
+                <div className="mb-6">
+                  <h2 className="text-sm font-medium text-blue-600 flex items-center mb-3">
+                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                    </svg>
+                    Ghi chú
+                  </h2>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p>{prescription.notes}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Prescription */}
               <div>
@@ -290,14 +326,31 @@ const MedicalRecordDetail = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {medicalRecord.prescription && medicalRecord.prescription.length > 0 ? (
-                        medicalRecord.prescription.map((med, index) => (
+                      {prescription.medications && prescription.medications.length > 0 ? (
+                        prescription.medications.map((med, index) => (
                           <tr key={index} className="border-b border-gray-200">
-                            <td className="px-4 py-3">{med.medicine || med.medicationName || 'Không có thông tin'}</td>
+                            <td className="px-4 py-3">
+                              {med.medicationId?.name || med.medicationName || 'Không có thông tin'}
+                              {med.unitPrice && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(med.unitPrice)} / {med.medicationId?.unitTypeDisplay || 'đơn vị'}
+                                </div>
+                              )}
+                            </td>
                             <td className="px-4 py-3">{med.dosage || 'Không có thông tin'}</td>
-                            <td className="px-4 py-3">{med.usage || med.instructions || 'Không có thông tin'}</td>
-                            <td className="px-4 py-3">{med.frequency || med.timing || med.duration || 'Không có thông tin'}</td>
-                            <td className="px-4 py-3">{med.notes || 'Không có thông tin'}</td>
+                            <td className="px-4 py-3">{med.usage || 'Không có thông tin'}</td>
+                            <td className="px-4 py-3">{med.duration || 'Không có thông tin'}</td>
+                            <td className="px-4 py-3">
+                              <div>Số lượng: {med.quantity} {med.medicationId?.unitTypeDisplay || 'đơn vị'}</div>
+                              {med.totalPrice > 0 && (
+                                <div className="text-xs text-gray-600 mt-1">
+                                  Tổng: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(med.totalPrice)}
+                                </div>
+                              )}
+                              {med.notes && (
+                                <div className="text-xs text-gray-500 mt-1">{med.notes}</div>
+                              )}
+                            </td>
                           </tr>
                         ))
                       ) : (
@@ -310,15 +363,14 @@ const MedicalRecordDetail = () => {
                 </div>
               </div>
 
-              {/* Follow-up Info */}
-              {medicalRecord.followUpDate && (
-                <div className="mt-6 p-3 bg-yellow-50 text-yellow-700 rounded-lg">
-                  <div className="flex">
-                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className="font-medium">Ngày tái khám:</span>
-                    <span className="ml-2">{formatDate(medicalRecord.followUpDate)}</span>
+              {/* Total Amount */}
+              {prescription.totalAmount > 0 && (
+                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-blue-900">Tổng tiền đơn thuốc:</span>
+                    <span className="text-xl font-bold text-blue-900">
+                      {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(prescription.totalAmount)}
+                    </span>
                   </div>
                 </div>
               )}
@@ -326,7 +378,8 @@ const MedicalRecordDetail = () => {
 
             {/* Footer with ID reference */}
             <div className="px-6 py-3 bg-gray-50 text-xs text-gray-500 print:bg-white">
-              ID: {medicalRecord._id} - Ngày tạo: {formatDate(medicalRecord.createdAt)}
+              ID: {prescription._id} - Ngày tạo: {formatDate(prescription.createdAt)}
+              {prescription.dispensedAt && ` - Ngày cấp thuốc: ${formatDate(prescription.dispensedAt)}`}
             </div>
           </div>
 
@@ -386,9 +439,9 @@ const MedicalRecordDetail = () => {
               </svg>
               Đặt lịch mới
             </Link>
-            {medicalRecord.appointmentId && (
+            {prescription.appointmentId && (
               <Link 
-                to={`/appointments/${medicalRecord.appointmentId._id || medicalRecord.appointmentId}`} 
+                to={`/appointments/${prescription.appointmentId._id || prescription.appointmentId}`} 
                 className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">

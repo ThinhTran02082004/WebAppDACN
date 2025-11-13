@@ -57,13 +57,13 @@ const MedicalRecords = () => {
     }
   }, [patientId]);
 
-  // Load medications when showing the form
+  // Load medications when showing the form or when currentRecord changes
   useEffect(() => {
     if (showForm) {
       fetchMedications();
       fetchMedicationCategories();
     }
-  }, [showForm]);
+  }, [showForm, currentRecord, formData.appointmentId]);
   
   // Filter medications when search term or category changes
   useEffect(() => {
@@ -475,11 +475,48 @@ const MedicalRecords = () => {
   const fetchMedications = async () => {
     setLoadingMedications(true);
     try {
-      const response = await api.get('/medications/medications', {
-        params: {
-          limit: 100 // Get a large batch for local filtering
+      // Try to get hospitalId from currentRecord or appointment
+      let hospitalId = null;
+      
+      // First, try to get from currentRecord if it has appointment data
+      if (currentRecord?.appointmentId?.hospitalId) {
+        hospitalId = typeof currentRecord.appointmentId.hospitalId === 'object'
+          ? currentRecord.appointmentId.hospitalId._id
+          : currentRecord.appointmentId.hospitalId;
+      }
+      // If we have appointmentId in formData, fetch appointment to get hospitalId
+      else if (formData.appointmentId) {
+        try {
+          const appointmentRes = await api.get(`/appointments/${formData.appointmentId}`);
+          if (appointmentRes.data.success && appointmentRes.data.data?.hospitalId) {
+            hospitalId = typeof appointmentRes.data.data.hospitalId === 'object'
+              ? appointmentRes.data.data.hospitalId._id
+              : appointmentRes.data.data.hospitalId;
+          }
+        } catch (err) {
+          console.error('Error fetching appointment for hospitalId:', err);
         }
-      });
+      }
+      // Fallback: get from doctor profile
+      else {
+        try {
+          const doctorRes = await api.get('/doctors/profile');
+          if (doctorRes.data.success && doctorRes.data.data?.hospitalId) {
+            hospitalId = typeof doctorRes.data.data.hospitalId === 'object'
+              ? doctorRes.data.data.hospitalId._id
+              : doctorRes.data.data.hospitalId;
+          }
+        } catch (err) {
+          console.error('Error fetching doctor profile for hospitalId:', err);
+        }
+      }
+
+      const params = { limit: 100 };
+      if (hospitalId) {
+        params.hospitalId = hospitalId;
+      }
+      
+      const response = await api.get('/medications', { params });
       
       if (response.data.success) {
         setMedications(response.data.data.docs || []);
@@ -746,6 +783,13 @@ const MedicalRecords = () => {
                     <FaStethoscope className="inline-block mr-1.5 text-indigo-500" /> 
                     {record.diagnosis || 'Không có chẩn đoán'}
                   </div>
+                  {record.isFromPrescription && record.prescriptionOrder && (
+                    <div className="flex items-center text-xs text-blue-600 mt-1 bg-blue-50 rounded-full px-2 py-1 w-fit">
+                      <FaPills className="mr-1.5 text-blue-500" /> 
+                      Đơn thuốc #{record.prescriptionOrder}
+                      {record.isHospitalization && ' (Nội trú)'}
+                    </div>
+                  )}
                   {record.appointmentId && (
                     <div className="flex items-center text-xs text-gray-500 mt-2 bg-indigo-50 rounded-full px-2 py-1 w-fit">
                       <FaCalendarCheck className="mr-1.5 text-indigo-400" /> 
@@ -1062,16 +1106,79 @@ const MedicalRecords = () => {
                   <div className="text-sm flex items-center">
                     <FaClock className="mr-1.5" /> {formatDate(currentRecord.createdAt)}
                   </div>
-                  <button 
-                    className="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg transition-colors text-sm flex items-center"
-                    onClick={handleEditRecord}
-                  >
-                    <FaEdit className="mr-1.5" /> Chỉnh sửa
-                  </button>
+                  {!currentRecord.isFromPrescription && !currentRecord.isFromAppointment && (
+                    <button 
+                      className="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg transition-colors text-sm flex items-center"
+                      onClick={handleEditRecord}
+                    >
+                      <FaEdit className="mr-1.5" /> Chỉnh sửa
+                    </button>
+                  )}
+                  {(currentRecord.isFromPrescription || currentRecord.isFromAppointment) && (
+                    <span className="text-xs text-white/70 px-3 py-1.5 bg-white/10 rounded-lg">
+                      {currentRecord.isFromPrescription ? 'Từ đơn thuốc (chỉ xem)' : 'Từ lịch hẹn (chỉ xem)'}
+                    </span>
+                  )}
                 </div>
               </div>
               
               <div className="p-6 space-y-6">
+                {/* Thông tin đơn thuốc nếu record từ prescription */}
+                {currentRecord.isFromPrescription && (
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h3 className="text-md font-semibold text-gray-800 mb-3 flex items-center">
+                      <FaPills className="mr-2 text-blue-500" /> Thông tin đơn thuốc
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {currentRecord.prescriptionOrder && (
+                        <div>
+                          <div className="text-sm text-gray-500 flex items-center">
+                            <FaRegClipboard className="mr-1.5 text-blue-500" /> Số thứ tự đơn:
+                          </div>
+                          <div className="font-medium text-gray-800">
+                            Đơn thuốc #{currentRecord.prescriptionOrder}
+                            {currentRecord.isHospitalization && ' (Nội trú)'}
+                          </div>
+                        </div>
+                      )}
+                      {currentRecord.prescriptionStatus && (
+                        <div>
+                          <div className="text-sm text-gray-500 flex items-center">
+                            <FaClock className="mr-1.5 text-blue-500" /> Trạng thái:
+                          </div>
+                          <div className="font-medium text-gray-800">
+                            {currentRecord.prescriptionStatus === 'approved' && 'Đã duyệt'}
+                            {currentRecord.prescriptionStatus === 'verified' && 'Đã xác nhận'}
+                            {currentRecord.prescriptionStatus === 'dispensed' && 'Đã cấp phát'}
+                            {currentRecord.prescriptionStatus === 'completed' && 'Hoàn thành'}
+                            {currentRecord.prescriptionStatus === 'pending' && 'Chờ duyệt'}
+                          </div>
+                        </div>
+                      )}
+                      {currentRecord.prescriptionTotalAmount !== undefined && (
+                        <div className="md:col-span-2">
+                          <div className="text-sm text-gray-500 flex items-center">
+                            <FaRegClipboard className="mr-1.5 text-blue-500" /> Tổng tiền đơn thuốc:
+                          </div>
+                          <div className="font-semibold text-lg text-blue-600">
+                            {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(currentRecord.prescriptionTotalAmount || 0)}
+                          </div>
+                        </div>
+                      )}
+                      {currentRecord.prescriptionId && currentRecord.appointmentId?._id && (
+                        <div className="md:col-span-2">
+                          <button 
+                            className="px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors flex items-center text-sm"
+                            onClick={() => navigate(`/doctor/appointments/${currentRecord.appointmentId._id}?prescriptionId=${currentRecord.prescriptionId}`)}
+                          >
+                            <FaEye className="mr-2" /> Xem chi tiết đơn thuốc
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
                 <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                   <h3 className="text-md font-semibold text-gray-800 mb-3">Thông tin lịch hẹn</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1185,7 +1292,6 @@ const MedicalRecords = () => {
                             <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Liều lượng</th>
                             <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cách dùng</th>
                             <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thời gian dùng</th>
-                            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ghi chú</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -1197,7 +1303,6 @@ const MedicalRecords = () => {
                               <td className="px-4 py-3 whitespace-nowrap text-gray-700">{med.dosage || 'N/A'}</td>
                               <td className="px-4 py-3 whitespace-nowrap text-gray-700">{med.usage || 'N/A'}</td>
                               <td className="px-4 py-3 whitespace-nowrap text-gray-700">{med.duration || 'N/A'}</td>
-                              <td className="px-4 py-3 whitespace-nowrap text-gray-700">{med.notes || 'N/A'}</td>
                             </tr>
                           ))}
                         </tbody>

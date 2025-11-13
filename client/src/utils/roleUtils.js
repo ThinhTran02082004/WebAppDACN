@@ -13,9 +13,11 @@ export const getHomeRoute = (user) => {
   // Kiểm tra cả hai trường roleType và role
   const isAdmin = user.roleType === 'admin' || user.role === 'admin';
   const isDoctor = user.roleType === 'doctor' || user.role === 'doctor';
+  const isPharmacist = user.roleType === 'pharmacist' || user.role === 'pharmacist';
   
   if (isAdmin) return '/admin/dashboard';
   if (isDoctor) return '/doctor/dashboard';
+  if (isPharmacist) return '/pharmacist/dashboard';
   return '/';
 };
 
@@ -49,6 +51,9 @@ export const navigateByRole = (user, navigate, fallbackPath = '/') => {
       break;
     case 'admin':
       navigate('/admin/dashboard');
+      break;
+    case 'pharmacist':
+      navigate('/pharmacist/dashboard');
       break;
     default:
       navigate(fallbackPath);

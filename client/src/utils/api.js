@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { toastWarning } from './toast';
 
-const apiBaseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const apiBaseURL = import.meta.env.VITE_API_URL ;
 
 // Create a custom axios instance
 const api = axios.create({
@@ -43,19 +43,27 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('API Error:', error.response || error.message);
+    // Only log errors that are not 401 on login page to reduce noise
+    if (!(error.response?.status === 401 && window.location.pathname === '/login')) {
+      console.error('API Error:', error.response || error.message);
+    }
 
     // Handle 401 Unauthorized errors but check specific cases
     if (error.response && error.response.status === 401) {
-      // Nếu đang ở trang login thì không xử lý logout
-      if (window.location.pathname === '/login') {
-        // Không làm gì, để component login xử lý lỗi
+      const currentPath = window.location.pathname;
+      
+      // Skip handling for login, register, forgot-password, and other auth pages
+      const authPages = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/need-verification'];
+      const isAuthPage = authPages.some(page => currentPath.startsWith(page));
+      
+      if (isAuthPage) {
+        // Let the auth component handle the error
         return Promise.reject(error);
       }
       
-      // Nếu không phải ở trang login và có token (nghĩa là đã đăng nhập trước đó)
-      const userInfo = JSON.parse(localStorage.getItem('userInfo')) || 
-                      JSON.parse(sessionStorage.getItem('userInfo'));
+      // For other pages, check if user has a token (meaning they were logged in before)
+      const userInfo = JSON.parse(localStorage.getItem('userInfo') || 'null') || 
+                      JSON.parse(sessionStorage.getItem('userInfo') || 'null');
       
       if (userInfo && userInfo.token) {
         console.log('Token đã hết hạn - Đang đăng xuất...');

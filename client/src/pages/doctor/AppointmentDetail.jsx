@@ -5,12 +5,15 @@ import {
   FaNotesMedical, FaClipboardCheck, FaTimesCircle, FaCheckCircle,
   FaArrowLeft, FaFileAlt, FaPrint, FaExclamationCircle,
   FaClock, FaStethoscope, FaRegHospital, FaInfoCircle,
-  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen, FaVideo, FaPlus, FaTimes
+  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen, FaVideo, FaPlus, FaTimes, FaComments, FaShare
 } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
 
 import api from '../../utils/api';
 import VideoCallButton from '../../components/VideoCallButton';
+import PrescriptionManager from '../../components/PrescriptionManager';
+import HospitalizationManager from '../../components/HospitalizationManager';
+import DoctorBilling from '../../components/DoctorBilling';
 
 const AppointmentDetail = () => {
   const { id } = useParams();
@@ -21,13 +24,8 @@ const AppointmentDetail = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectionModal, setShowRejectionModal] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [showCompletionModal, setShowCompletionModal] = useState(false);
-  const [completionData, setCompletionData] = useState({
-    diagnosis: '',
-    treatment: '',
-    prescription: [],
-    notes: ''
-  });
+  const [activeTab, setActiveTab] = useState('info'); // 'info', 'prescription', 'hospitalization', 'billing'
+  const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
 
   useEffect(() => {
     fetchAppointmentDetail();
@@ -41,11 +39,15 @@ const AppointmentDetail = () => {
       if (response.data.success) {
         setAppointment(response.data.data);
       } else {
-        setError(response.data.message || 'Không thể tải thông tin lịch hẹn');
+        const errorMsg = response.data.message || 'Không thể tải thông tin lịch hẹn';
+        setError(errorMsg);
+        toast.error(errorMsg);
       }
     } catch (error) {
       console.error('Lỗi khi tải chi tiết lịch hẹn:', error);
-      setError('Đã xảy ra lỗi khi tải thông tin. Vui lòng thử lại sau.');
+      const errorMsg = error.response?.data?.message || 'Đã xảy ra lỗi khi tải thông tin. Vui lòng thử lại sau.';
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -65,13 +67,7 @@ const AppointmentDetail = () => {
         endpoint = `/appointments/${id}/reject`;
         requestData = { reason };
       } else if (newStatus === 'completed') {
-        setCompletionData({
-          diagnosis: '',
-          treatment: '',
-          prescription: [],
-          notes: ''
-        });
-        setShowCompletionModal(true);
+        await handleCompleteAppointment();
         setIsUpdating(false);
         return;
       }
@@ -110,6 +106,64 @@ const AppointmentDetail = () => {
     }
   };
 
+  const handleChatWithPatient = async () => {
+    try {
+      // Get patient's user ID
+      const patientUserId = appointment?.patientId?._id || appointment?.patientId;
+      
+      if (!patientUserId) {
+        toast.error('Không thể tìm thấy thông tin bệnh nhân');
+        return;
+      }
+
+      // Create or get existing conversation
+      const response = await api.post('/chat/conversations', {
+        participantId: patientUserId,
+        appointmentId: appointment._id
+      });
+
+      if (response.data.success) {
+        // Navigate to chat page with conversation ID
+        navigate(`/doctor/chat/${response.data.data._id}`);
+      }
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      toast.error(error.response?.data?.message || 'Không thể bắt đầu trò chuyện. Vui lòng thử lại sau.');
+    }
+  };
+
+  const handleShareToChat = async () => {
+    try {
+      const patientUserId = appointment?.patientId?._id || appointment?.patientId;
+      
+      if (!patientUserId) {
+        toast.error('Không thể tìm thấy thông tin bệnh nhân');
+        return;
+      }
+
+      // Create or get conversation
+      const response = await api.post('/chat/conversations', {
+        participantId: patientUserId,
+        appointmentId: appointment._id
+      });
+
+      if (response.data.success) {
+        const conversationId = response.data.data._id;
+        
+        // Send appointment to chat
+        await api.post(`/chat/conversations/${conversationId}/send-appointment`, {
+          appointmentId: appointment._id
+        });
+        
+        toast.success('Đã chia sẻ lịch hẹn vào chat');
+        navigate(`/doctor/chat/${conversationId}`);
+      }
+    } catch (error) {
+      console.error('Error sharing appointment:', error);
+      toast.error('Không thể chia sẻ lịch hẹn');
+    }
+  };
+
   const formatDateTime = (dateTimeStr) => {
     if (!dateTimeStr) return 'N/A';
     
@@ -138,6 +192,8 @@ const AppointmentDetail = () => {
       pending: { text: 'Chờ xác nhận', className: 'bg-yellow-100 text-yellow-800 border border-yellow-200', icon: <FaExclamationCircle className="mr-1.5" /> },
       confirmed: { text: 'Đã xác nhận', className: 'bg-blue-100 text-blue-800 border border-blue-200', icon: <FaCheckCircle className="mr-1.5" /> },
       completed: { text: 'Hoàn thành', className: 'bg-green-100 text-green-800 border border-green-200', icon: <FaClipboardCheck className="mr-1.5" /> },
+      pending_payment: { text: 'Chờ thanh toán', className: 'bg-orange-100 text-orange-800 border border-orange-200', icon: <FaClock className="mr-1.5" /> },
+      hospitalized: { text: 'Đang nằm viện', className: 'bg-purple-100 text-purple-800 border border-purple-200', icon: <FaRegHospital className="mr-1.5" /> },
       cancelled: { text: 'Đã hủy', className: 'bg-red-100 text-red-800 border border-red-200', icon: <FaTimesCircle className="mr-1.5" /> },
       rejected: { text: 'Đã từ chối', className: 'bg-red-100 text-red-800 border border-red-200', icon: <FaTimesCircle className="mr-1.5" /> },
       rescheduled: { text: 'Đã đổi lịch', className: 'bg-indigo-100 text-indigo-800 border border-indigo-200', icon: <FaCalendarAlt className="mr-1.5" /> },
@@ -154,71 +210,37 @@ const AppointmentDetail = () => {
     );
   };
 
-  const viewMedicalRecord = () => {
-    if (appointment && appointment.patientId?._id) {
-      navigate(`/doctor/medical-records/${appointment.patientId._id}?appointmentId=${appointment._id}`);
-    } else {
-      toast.error('Không thể tìm thấy thông tin bệnh nhân');
-    }
-  };
 
   const printAppointment = () => {
     window.print();
   };
 
   const handleCompleteAppointment = async () => {
+    if (isUpdating) return;
+    
     setIsUpdating(true);
     try {
-      const response = await api.put(`/appointments/${id}/complete`, completionData);
+      const response = await api.put(`/appointments/${id}/complete`);
       
       if (response.data.success) {
-        toast.success('Lịch hẹn đã hoàn thành và hồ sơ y tế đã được tạo');
-        setShowCompletionModal(false);
-        
-        setAppointment({
-          ...appointment,
-          status: 'completed'
-        });
+        toast.success('Lịch hẹn đã hoàn thành thành công');
+        await fetchAppointmentDetail();
       } else {
         toast.error(`Không thể hoàn thành lịch hẹn: ${response.data.message || 'Lỗi không xác định'}`);
       }
     } catch (error) {
       console.error('Lỗi khi hoàn thành lịch hẹn:', error.response?.data || error.message);
-      toast.error(error.response?.data?.message || 'Lỗi khi hoàn thành lịch hẹn');
+      const errorMessage = error.response?.data?.message || 'Lỗi khi hoàn thành lịch hẹn';
+      toast.error(errorMessage);
+      
+      // If there are unpaid parts, show them
+      if (error.response?.data?.unpaidParts) {
+        const unpaidParts = error.response.data.unpaidParts;
+        toast.info(`Còn thiếu thanh toán: ${unpaidParts.join(', ')}`);
+      }
     } finally {
       setIsUpdating(false);
     }
-  };
-
-  const addMedication = () => {
-    setCompletionData(prev => ({
-      ...prev,
-      prescription: [
-        ...prev.prescription,
-        { medicine: '', dosage: '', frequency: '', duration: '' }
-      ]
-    }));
-  };
-
-  const updateMedication = (index, field, value) => {
-    setCompletionData(prev => {
-      const updatedPrescription = [...prev.prescription];
-      updatedPrescription[index] = {
-        ...updatedPrescription[index],
-        [field]: value
-      };
-      return {
-        ...prev,
-        prescription: updatedPrescription
-      };
-    });
-  };
-
-  const removeMedication = (index) => {
-    setCompletionData(prev => ({
-      ...prev,
-      prescription: prev.prescription.filter((_, i) => i !== index)
-    }));
   };
 
   // Modal từ chối lịch hẹn
@@ -271,160 +293,6 @@ const AppointmentDetail = () => {
     );
   };
 
-  const renderCompletionModal = () => {
-    if (!showCompletionModal) return null;
-    
-    return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center backdrop-blur-sm">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 transform transition-all max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center p-5 border-b border-gray-200">
-            <h3 className="text-xl font-semibold text-gray-800 flex items-center">
-              <FaClipboardCheck className="text-green-500 mr-2" /> Hoàn thành lịch hẹn
-            </h3>
-            <button 
-              className="text-gray-400 hover:text-gray-500 focus:outline-none transition-colors"
-              onClick={() => setShowCompletionModal(false)}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          <div className="p-5 space-y-4">
-            <p className="text-gray-600 mb-3">
-              Bệnh nhân: <span className="font-medium">{appointment?.patientId?.fullName}</span>
-              <span className="mx-2">•</span>
-              Ngày khám: <span className="font-medium">{new Date(appointment?.appointmentDate).toLocaleDateString('vi-VN')}</span>
-            </p>
-            
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-gray-700">Chẩn đoán</label>
-              <textarea
-                value={completionData.diagnosis}
-                onChange={(e) => setCompletionData({...completionData, diagnosis: e.target.value})}
-                placeholder="Nhập chẩn đoán..."
-                rows={2}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-              />
-            </div>
-            
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-gray-700">Phương pháp điều trị</label>
-              <textarea
-                value={completionData.treatment}
-                onChange={(e) => setCompletionData({...completionData, treatment: e.target.value})}
-                placeholder="Nhập phương pháp điều trị..."
-                rows={2}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-              />
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <label className="block text-sm font-medium text-gray-700">Đơn thuốc</label>
-                <button 
-                  onClick={addMedication}
-                  className="px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 text-sm flex items-center"
-                >
-                  <FaPlus className="mr-1" /> Thêm thuốc
-                </button>
-              </div>
-              
-              {completionData.prescription.length === 0 ? (
-                <p className="text-sm text-gray-500 italic">Chưa có thuốc nào được kê</p>
-              ) : (
-                <div className="space-y-3">
-                  {completionData.prescription.map((med, index) => (
-                    <div key={index} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
-                      <div className="flex justify-between mb-2">
-                        <h4 className="font-medium text-gray-700">Thuốc #{index + 1}</h4>
-                        <button 
-                          onClick={() => removeMedication(index)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <FaTimes />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Tên thuốc</label>
-                          <input
-                            type="text"
-                            value={med.medicine}
-                            onChange={(e) => updateMedication(index, 'medicine', e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded"
-                            placeholder="Tên thuốc"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Liều lượng</label>
-                          <input
-                            type="text"
-                            value={med.dosage}
-                            onChange={(e) => updateMedication(index, 'dosage', e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded"
-                            placeholder="Liều lượng"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Tần suất</label>
-                          <input
-                            type="text"
-                            value={med.frequency}
-                            onChange={(e) => updateMedication(index, 'frequency', e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded"
-                            placeholder="Vd: 3 lần/ngày"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Thời gian</label>
-                          <input
-                            type="text"
-                            value={med.duration}
-                            onChange={(e) => updateMedication(index, 'duration', e.target.value)}
-                            className="w-full p-2 border border-gray-300 rounded"
-                            placeholder="Vd: 7 ngày"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-gray-700">Ghi chú</label>
-              <textarea
-                value={completionData.notes}
-                onChange={(e) => setCompletionData({...completionData, notes: e.target.value})}
-                placeholder="Nhập ghi chú bổ sung..."
-                rows={2}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-              />
-            </div>
-          </div>
-          
-          <div className="flex justify-end space-x-3 p-5 border-t border-gray-200">
-            <button 
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-              onClick={() => setShowCompletionModal(false)}
-            >
-              Hủy
-            </button>
-            <button 
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-              onClick={handleCompleteAppointment}
-              disabled={!completionData.diagnosis || isUpdating}
-            >
-              {isUpdating ? 'Đang xử lý...' : 'Hoàn thành và lưu hồ sơ'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   if (loading) {
     return (
@@ -477,7 +345,6 @@ const AppointmentDetail = () => {
     <div className="max-w-5xl mx-auto">
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} />
       {renderRejectionModal()}
-      {renderCompletionModal()}
       
       {/* Header */}
       <div className="bg-white rounded-xl shadow-sm mb-6 overflow-hidden">
@@ -512,6 +379,27 @@ const AppointmentDetail = () => {
         {/* Actions */}
         <div className="px-4 sm:px-6 py-4 bg-gray-50 flex flex-wrap gap-3 justify-between border-b border-gray-100">
           <div className="flex flex-wrap gap-2 sm:gap-3">
+            {/* Chat Button - Show for pending, rescheduled, confirmed, or completed appointments */}
+            {(appointment.status === 'pending' || appointment.status === 'rescheduled' || appointment.status === 'confirmed' || appointment.status === 'completed') && (
+              <>
+                <button
+                  className="inline-flex items-center px-3 sm:px-4 py-2 rounded-lg bg-green-100 text-green-800 hover:bg-green-200 transition-all text-sm font-medium"
+                  onClick={handleChatWithPatient}
+                >
+                  <FaComments className="mr-1.5" />
+                  <span className="hidden sm:inline">Chat với bệnh nhân</span>
+                  <span className="sm:hidden">Chat</span>
+                </button>
+                <button
+                  onClick={handleShareToChat}
+                  className="inline-flex items-center px-3 sm:px-4 py-2 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 transition-all text-sm font-medium"
+                >
+                  <FaShare className="mr-1.5" />
+                  <span className="hidden sm:inline">Chia sẻ vào chat</span>
+                  <span className="sm:hidden">Chia sẻ</span>
+                </button>
+              </>
+            )}
             {/* Video Call Button for confirmed appointments */}
             {appointment.status === 'confirmed' && (
               <VideoCallButton 
@@ -521,7 +409,7 @@ const AppointmentDetail = () => {
               />
             )}
             
-            {appointment.status === 'pending' && (
+            {(appointment.status === 'pending' || appointment.status === 'rescheduled') && (
               <>
                 <button 
                   className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
@@ -540,26 +428,28 @@ const AppointmentDetail = () => {
               </>
             )}
             
-            {appointment.status === 'confirmed' && (
-              <button 
-                className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
-                onClick={() => handleStatusChange('completed')}
-                disabled={isUpdating}
-              >
-                <FaClipboardCheck className="mr-1.5" /> Hoàn thành lịch hẹn
-              </button>
+            {(appointment.status === 'confirmed' || appointment.status === 'hospitalized') && (
+              <>
+                <button 
+                  className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
+                  onClick={() => { setActiveTab('prescription'); setShowPrescriptionForm(true); }}
+                >
+                  <FaNotesMedical className="mr-1.5" /> Kê Đơn Thuốc
+                </button>
+                {appointment.status === 'confirmed' && (
+                  <button 
+                    className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-sm disabled:opacity-70 text-xs sm:text-sm"
+                    onClick={() => handleStatusChange('completed')}
+                    disabled={isUpdating}
+                  >
+                    <FaClipboardCheck className="mr-1.5" /> Hoàn Thành Khám
+                  </button>
+                )}
+              </>
             )}
           </div>
           
           <div className="flex gap-2 sm:gap-3">
-            {appointment.status === 'completed' && (
-              <button 
-                className="inline-flex items-center px-3 sm:px-4 py-2 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-indigo-700 transition-all shadow-sm text-xs sm:text-sm"
-                onClick={viewMedicalRecord}
-              >
-                <FaFileAlt className="mr-1.5" /> Hồ sơ y tế
-              </button>
-            )}
             <button 
               className="inline-flex items-center px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-all text-xs sm:text-sm"
               onClick={printAppointment}
@@ -744,7 +634,7 @@ const AppointmentDetail = () => {
       </div>
 
       {/* Patient Medical Information */}
-      <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden mb-6 sm:mb-8">
+      <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden mb-6">
         <div className="px-4 sm:px-6 py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white">
           <h2 className="text-base sm:text-lg font-semibold flex items-center">
             <FaNotesMedical className="mr-2" /> Thông tin bệnh lý
@@ -773,6 +663,169 @@ const AppointmentDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Tabs Section */}
+      {(appointment.status === 'confirmed' || appointment.status === 'completed' || appointment.status === 'hospitalized' || appointment.status === 'pending_payment') && (
+        <div className="bg-white rounded-xl shadow-md overflow-hidden mb-6 sm:mb-8">
+          {/* Tab Headers */}
+          <div className="flex border-b overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('prescription')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === 'prescription'
+                  ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
+                  : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+              }`}
+            >
+              <FaNotesMedical className="inline mr-2" />
+              Đơn Thuốc
+            </button>
+            <button
+              onClick={() => setActiveTab('hospitalization')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === 'hospitalization'
+                  ? 'border-b-2 border-purple-600 text-purple-600 bg-purple-50'
+                  : 'text-gray-600 hover:text-purple-600 hover:bg-gray-50'
+              }`}
+            >
+              <FaRegHospital className="inline mr-2" />
+              Nằm Viện
+            </button>
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === 'billing'
+                  ? 'border-b-2 border-green-600 text-green-600 bg-green-50'
+                  : 'text-gray-600 hover:text-green-600 hover:bg-gray-50'
+              }`}
+            >
+              <FaFileMedical className="inline mr-2" />
+              Thanh Toán
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {activeTab === 'prescription' && (
+              <div>
+                {showPrescriptionForm ? (
+                  <PrescriptionManager
+                    appointmentId={appointment._id}
+                    patientId={appointment.patientId?._id}
+                    onPrescriptionCreated={() => {
+                      setShowPrescriptionForm(false);
+                      toast.success('Đơn thuốc đã được tạo thành công');
+                      fetchAppointmentDetail();
+                    }}
+                  />
+                ) : (
+                  <>
+                    {Array.isArray(appointment.prescriptions) && appointment.prescriptions.length > 0 ? (
+                      <div className="space-y-3">
+                        {appointment.prescriptions
+                          .sort((a, b) => (a.prescriptionOrder || 1) - (b.prescriptionOrder || 1))
+                          .map((p) => (
+                          <div key={p._id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="flex items-center gap-2">
+                                <div className="font-semibold">
+                                  Đơn thuốc {p.prescriptionOrder ? `đợt ${p.prescriptionOrder}` : ''}
+                                </div>
+                                {p.isHospitalization && (
+                                  <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-semibold">
+                                    Nội trú
+                                  </span>
+                                )}
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  p.status === 'dispensed' ? 'bg-green-100 text-green-800' :
+                                  p.status === 'verified' ? 'bg-emerald-100 text-emerald-800' :
+                                  p.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {p.status === 'pending' ? 'Chờ xử lý' :
+                                   p.status === 'approved' ? 'Đã kê đơn' :
+                                   p.status === 'verified' ? 'Đã phê duyệt' :
+                                   p.status === 'dispensed' ? 'Đã cấp thuốc' :
+                                   p.status === 'completed' ? 'Hoàn thành' : p.status}
+                                </span>
+                              </div>
+                              <div className="text-sm text-gray-500">{new Date(p.createdAt).toLocaleString('vi-VN')}</div>
+                            </div>
+                            {p.diagnosis && (
+                              <div className="text-sm text-gray-600 mb-2 pb-2 border-b">
+                                <span className="font-medium">Chẩn đoán:</span> <span className="text-gray-800">{p.diagnosis}</span>
+                              </div>
+                            )}
+                            <div className="text-sm mb-2">
+                              <div className="font-medium text-gray-700 mb-1">Danh sách thuốc:</div>
+                              <ul className="list-disc pl-5 space-y-1">
+                                {p.medications?.map((m, i) => (
+                                  <li key={i} className="text-gray-600">
+                                    {m.medicationId?.name || m.medicationName} — SL: {m.quantity} {m.medicationId?.unitTypeDisplay || ''}, Liều: {m.dosage}, Cách dùng: {m.usage}
+                                    {m.totalPrice > 0 && (
+                                      <span className="ml-2 text-gray-500">
+                                        ({new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(m.totalPrice)})
+                                      </span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                            {p.totalAmount > 0 && (
+                              <div className="text-sm font-semibold text-gray-800 mt-2 pt-2 border-t">
+                                Tổng tiền: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(p.totalAmount)}
+                              </div>
+                            )}
+                            {p.notes && (
+                              <div className="text-sm text-gray-600 mt-2 pt-2 border-t">
+                                <span className="font-medium">Ghi chú:</span> {p.notes}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <FaNotesMedical className="mx-auto text-5xl text-gray-300 mb-4" />
+                        <p className="text-gray-500 mb-4">Chưa có đơn thuốc nào được kê</p>
+                        {(appointment.status === 'confirmed' || appointment.status === 'hospitalized') && (
+                          <button
+                            onClick={() => setShowPrescriptionForm(true)}
+                            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          >
+                            <FaPlus className="inline mr-2" />
+                            Kê Đơn Thuốc Mới
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'hospitalization' && (
+              <HospitalizationManager
+                appointmentId={appointment._id}
+                patientId={appointment.patientId?._id}
+                onUpdate={() => {
+                  fetchAppointmentDetail();
+                  toast.success('Cập nhật thông tin nằm viện thành công');
+                }}
+              />
+            )}
+
+            {activeTab === 'billing' && (
+              <DoctorBilling
+                appointmentId={appointment._id}
+                onPaymentComplete={() => {
+                  fetchAppointmentDetail();
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

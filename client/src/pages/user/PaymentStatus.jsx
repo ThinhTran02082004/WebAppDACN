@@ -14,11 +14,12 @@ const PaymentStatus = () => {
   useEffect(() => {
     const paymentId = searchParams.get('paymentId');
     const PayerID = searchParams.get('PayerID');
+    const orderId = searchParams.get('token');
     const path = window.location.pathname;
     
     if (path.includes('/paypal/success') && paymentId && PayerID) {
       // Process successful payment
-      executePayPalPayment(paymentId, PayerID);
+      executePayPalPayment(paymentId, PayerID, orderId);
     } else if (path.includes('/paypal/cancel')) {
       // Handle cancelled payment
       setStatus('failed');
@@ -29,12 +30,13 @@ const PaymentStatus = () => {
     }
   }, [searchParams, navigate]);
   
-  const executePayPalPayment = async (paymentId, PayerID) => {
+  const executePayPalPayment = async (paymentId, PayerID, orderId) => {
     try {
-      const response = await api.post('/payments/paypal/execute', { 
-        paymentId, 
-        PayerID 
-      });
+      const payload = { paymentId, PayerID };
+      if (orderId) {
+        payload.orderId = orderId;
+      }
+      const response = await api.post('/payments/paypal/execute', payload);
       
       if (response.data.success) {
         setStatus('success');

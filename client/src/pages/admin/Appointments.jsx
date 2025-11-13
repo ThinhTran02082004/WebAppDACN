@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaEdit, FaSearch, FaFilter, FaDownload, FaCalendarAlt, FaUserMd, FaUser, FaHospital, FaEye } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
+import { FaEdit, FaSearch, FaFilter, FaDownload, FaCalendarAlt, FaUserMd, FaUser, FaHospital } from 'react-icons/fa';
 import api from '../../utils/api';
 import { toast } from 'react-toastify';
 
@@ -31,6 +30,7 @@ const Appointments = () => {
     notes: ''
   });
   const [loadingAction, setLoadingAction] = useState(false);
+  const [completingId, setCompletingId] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -289,6 +289,42 @@ const Appointments = () => {
     }
   };
 
+  const handleCompleteAppointment = async (appointmentId) => {
+    if (completingId) return;
+    
+    setCompletingId(appointmentId);
+    try {
+      const res = await api.put(`/appointments/${appointmentId}/complete`);
+      
+      if (res.data.success) {
+        const completionDate = res.data.data?.appointment?.completionDate;
+        setAppointments(prevAppointments =>
+          prevAppointments.map(appt =>
+            appt._id === appointmentId
+              ? {
+                  ...appt,
+                  status: 'completed',
+                  completionDate: completionDate || appt.completionDate || new Date().toISOString()
+                }
+              : appt
+          )
+        );
+        toast.success(res.data.message || 'Hoan thanh lich hen thanh cong');
+      } else {
+        toast.error(res.data.message || 'Khong the hoan thanh lich hen');
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Loi khi hoan thanh lich hen';
+      toast.error(errorMessage);
+      if (error.response?.data?.unpaidParts?.length) {
+        toast.info(`Can thanh toan: ${error.response.data.unpaidParts.join(', ')}`);
+      }
+      console.error('Error completing appointment:', error.response?.data || error.message);
+    } finally {
+      setCompletingId(null);
+    }
+  };
+
   return (
     <div className="w-full">
       <div className="mb-6">
@@ -325,6 +361,8 @@ const Appointments = () => {
                   <option value="all">Tất cả</option>
                   <option value="pending">Chờ xác nhận</option>
                   <option value="confirmed">Đã xác nhận</option>
+                  <option value="hospitalized">Đang nằm viện</option>
+                  <option value="pending_payment">Chờ thanh toán</option>
                   <option value="completed">Đã hoàn thành</option>
                   <option value="cancelled">Đã hủy</option>
                   <option value="rescheduled">Đổi lịch</option>
@@ -440,6 +478,8 @@ const Appointments = () => {
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                           ${appointment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : ''}
                           ${appointment.status === 'confirmed' ? 'bg-blue-100 text-blue-800' : ''}
+                          ${appointment.status === 'hospitalized' ? 'bg-indigo-100 text-indigo-800' : ''}
+                          ${appointment.status === 'pending_payment' ? 'bg-orange-100 text-orange-800' : ''}
                           ${appointment.status === 'completed' ? 'bg-green-100 text-green-800' : ''}
                           ${appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' : ''}
                           ${appointment.status === 'rescheduled' ? 'bg-purple-100 text-purple-800' : ''}
@@ -448,6 +488,8 @@ const Appointments = () => {
                         `}>
                           {appointment.status === 'pending' && 'Chờ xác nhận'}
                           {appointment.status === 'confirmed' && 'Đã xác nhận'}
+                          {appointment.status === 'hospitalized' && 'Đang nằm viện'}
+                          {appointment.status === 'pending_payment' && 'Chờ thanh toán'}
                           {appointment.status === 'completed' && 'Đã hoàn thành'}
                           {appointment.status === 'cancelled' && 'Đã hủy'}
                           {appointment.status === 'rescheduled' && 'Đổi lịch'}
@@ -457,22 +499,13 @@ const Appointments = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(appointment.createdAt)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-3">
-                          <button
-                            className="text-green-600 hover:text-green-900"
-                            onClick={() => navigate(`/admin/appointments/${appointment._id}`)}
-                            title="Xem chi tiết"
-                          >
-                            <FaEye />
-                          </button>
-                          <button
-                            className="text-blue-600 hover:text-blue-900"
-                            onClick={() => openModal('edit', appointment)}
-                            title="Cập nhật trạng thái"
-                          >
-                            <FaEdit />
-                          </button>
-                        </div>
+                        <button
+                          className="text-blue-600 hover:text-blue-900"
+                          onClick={() => openModal('edit', appointment)}
+                          title="Cập nhật trạng thái"
+                        >
+                          <FaEdit />
+                        </button>
                       </td>
                     </tr>
                   ))

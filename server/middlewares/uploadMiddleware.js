@@ -6,24 +6,30 @@ const memoryStorage = multer.memoryStorage();
 
 // Kiểm tra loại file
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|gif|webp|svg|jfif|bmp|tiff|tif|ico|heic|heif|avif|raw|psd|ai|eps/;
-  // Kiểm tra mime type
-  const mimeOk = allowedTypes.test(file.mimetype);
-  // Kiểm tra extension
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const imageTypes = /jpeg|jpg|png|gif|webp|svg|jfif|bmp|tiff|tif|ico|heic|heif|avif|raw|psd|ai|eps/;
+  const videoTypes = /mp4|avi|mov|wmv|flv|webm|mkv|m4v|mpeg|mpg|3gp/;
   
-  if (mimeOk && extname) {
+  // Kiểm tra mime type
+  const isImage = imageTypes.test(file.mimetype) || file.mimetype.startsWith('image/');
+  const isVideo = videoTypes.test(file.mimetype) || file.mimetype.startsWith('video/');
+  
+  // Kiểm tra extension
+  const extname = path.extname(file.originalname).toLowerCase();
+  const isImageExt = imageTypes.test(extname);
+  const isVideoExt = videoTypes.test(extname);
+  
+  if ((isImage && isImageExt) || (isVideo && isVideoExt)) {
     return cb(null, true);
   }
   
-  cb(new Error('Định dạng file không được hỗ trợ. Hệ thống chấp nhận hầu hết các định dạng ảnh phổ biến như JPEG, PNG, GIF, WEBP, SVG, BMP, TIFF và các định dạng chuyên dụng khác.'));
+  cb(new Error('Định dạng file không được hỗ trợ. Hệ thống chấp nhận file ảnh (JPEG, PNG, GIF, WEBP...) và video (MP4, AVI, MOV, WEBM...).'));
 };
 
 // Cấu hình upload với memory storage
 const upload = multer({
   storage: memoryStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // Giới hạn 10MB
+    fileSize: 50 * 1024 * 1024 // Giới hạn 50MB
   },
   fileFilter: fileFilter
 });

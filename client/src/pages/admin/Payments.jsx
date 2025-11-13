@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { FaSearch, FaFilter, FaDownload, FaUser, FaCalendarAlt, FaMoneyBillWave, FaCreditCard, FaUserMd, FaTimes, FaInfo, FaEdit } from 'react-icons/fa';
+import { FaSearch, FaFilter, FaDownload, FaUser, FaCalendarAlt, FaMoneyBillWave, FaCreditCard, FaUserMd, FaTimes, FaInfo, FaEdit, FaEye } from 'react-icons/fa';
 import api from '../../utils/api';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom'; // Added for navigation
 
 
 const Payments = () => {
@@ -33,6 +34,8 @@ const Payments = () => {
   const [editPaymentNotes, setEditPaymentNotes] = useState('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
+  const navigate = useNavigate(); // Initialize useNavigate
+
   // Format currency to VND
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';
@@ -61,8 +64,8 @@ const Payments = () => {
       // Format date parameter if needed
       const dateParam = filter.date ? new Date(filter.date).toISOString().split('T')[0] : '';
       
-      // Build API URL with proper parameters
-      const apiUrl = `/admin/payments?page=${pagination.currentPage}&limit=${pagination.pageSize}&status=${filter.status}&method=${filter.method}&date=${dateParam}&period=${filter.period}&search=${searchTerm}`;
+      // Use the new billing payment history endpoint
+      const apiUrl = `/billing/payment-history?page=${pagination.currentPage}&limit=${pagination.pageSize}&status=${filter.status}&method=${filter.method}&date=${dateParam}&search=${searchTerm}`;
       
       console.log('Fetching payments with URL:', apiUrl);
       
@@ -70,14 +73,14 @@ const Payments = () => {
       console.log('Payment response data:', res.data);
       
       if (res.data.success) {
-        // The correct format from payment controller has payments directly in res.data.payments
-        if (res.data.payments && Array.isArray(res.data.payments)) {
-          console.log(`Found ${res.data.payments.length} payments in res.data.payments array`);
-          setPayments(res.data.payments);
+        // The billing controller returns data in res.data.data
+        if (res.data.data && Array.isArray(res.data.data)) {
+          console.log(`Found ${res.data.data.length} payments in res.data.data array`);
+          setPayments(res.data.data);
           setPagination({
             ...pagination,
-            totalPages: Math.ceil(res.data.total / pagination.pageSize) || 1,
-            currentPage: res.data.currentPage || 1
+            totalPages: res.data.pagination?.pages || Math.ceil(res.data.pagination?.total / pagination.pageSize) || 1,
+            currentPage: parseInt(res.data.pagination?.page) || 1
           });
         }
         // If no data or empty array
@@ -86,8 +89,8 @@ const Payments = () => {
           setPayments([]);
           setPagination({
             ...pagination,
-            totalPages: res.data.totalPages || 1,
-            currentPage: res.data.currentPage || 1
+            totalPages: res.data.pagination?.pages || 1,
+            currentPage: parseInt(res.data.pagination?.page) || 1
           });
         }
       } else {
@@ -204,7 +207,7 @@ const Payments = () => {
 
   const exportData = () => {
     // Xuất dữ liệu dưới dạng CSV
-    const fields = ['_id', 'userId.fullName', 'userId.avatarUrl', 'appointmentId.bookingCode', 'amount', 'paymentMethod', 'paymentStatus', 'createdAt'];
+    const fields = ['_id', 'paymentNumber', 'patientId.fullName', 'patientId.avatarUrl', 'billType', 'appointmentId.bookingCode', 'amount', 'paymentMethod', 'paymentStatus', 'createdAt'];
     
     const csvContent = [
       // Header
@@ -230,6 +233,25 @@ const Payments = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Cải thiện hàm handleViewAppointment để xử lý cả trường hợp populated và không populated
+  const handleViewAppointment = (appointmentId) => {
+    if (!appointmentId) {
+      toast.warning('Không tìm thấy thông tin lịch hẹn');
+      return;
+    }
+    
+    // Xử lý cả trường hợp appointmentId là object có _id hoặc là string
+    const appointmentIdStr = appointmentId._id 
+      ? appointmentId._id.toString() 
+      : (typeof appointmentId === 'string' ? appointmentId : appointmentId.toString());
+    
+    if (appointmentIdStr) {
+      navigate(`/admin/appointments/${appointmentIdStr}`);
+    } else {
+      toast.warning('Không tìm thấy thông tin lịch hẹn');
+    }
   };
 
   return (
@@ -381,6 +403,7 @@ const Payments = () => {
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã thanh toán</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Người dùng</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bác sĩ</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Loại</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã đặt lịch</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Số tiền</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phương thức</th>
@@ -394,18 +417,18 @@ const Payments = () => {
                 payments.map((payment) => (
                   <tr key={payment._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{payment.paymentId || payment._id.substring(0, 8)}</div>
+                      <div className="text-sm text-gray-900">{payment.paymentNumber || payment._id.substring(0, 8)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                          {payment.userId && (payment.userId.avatarUrl || payment.userId.avatar?.secureUrl || payment.userId.avatar?.url) ? (
+                          {payment.patientId && (payment.patientId.avatarUrl || payment.patientId.avatar?.secureUrl || payment.patientId.avatar?.url) ? (
                             <img 
-                              src={payment.userId.avatarUrl || payment.userId.avatar?.secureUrl || payment.userId.avatar?.url} 
-                              alt={payment.userId.fullName || 'User'}
+                              src={payment.patientId.avatarUrl || payment.patientId.avatar?.secureUrl || payment.patientId.avatar?.url} 
+                              alt={payment.patientId.fullName || 'User'}
                               className="h-full w-full object-cover"
                               onError={(e) => {
-                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(payment.userId.fullName || 'User')}&background=1AC0FF&color=fff`;
+                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(payment.patientId.fullName || 'User')}&background=1AC0FF&color=fff`;
                               }}
                             />
                           ) : (
@@ -414,7 +437,7 @@ const Payments = () => {
                         </div>
                         <div className="ml-3">
                           <div className="text-sm font-medium text-gray-900">
-                            {payment.userId && payment.userId.fullName ? payment.userId.fullName : 'N/A'}
+                            {payment.patientId && payment.patientId.fullName ? payment.patientId.fullName : 'N/A'}
                           </div>
                         </div>
                       </div>
@@ -422,13 +445,13 @@ const Payments = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
-                          {payment.doctorId && payment.doctorId.user && (payment.doctorId.user.avatarUrl || payment.doctorId.user.avatar?.secureUrl || payment.doctorId.user.avatar?.url) ? (
+                          {payment.appointmentId?.doctorId?.user && (payment.appointmentId.doctorId.user.avatarUrl || payment.appointmentId.doctorId.user.avatar?.secureUrl || payment.appointmentId.doctorId.user.avatar?.url) ? (
                             <img 
-                              src={payment.doctorId.user.avatarUrl || payment.doctorId.user.avatar?.secureUrl || payment.doctorId.user.avatar?.url} 
-                              alt={payment.doctorId.user.fullName || 'Doctor'}
+                              src={payment.appointmentId.doctorId.user.avatarUrl || payment.appointmentId.doctorId.user.avatar?.secureUrl || payment.appointmentId.doctorId.user.avatar?.url} 
+                              alt={payment.appointmentId.doctorId.user.fullName || 'Doctor'}
                               className="h-full w-full object-cover"
                               onError={(e) => {
-                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(payment.doctorId.user.fullName || 'Doctor')}&background=2563EB&color=fff`;
+                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(payment.appointmentId.doctorId.user.fullName || 'Doctor')}&background=2563EB&color=fff`;
                               }}
                             />
                           ) : (
@@ -437,14 +460,44 @@ const Payments = () => {
                         </div>
                         <div className="ml-3">
                           <div className="text-sm text-gray-900">
-                            {payment.doctorId && payment.doctorId.user ? payment.doctorId.user.fullName : 'N/A'}
+                            {payment.appointmentId?.doctorId?.user ? payment.appointmentId.doctorId.user.fullName : 'N/A'}
                           </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        payment.billType === 'consultation' ? 'bg-blue-100 text-blue-800' :
+                        payment.billType === 'medication' ? 'bg-green-100 text-green-800' :
+                        payment.billType === 'hospitalization' ? 'bg-purple-100 text-purple-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {payment.billType === 'consultation' ? 'Phí khám' :
+                         payment.billType === 'medication' ? 'Tiền thuốc' :
+                         payment.billType === 'hospitalization' ? 'Phí nội trú' :
+                         payment.billType || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {payment.appointmentId && payment.appointmentId.bookingCode ? payment.appointmentId.bookingCode : 'N/A'}
+                        {payment.appointmentId && (payment.appointmentId._id || payment.appointmentId) ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                const appointmentId = payment.appointmentId._id || payment.appointmentId;
+                                handleViewAppointment(appointmentId);
+                              }}
+                              className="text-blue-600 hover:text-blue-900 hover:underline font-medium flex items-center gap-1"
+                              title="Click để xem chi tiết lịch hẹn"
+                            >
+                              <FaCalendarAlt className="text-sm" />
+                              {payment.appointmentId.bookingCode || 
+                               (payment.appointmentId._id ? payment.appointmentId._id.toString().substring(0, 8) : 'N/A')}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500">N/A</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -477,17 +530,29 @@ const Payments = () => {
                       <div className="text-sm text-gray-900">{formatDate(payment.createdAt)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex space-x-2">
-                      <button 
-                        onClick={() => openModal(payment)}
-                        className="text-blue-600 hover:text-blue-900 p-1"
-                          title="Chi tiết"
-                      >
-                        <FaInfo className="h-5 w-5" />
-                      </button>
+                      <div className="flex space-x-2 justify-end">
+                        <button 
+                          onClick={() => openModal(payment)}
+                          className="text-blue-600 hover:text-blue-900 p-1.5 rounded hover:bg-blue-50 transition-colors"
+                          title="Chi tiết thanh toán"
+                        >
+                          <FaInfo className="h-5 w-5" />
+                        </button>
+                        {payment.appointmentId && (payment.appointmentId._id || payment.appointmentId) && (
+                          <button 
+                            onClick={() => {
+                              const appointmentId = payment.appointmentId._id || payment.appointmentId;
+                              handleViewAppointment(appointmentId);
+                            }}
+                            className="text-indigo-600 hover:text-indigo-900 p-1.5 rounded hover:bg-indigo-50 transition-colors"
+                            title="Xem chi tiết lịch hẹn"
+                          >
+                            <FaEye className="h-5 w-5" />
+                          </button>
+                        )}
                         <button 
                           onClick={() => openModal(payment, 'edit')}
-                          className="text-green-600 hover:text-green-900 p-1"
+                          className="text-green-600 hover:text-green-900 p-1.5 rounded hover:bg-green-50 transition-colors"
                           title="Sửa trạng thái"
                         >
                           <FaEdit className="h-5 w-5" />
@@ -569,36 +634,116 @@ const Payments = () => {
               <div className="space-y-4">
                 <div className="flex justify-between items-center pb-3 border-b border-gray-200">
                   <span className="text-gray-600">Mã thanh toán:</span>
-                  <span className="font-medium">{selectedPayment.paymentId || selectedPayment._id.substring(0, 8)}</span>
+                  <span className="font-medium">{selectedPayment.paymentNumber || selectedPayment._id.substring(0, 8)}</span>
                 </div>
                 
                 <div className="flex justify-between items-center pb-3 border-b border-gray-200">
                   <span className="text-gray-600">Người dùng:</span>
                   <span className="font-medium">
-                    {selectedPayment.userId?.fullName || 'N/A'}
+                    {selectedPayment.patientId?.fullName || 'N/A'}
                   </span>
                 </div>
                 
                 <div className="flex justify-between items-center pb-3 border-b border-gray-200">
                   <span className="text-gray-600">Bác sĩ:</span>
                   <span className="font-medium">
-                    {selectedPayment.doctorId?.user?.fullName || 'N/A'}
+                    {selectedPayment.appointmentId?.doctorId?.user?.fullName || 'N/A'}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                  <span className="text-gray-600">Loại thanh toán:</span>
+                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    selectedPayment.billType === 'consultation' ? 'bg-blue-100 text-blue-800' :
+                    selectedPayment.billType === 'medication' ? 'bg-green-100 text-green-800' :
+                    selectedPayment.billType === 'hospitalization' ? 'bg-purple-100 text-purple-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {selectedPayment.billType === 'consultation' ? 'Phí khám' :
+                     selectedPayment.billType === 'medication' ? 'Tiền thuốc' :
+                     selectedPayment.billType === 'hospitalization' ? 'Phí nội trú' :
+                     selectedPayment.billType || 'N/A'}
                   </span>
                 </div>
                 
                 <div className="flex justify-between items-center pb-3 border-b border-gray-200">
                   <span className="text-gray-600">Mã đặt lịch:</span>
-                  <span className="font-medium">
-                    {selectedPayment.appointmentId?.bookingCode || 'N/A'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium flex items-center gap-1">
+                      <FaCalendarAlt className="text-sm text-gray-500" />
+                      {selectedPayment.appointmentId?.bookingCode || 'N/A'}
+                    </span>
+                    {selectedPayment.appointmentId && (selectedPayment.appointmentId._id || selectedPayment.appointmentId) && (
+                      <button
+                        onClick={() => {
+                          const appointmentId = selectedPayment.appointmentId._id || selectedPayment.appointmentId;
+                          handleViewAppointment(appointmentId);
+                        }}
+                        className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1.5 text-sm font-medium"
+                        title="Xem chi tiết lịch hẹn"
+                      >
+                        <FaEye className="text-xs" />
+                        Xem lịch hẹn
+                      </button>
+                    )}
+                  </div>
                 </div>
                 
-                <div className="flex justify-between items-center pb-3 border-b border-gray-200">
-                  <span className="text-gray-600">Ngày hẹn:</span>
-                  <span className="font-medium">
-                    {selectedPayment.appointmentId?.date ? formatDate(selectedPayment.appointmentId.date) : 'N/A'}
-                  </span>
-                </div>
+                {selectedPayment.appointmentId && (
+                  <>
+                    <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                      <span className="text-gray-600">Ngày hẹn:</span>
+                      <span className="font-medium">
+                        {selectedPayment.appointmentId.appointmentDate 
+                          ? new Date(selectedPayment.appointmentId.appointmentDate).toLocaleDateString('vi-VN', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })
+                          : selectedPayment.appointmentId.date 
+                            ? formatDate(selectedPayment.appointmentId.date) 
+                            : 'N/A'}
+                      </span>
+                    </div>
+                    {selectedPayment.appointmentId.timeSlot && (
+                      <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                        <span className="text-gray-600">Giờ hẹn:</span>
+                        <span className="font-medium">
+                          {selectedPayment.appointmentId.timeSlot.startTime} - {selectedPayment.appointmentId.timeSlot.endTime}
+                        </span>
+                      </div>
+                    )}
+                    {selectedPayment.appointmentId.hospitalId && (
+                      <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                        <span className="text-gray-600">Chi nhánh:</span>
+                        <span className="font-medium">
+                          {typeof selectedPayment.appointmentId.hospitalId === 'object' 
+                            ? selectedPayment.appointmentId.hospitalId.name 
+                            : 'N/A'}
+                        </span>
+                      </div>
+                    )}
+                    {selectedPayment.appointmentId.status && (
+                      <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                        <span className="text-gray-600">Trạng thái lịch hẹn:</span>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          selectedPayment.appointmentId.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          selectedPayment.appointmentId.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                          selectedPayment.appointmentId.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          selectedPayment.appointmentId.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {selectedPayment.appointmentId.status === 'completed' ? 'Hoàn thành' :
+                           selectedPayment.appointmentId.status === 'confirmed' ? 'Đã xác nhận' :
+                           selectedPayment.appointmentId.status === 'pending' ? 'Chờ xác nhận' :
+                           selectedPayment.appointmentId.status === 'cancelled' ? 'Đã hủy' :
+                           selectedPayment.appointmentId.status === 'rejected' ? 'Đã từ chối' :
+                           selectedPayment.appointmentId.status}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
                 
                 <div className="flex justify-between items-center pb-3 border-b border-gray-200">
                   <span className="text-gray-600">Số tiền:</span>
@@ -679,7 +824,7 @@ const Payments = () => {
                     Mã thanh toán
                   </label>
                   <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50">
-                    {selectedPayment.paymentId || selectedPayment._id.substring(0, 8)}
+                    {selectedPayment.paymentNumber || selectedPayment._id.substring(0, 8)}
                   </div>
                 </div>
                 

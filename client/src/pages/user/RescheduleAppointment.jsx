@@ -43,7 +43,7 @@ const RescheduleAppointment = () => {
   // Initialize socket connection
   useEffect(() => {
     if (isAuthenticated && user) {
-      const apiBaseUrl = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+      const apiBaseUrl = import.meta.env?.VITE_API_URL ;
       // Extract base server URL (without /api)
       const socketUrl = apiBaseUrl.replace(/\/api$/, '');
 

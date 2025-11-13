@@ -6,8 +6,20 @@ const asyncHandler = require('express-async-handler');
 // GET /api/user/profile – Lấy thông tin cá nhân
 exports.getUserProfile = async (req, res) => {
   try {
-    // Lấy thông tin người dùng hiện tại, bỏ qua mật khẩu
-    const user = await User.findById(req.user.id).select('-passwordHash');
+    // Populate hospitalId for pharmacist
+    const userRole = req.user.roleType || req.user.role;
+    const populateOptions = (userRole === 'pharmacist' || userRole === 'doctor') ? 'hospitalId' : '';
+    
+    // Lấy thông tin người dùng hiện tại, bỏ qua mật khẩu và populate hospitalId nếu cần
+    let user;
+    if (populateOptions) {
+      user = await User.findById(req.user.id)
+        .select('-passwordHash -verificationToken -verificationTokenExpires -resetPasswordToken -resetPasswordExpires -otpCode -otpExpires')
+        .populate(populateOptions, 'name address');
+    } else {
+      user = await User.findById(req.user.id)
+        .select('-passwordHash -verificationToken -verificationTokenExpires -resetPasswordToken -resetPasswordExpires -otpCode -otpExpires');
+    }
     
     if (!user) {
       return res.status(404).json({
@@ -265,6 +277,7 @@ exports.getAllUsers = async (req, res) => {
     // Thực hiện query
     const users = await User.find(query)
       .select('-passwordHash -verificationToken -verificationTokenExpires -resetPasswordToken -resetPasswordExpires -otpCode -otpExpires')
+      .populate('hospitalId', 'name address')
       .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit));
@@ -586,6 +599,88 @@ exports.unlockUserAccount = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Lỗi khi mở khóa tài khoản người dùng',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Create pharmacist account
+ * @route   POST /api/admin/pharmacists
+ * @access  Private (Admin)
+ */
+exports.createPharmacist = async (req, res) => {
+  try {
+    const { fullName, email, password, phoneNumber, hospitalId } = req.body;
+
+    // Validate required fields
+    if (!fullName || !email || !password || !hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng cung cấp đầy đủ thông tin (họ tên, email, mật khẩu và chi nhánh)'
+      });
+    }
+
+    // Validate hospitalId exists
+    const Hospital = require('../models/Hospital');
+    const hospital = await Hospital.findById(hospitalId);
+    if (!hospital) {
+      return res.status(400).json({
+        success: false,
+        message: 'Chi nhánh không hợp lệ'
+      });
+    }
+
+    // Check if email already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        field: 'email',
+        message: 'Email đã được sử dụng'
+      });
+    }
+
+    // Create pharmacist user
+    const pharmacist = await User.create({
+      fullName,
+      email,
+      passwordHash: password, // Will be hashed by middleware
+      phoneNumber,
+      roleType: 'pharmacist',
+      hospitalId,
+      isVerified: true // Admin created, so auto-verified
+    });
+
+    // Populate hospitalId for response
+    const populatedPharmacist = await User.findById(pharmacist._id)
+      .populate('hospitalId', 'name address')
+      .select('-passwordHash');
+
+    res.status(201).json({
+      success: true,
+      message: 'Tạo tài khoản dược sĩ thành công',
+      data: populatedPharmacist
+    });
+  } catch (error) {
+    console.error('Create pharmacist error:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = {};
+      for (let field in error.errors) {
+        validationErrors[field] = error.errors[field].message;
+      }
+      return res.status(400).json({
+        success: false,
+        errors: validationErrors,
+        message: 'Thông tin không hợp lệ'
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi tạo tài khoản dược sĩ',
       error: error.message
     });
   }
