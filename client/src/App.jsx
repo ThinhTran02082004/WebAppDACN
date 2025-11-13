@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -203,7 +202,7 @@ function AppContent() {
                 <Route path="/verify-email" element={<VerifyEmail />} />
                 <Route path="/otp-verification" element={<OtpVerification />} />
                 <Route path="/need-verification" element={<NeedVerification />} />
-               
+
                 <Route path="/auth/social-callback" element={<SocialCallback />} />
                 <Route path="/facebook-callback" element={<SocialCallback />} />
                 <Route path="/doctors" element={<Doctors />} />
@@ -217,12 +216,12 @@ function AppContent() {
                 <Route path="/services" element={<Services />} />
                 <Route path="/services/:serviceId" element={<ServiceDetail />} />
                 <Route path="/contact" element={<Contact />} />
-                
+
                 {/* Payment Status Routes */}
                 <Route path="/payment/paypal/success" element={<PaymentStatus />} />
                 <Route path="/payment/paypal/cancel" element={<PaymentStatus />} />
                 <Route path="/payment/result" element={<PaymentResult />} />
-                
+
                 {/* Redirect old routes to new auth page */}
                 <Route path="/login" element={
                   isAuthenticated ? <Navigate to="/" /> : <Auth />
@@ -230,7 +229,7 @@ function AppContent() {
                 <Route path="/register" element={
                   isAuthenticated ? <Navigate to="/" /> : <Auth />
                 } />
-                
+
                 {/* User Protected Routes */}
                 <Route element={<UserRoute />}>
                   <Route path="/profile" element={<Profile />} />
@@ -248,20 +247,20 @@ function AppContent() {
                   <Route path="/chat" element={<UserChat />} />
                   <Route path="/chat/:conversationId" element={<UserChat />} />
                 </Route>
-                
+
                 {/* New routes */}
                 <Route path="/set-social-password" element={<SetSocialPassword />} />
-                
+
                 {/* New facilities routes */}
                 <Route path="/facilities" element={<Facilities />} />
                 <Route path="/facilities/surgery" element={<FacilitySurgery />} />
-                
+
                 {/* News routes */}
                 <Route path="/news" element={<News />} />
                 <Route path="/news/:slug" element={<NewsDetail />} />
-                <Route path="/tin-tuc" element={<Navigate to="/news" />} /> 
+                <Route path="/tin-tuc" element={<Navigate to="/news" />} />
                 <Route path="/tin-tuc/:slug" element={<NewsDetail />} />
-                
+
                 {/* Catch All */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
@@ -271,10 +270,10 @@ function AppContent() {
           </>
         } />
       </Routes>
-      
+
       {/* Chat widget for regular users (not in admin or doctor portals) */}
       {showChatWidget && <ChatWidget currentUserId={user?.id} />}
-      
+
       {/* Video call notification for all authenticated users */}
       {isAuthenticated && <VideoCallNotification />}
     </div>
