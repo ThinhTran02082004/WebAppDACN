@@ -18,11 +18,8 @@ const VideoCallHistory = () => {
   const [selectedStatus, setSelectedStatus] = useState('ended');
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-<<<<<<< HEAD
-=======
   const [dateInput, setDateInput] = useState('');
   const [appliedDate, setAppliedDate] = useState('');
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
   const [pagination, setPagination] = useState({
     page: 1,
     pages: 1,
@@ -32,26 +29,11 @@ const VideoCallHistory = () => {
 
   useEffect(() => {
     fetchHistory();
-<<<<<<< HEAD
-  }, [selectedStatus, pagination.page]);
-=======
   }, [selectedStatus, pagination.page, appliedDate]);
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
 
   const fetchHistory = async () => {
     try {
       setLoading(true);
-<<<<<<< HEAD
-      let url = `/video-rooms/history?page=${pagination.page}&limit=${pagination.limit}`;
-      if (selectedStatus && selectedStatus !== 'all') {
-        url += `&status=${selectedStatus}`;
-      }
-      
-      const response = await api.get(url);
-      if (response.data.success) {
-        setHistory(response.data.data);
-        setPagination(response.data.pagination);
-=======
       const params = new URLSearchParams({
         page: pagination.page,
         limit: pagination.limit
@@ -71,7 +53,6 @@ const VideoCallHistory = () => {
           ...prev,
           ...response.data.pagination
         }));
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
       }
     } catch (error) {
       console.error('Error fetching history:', error);
@@ -94,8 +75,6 @@ const VideoCallHistory = () => {
     }
   };
 
-<<<<<<< HEAD
-=======
   const handleSearchByDate = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
     setAppliedDate(dateInput);
@@ -107,7 +86,6 @@ const VideoCallHistory = () => {
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
   const formatDuration = (minutes) => {
     if (!minutes) return 'N/A';
     const hours = Math.floor(minutes / 60);
@@ -133,8 +111,6 @@ const VideoCallHistory = () => {
     );
   };
 
-<<<<<<< HEAD
-=======
   const getRoomTitle = (room) => {
     if (room.appointmentId?.bookingCode) {
       return `Mã lịch hẹn: ${room.appointmentId.bookingCode}`;
@@ -153,7 +129,6 @@ const VideoCallHistory = () => {
     return 'Đang cập nhật bác sĩ';
   };
 
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="bg-white rounded-lg shadow-md">
@@ -179,26 +154,6 @@ const VideoCallHistory = () => {
 
         {/* Filters */}
         <div className="p-6 border-b border-gray-200 bg-gray-50">
-<<<<<<< HEAD
-          <div className="flex items-center space-x-4">
-            <label className="text-sm font-medium text-gray-700">Trạng thái:</label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => {
-                setSelectedStatus(e.target.value);
-                setPagination({ ...pagination, page: 1 });
-              }}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">Tất cả</option>
-              <option value="ended">Đã kết thúc</option>
-              <option value="active">Đang hoạt động</option>
-              <option value="cancelled">Đã hủy</option>
-            </select>
-          </div>
-        </div>
-
-=======
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center space-x-4">
               <label className="text-sm font-medium text-gray-700">Trạng thái:</label>
@@ -247,7 +202,7 @@ const VideoCallHistory = () => {
             </div>
           </div>
         </div>
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
+
         {/* Content */}
         <div className="p-6">
           {loading ? (
@@ -265,20 +220,12 @@ const VideoCallHistory = () => {
                 <div key={room._id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-<<<<<<< HEAD
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h4 className="font-semibold text-gray-900">{room.roomName}</h4>
-                        {getStatusBadge(room.status)}
-                      </div>
-                      
-=======
                       <div className="flex items-center space-x-3 mb-1">
                         <h4 className="font-semibold text-gray-900">{getRoomTitle(room)}</h4>
                         {getStatusBadge(room.status)}
                       </div>
                       <p className="text-sm text-gray-500">{getRoomSubtitle(room)}</p>
 
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                         <div className="flex items-center text-sm text-gray-600">
                           <FaUserMd className="mr-2 text-blue-600" />
@@ -321,11 +268,7 @@ const VideoCallHistory = () => {
           {pagination.pages > 1 && (
             <div className="flex justify-center items-center space-x-2 mt-6">
               <button
-<<<<<<< HEAD
-                onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
-=======
                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
                 disabled={pagination.page === 1}
                 className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
               >
@@ -335,11 +278,7 @@ const VideoCallHistory = () => {
                 Trang {pagination.page} / {pagination.pages}
               </span>
               <button
-<<<<<<< HEAD
-                onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
-=======
                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
                 disabled={pagination.page === pagination.pages}
                 className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
               >
@@ -372,11 +311,7 @@ const VideoCallHistory = () => {
               <div>
                 <h4 className="font-semibold text-gray-700 mb-2">Thông tin phòng</h4>
                 <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-<<<<<<< HEAD
-                  <p><span className="font-medium">Tên phòng:</span> {selectedRoom.roomName}</p>
-=======
                   <p><span className="font-medium">Tên phòng:</span> {getRoomTitle(selectedRoom)}</p>
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
                   <p><span className="font-medium">Trạng thái:</span> {getStatusBadge(selectedRoom.status)}</p>
                   <p><span className="font-medium">Mã lịch hẹn:</span> {selectedRoom.appointmentId?.bookingCode || 'N/A'}</p>
                 </div>
@@ -448,7 +383,3 @@ const VideoCallHistory = () => {
 };
 
 export default VideoCallHistory;
-<<<<<<< HEAD
-
-=======
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
