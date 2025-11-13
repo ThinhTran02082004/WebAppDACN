@@ -11,7 +11,6 @@ import AOS from 'aos';
 import 'aos/dist/aos.css';
 import { useInView } from 'react-intersection-observer';
 import { motion } from 'framer-motion';
-import ChatWidget from '../../components/ChatWidget';
 
 const Home = () => {
   const [loading, setLoading] = useState(true);
@@ -564,7 +563,6 @@ const Home = () => {
       </section>
 
 
-      <ChatWidget />
       {/* Discount Banner */}
       <section className="bg-gradient-to-r from-blue-500 to-blue-600 py-3 relative overflow-hidden">
         <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-400 rounded-full opacity-30"></div>

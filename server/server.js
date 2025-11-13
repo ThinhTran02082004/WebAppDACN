@@ -11,7 +11,7 @@ const { connectDB, disconnectDB } = require('./config/database');
 const jwt = require('jsonwebtoken');
 const session = require('express-session');
 const { Logger } = require('./models/logger');
-
+const rateLimit = require('express-rate-limit');
 // Import routes
 const userRoutes = require('./routes/user');
 const doctorRoutes = require('./routes/doctor');
@@ -25,6 +25,7 @@ const logRoutes = require('./routes/log');
 const scheduleRoutes = require('./routes/schedule');
 const adminRoutes = require('./routes/admin');
 const aiRoutes = require('./routes/ai');
+const { protect } = require('./middlewares/authMiddleware');
 // Import các routes còn thiếu
 const apiRoutes = require('./routes/api');
 const couponRoutes = require('./routes/couponRoutes');
@@ -148,6 +149,19 @@ const logger = new Logger();
 // Request logger middleware
 app.use(logger.createRequestLogger());
 
+
+// Cấu hình giới hạn cho AI (Thêm vào trước phần Routes)
+const aiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 phút
+  max: 20, // Cho phép 20 yêu cầu mỗi 15 phút cho mỗi IP
+  message: {
+      success: false,
+      message: 'Bạn đã gửi quá nhiều yêu cầu, vui lòng thử lại sau 15 phút.'
+  },
+  standardHeaders: true, 
+  legacyHeaders: false, 
+});
+
 // Routes
 app.use('/api/auth', userRoutes);
 app.use('/api/doctors', doctorRoutes);
@@ -160,7 +174,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/ai', aiRoutes);
+app.use('/api/ai', protect, aiLimiter, aiRoutes);
 
 // Đăng ký các routes còn thiếu
 app.use('/api', apiRoutes);

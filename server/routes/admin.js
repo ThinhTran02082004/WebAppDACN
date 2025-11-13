@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+
 
 // Controller imports
 const doctorController = require('../controllers/doctorController');
@@ -17,18 +19,25 @@ const paymentController = require('../controllers/paymentController');
 const statisticsController = require('../controllers/statisticsController');
 
 const { protect, authorize } = require('../middlewares/authMiddleware');
-const { upload, uploadToMemory } = require('../middlewares/uploadMiddleware');
+
+const { getChatHistory, addIrrelevantQuestion } = require('../controllers/adminController');
 
 const medicationController = require('../controllers/medicationController');
 
 
-
+// Cấu hình multer để lưu file vào bộ nhớ (RAM)
+const storage = multer.memoryStorage();
+const uploadToMemory = multer({ storage: storage });
 
 
 // Protect all admin routes
 router.use(protect);
 router.use(authorize('admin'));
 
+router.get('/chat-history', getChatHistory); 
+router.post('/filter/add', addIrrelevantQuestion);
+// Doctor routes
+router.post('/doctors', doctorController.createDoctor);
 // Account management routes
 router.get('/users', userController.getAllUsers);
 router.get('/users/:id', userController.getUserById);
@@ -37,13 +46,6 @@ router.put('/users/:id/unlock', userController.unlockUserAccount);
 router.put('/doctors/:id/lock', doctorController.lockDoctorAccount);
 router.put('/doctors/:id/unlock', doctorController.unlockDoctorAccount);
 
-// Doctor routes
-router.post('/doctors', doctorController.createDoctor);
-router.put('/doctors/:id', doctorController.updateDoctor);
-router.delete('/doctors/:id', doctorController.deleteDoctor);
-router.get('/doctors', doctorController.getDoctors);
-router.get('/doctors/:id', doctorController.getDoctorById);
-router.post('/doctors/:id/avatar', uploadToMemory.single('avatar'), doctorController.uploadDoctorAvatar);
 
 // Branch/Hospital routes
 router.post('/hospitals', hospitalController.createHospital);
@@ -120,4 +122,6 @@ router.post('/medications',  medicationController.createMedication);
 router.put('/medications/:id',  medicationController.updateMedication);
 router.delete('/medications/:id',  medicationController.deleteMedication);
 
-module.exports = router; 
+
+
+module.exports = router;
