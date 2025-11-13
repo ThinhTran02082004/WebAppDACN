@@ -58,21 +58,47 @@ const ServiceDetail = () => {
   }, [serviceId]);
   
   const handleBookService = () => {
+    // Extract specialtyId from service object
+    const specialtyId = service?.specialtyId?._id || service?.specialtyId;
+    
     if (!isAuthenticated) {
-      navigate('/auth', { state: { from: `/appointment?service=${serviceId}` } });
+      // Build URL with service and specialty parameters
+      const appointmentUrl = specialtyId 
+        ? `/appointment?service=${serviceId}&specialty=${specialtyId}`
+        : `/appointment?service=${serviceId}`;
+      
+      navigate('/auth', { state: { from: appointmentUrl } });
       return;
     }
     
-    navigate(`/appointment?service=${serviceId}`);
+    // Navigate with service and specialty parameters
+    const appointmentUrl = specialtyId 
+      ? `/appointment?service=${serviceId}&specialty=${specialtyId}`
+      : `/appointment?service=${serviceId}`;
+    
+    navigate(appointmentUrl);
   };
   
   const handleBookWithDoctor = (doctorId) => {
+    // Extract specialtyId from service object
+    const specialtyId = service?.specialtyId?._id || service?.specialtyId;
+    
     if (!isAuthenticated) {
-      navigate('/auth', { state: { from: `/appointment?service=${serviceId}&doctor=${doctorId}` } });
+      // Build URL with service, doctor, and specialty parameters
+      const appointmentUrl = specialtyId
+        ? `/appointment?service=${serviceId}&doctor=${doctorId}&specialty=${specialtyId}`
+        : `/appointment?service=${serviceId}&doctor=${doctorId}`;
+      
+      navigate('/auth', { state: { from: appointmentUrl } });
       return;
     }
     
-    navigate(`/appointment?service=${serviceId}&doctor=${doctorId}`);
+    // Navigate with service, doctor, and specialty parameters
+    const appointmentUrl = specialtyId
+      ? `/appointment?service=${serviceId}&doctor=${doctorId}&specialty=${specialtyId}`
+      : `/appointment?service=${serviceId}&doctor=${doctorId}`;
+    
+    navigate(appointmentUrl);
   };
   
   // Helper function to translate service type
