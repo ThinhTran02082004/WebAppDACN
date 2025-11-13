@@ -12,3 +12,4 @@ logs/
 dist/
 .vscode/
 .kiro/specs/
+server/logs/
