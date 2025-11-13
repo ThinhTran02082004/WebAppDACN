@@ -5,6 +5,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 import Navbar from './components/Navbar.jsx';
 import Footer from './components/Footer.jsx';
+import ChatWidget from './components/ChatWidget.jsx';
 import Home from './pages/user/Home.jsx';
 import Doctors from './pages/user/Doctors.jsx';
 import DoctorDetail from './pages/user/DoctorDetail.jsx';
@@ -66,6 +67,7 @@ import Users from './pages/admin/Users';
 import Hospitals from './pages/admin/Hospitals';
 import AdminDoctors from './pages/admin/Doctors';
 // Thêm các trang admin mới
+
 import AdminAppointments from './pages/admin/Appointments';
 import AdminAppointmentDetail from './pages/admin/AppointmentDetail';
 import AdminCoupons from './pages/admin/Coupons';
@@ -76,6 +78,7 @@ import AdminMedications from './pages/admin/Medications';
 import AdminNews from './pages/admin/News';
 import VideoRoomManagement from './pages/admin/VideoRoomManagement';
 import AdminVideoCallHistory from './pages/admin/VideoCallHistory';
+import HistoryAI from './pages/admin/HistoryAI';
 
 import Facilities from './pages/user/Facilities';
 import FacilitySurgery from './pages/user/FacilitySurgery';
@@ -120,6 +123,7 @@ function AppContent() {
           <Route path="news" element={<AdminNews />} />
           <Route path="video-rooms" element={<VideoRoomManagement />} />
           <Route path="video-call-history" element={<AdminVideoCallHistory />} />
+          <Route path="history-ai" element={<HistoryAI />} />
         </Route>
 
         {/* Doctor Routes - No Navbar/Footer */}
@@ -211,6 +215,7 @@ function AppContent() {
               </Routes>
             </div>
             <Footer />
+            <ChatWidget />
           </>
         } />
       </Routes>

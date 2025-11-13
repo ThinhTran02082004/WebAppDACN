@@ -1,0 +1,7 @@
+{
+  "name": "Myapp",
+  "displayName": "Myapp",
+  "plugins": [
+    "expo-asset"
+  ]
+}

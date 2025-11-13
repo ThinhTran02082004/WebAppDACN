@@ -6,7 +6,7 @@ import {
   FaFileAlt, FaCalendarAlt, FaPercentage, FaCreditCard,
   FaStar, FaProcedures, FaDoorOpen, FaChartBar, FaSignOutAlt,
   FaClock, FaCog, FaSearch, FaBars, FaTimes,
-  FaUserShield, FaLock, FaExclamationTriangle, FaMedkit, FaVideo, FaHistory
+  FaUserShield, FaLock, FaExclamationTriangle, FaMedkit, FaVideo, FaHistory, FaRobot
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
@@ -34,6 +34,7 @@ const AdminLayout = ({ children }) => {
     '/admin/news',
     '/admin/video-rooms',
     '/admin/video-call-history',
+    '/admin/history-ai',
   ];
 
   const doctorRoutes = [
@@ -128,6 +129,7 @@ const AdminLayout = ({ children }) => {
     { path: '/admin/news', label: 'Tin tức', icon: <FaFileAlt /> },
     { path: '/admin/video-rooms', label: 'Phòng Video', icon: <FaVideo /> },
     { path: '/admin/video-call-history', label: 'Lịch sử Video Call', icon: <FaHistory /> },
+    { path: '/admin/history-ai', label: 'Lịch sử AI', icon: <FaRobot /> },
   ] : [];
 
   // Group the navigation items for admin
@@ -136,9 +138,9 @@ const AdminLayout = ({ children }) => {
     users: navItems.length > 2 ? [navItems[1], navItems[2]].filter(Boolean) : [], // Users, Doctors
     scheduling: navItems.length > 9 ? [navItems[3], navItems[9]].filter(Boolean) : [], // Doctor schedules, Appointments
     facilities: navItems.length > 8 ? [navItems[4], navItems[5], navItems[6], navItems[7], navItems[8]].filter(Boolean) : [], // Hospitals, Specialties, Services, Rooms, Medications
-    business: navItems.length > 15
-      ? [navItems[10], navItems[11], navItems[12], navItems[13], navItems[14], navItems[15], navItems[16]].filter(Boolean)
-      : [] // Coupons, Payments, Reviews, News, Video Rooms, Video Call History
+    business: navItems.length > 16
+      ? [navItems[10], navItems[11], navItems[12], navItems[13], navItems[14], navItems[15], navItems[16], navItems[17]].filter(Boolean)
+      : [] // Coupons, Payments, Reviews, News, Video Rooms, Video Call History, History AI
   };
 
   // Get the current page name for header

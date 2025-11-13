@@ -65,6 +65,53 @@ exports.protect = async (req, res, next) => {
 };
 
 /**
+ * Optional authentication middleware - parses token if present but doesn't require it
+ * @desc    OPTIONAL AUTH: Sets req.user if token is valid, but doesn't fail if token is missing
+ *          Useful for routes that work for both authenticated and unauthenticated users
+ */
+exports.optionalAuth = async (req, res, next) => {
+  try {
+    let token;
+
+    // Lấy token từ header nếu có
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    // Nếu không có token, tiếp tục mà không set req.user
+    if (!token) {
+      return next();
+    }
+
+    try {
+      // Xác thực token nếu có
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Lấy thông tin user từ database
+      const user = await User.findById(decoded.id).select('-passwordHash');
+      
+      if (user) {
+        // Gán thông tin user vào req.user nếu token hợp lệ
+        req.user = user;
+        req.user.role = decoded.role;
+        req.user.id = user._id; // Đảm bảo có id
+      }
+      
+      // Tiếp tục dù user có tồn tại hay không (không bắt buộc)
+      next();
+    } catch (error) {
+      // Nếu token không hợp lệ, bỏ qua và tiếp tục (không bắt buộc)
+      console.log('Optional auth: Token không hợp lệ, tiếp tục như guest:', error.message);
+      next();
+    }
+  } catch (error) {
+    console.error('Optional auth middleware error:', error);
+    // Tiếp tục dù có lỗi (không bắt buộc)
+    next();
+  }
+};
+
+/**
  * Middleware to restrict routes to specific roles
  * @desc    ROLE-RESTRICTED ROUTE: Requires specific role type
  * @roles   user - Regular patient user
