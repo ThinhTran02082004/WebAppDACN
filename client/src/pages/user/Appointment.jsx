@@ -109,16 +109,16 @@ const Appointment = () => {
     // 1. We're at Step 2
     // 2. Have all required info
     // 3. Service has actually CHANGED (not just re-rendering with same service)
-    if (currentStep === 2 && 
-        formData.doctorId && 
-        formData.serviceId && 
-        formData.specialtyId && 
-        formData.hospitalId &&
-        formData.serviceId !== previousServiceId) {
-      
+    if (currentStep === 2 &&
+      formData.doctorId &&
+      formData.serviceId &&
+      formData.specialtyId &&
+      formData.hospitalId &&
+      formData.serviceId !== previousServiceId) {
+
       // Update previous service ID
       setPreviousServiceId(formData.serviceId);
-      
+
       // Small delay to allow user to see the selection
       const timer = setTimeout(() => {
         setCurrentStep(3);
@@ -1913,23 +1913,9 @@ const Appointment = () => {
 
       setDoctorServices(servicesData);
 
-      // Only clear serviceId if the current service is not in the doctor's services list
-      // This preserves pre-filled service from service detail page
-      setFormData(prev => {
-        // If there's a pre-filled serviceId, check if it's in the doctor's services
-        if (prev.serviceId) {
-          const serviceExists = servicesData.some(s => s._id === prev.serviceId);
-          // Keep the serviceId if it exists in doctor's services
-          if (serviceExists) {
-            return prev;
-          }
-        }
-        // Clear serviceId if no pre-fill or service not available for this doctor
-        return {
-          ...prev,
-          serviceId: ''
-        };
-      });
+      // Preserve pre-filled serviceId regardless of whether it's in doctor's services
+      // This allows booking any service from the specialty with the selected doctor
+      // The backend will validate if the combination is valid
     } catch (err) {
       console.error('Error fetching doctor services:', err);
       setError('Không thể tải danh sách dịch vụ của bác sĩ. Vui lòng thử lại sau.');
@@ -2219,13 +2205,13 @@ const Appointment = () => {
                   </div>
                 )}
 
-                {formData.doctorId && (
+                {formData.doctorId && doctors.find(d => d._id === formData.doctorId) && (
                   <div className="flex items-start">
                     <FaUserMd className="text-purple-500 mt-1 mr-3 flex-shrink-0" />
                     <div className="flex flex-col">
                       <span className="text-xs text-gray-500 font-medium uppercase">Bác sĩ</span>
                       <span className="text-gray-800 font-medium">
-                        {doctors.find(d => d._id === formData.doctorId)?.user?.fullName || 'Đang tải...'}
+                        {doctors.find(d => d._id === formData.doctorId)?.user?.fullName}
                       </span>
                     </div>
                   </div>
@@ -2433,8 +2419,8 @@ const Appointment = () => {
                 <button
                   type="button"
                   className={`flex items-center px-6 py-3 rounded-lg text-white font-medium transition-all ${canProceedToNextStep()
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
-                      : 'bg-gray-400 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                    : 'bg-gray-400 cursor-not-allowed'
                     }`}
                   onClick={goToNextStep}
                   disabled={!canProceedToNextStep()}
@@ -2491,8 +2477,8 @@ const Appointment = () => {
                           return (
                             <div
                               className={`bg-white rounded-xl shadow-md overflow-hidden border-2 transition-all hover:shadow-xl cursor-pointer ${formData.doctorId === doctor._id
-                                  ? 'border-blue-500 ring-2 ring-blue-200 transform scale-[1.01]'
-                                  : 'border-gray-200 hover:border-blue-300'
+                                ? 'border-blue-500 ring-2 ring-blue-200 transform scale-[1.01]'
+                                : 'border-gray-200 hover:border-blue-300'
                                 }`}
                               onClick={() => handleDoctorSelect(doctor)}
                             >
@@ -2631,15 +2617,49 @@ const Appointment = () => {
                       className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-3 px-4 bg-white appearance-none"
                     >
                       <option value="">-- Chọn dịch vụ --</option>
-                      {Array.isArray(doctorServices) && doctorServices.length > 0 ? (
-                        doctorServices.map(service => (
-                          <option key={service._id} value={service._id}>
-                            {service.name} - {service.price?.toLocaleString('vi-VN') || '0'} VNĐ
-                          </option>
-                        ))
-                      ) : (
-                        <option value="" disabled>Bác sĩ này không có dịch vụ nào</option>
-                      )}
+                      {(() => {
+                        // Combine doctorServices and services, prioritizing doctorServices
+                        // But ensure pre-filled service is always included
+                        const availableServices = [];
+                        const serviceIds = new Set();
+
+                        // Add doctor-specific services first
+                        if (Array.isArray(doctorServices) && doctorServices.length > 0) {
+                          doctorServices.forEach(service => {
+                            availableServices.push(service);
+                            serviceIds.add(service._id);
+                          });
+                        }
+
+                        // If there's a pre-filled service that's not in doctorServices, add it from services array
+                        if (formData.serviceId && !serviceIds.has(formData.serviceId)) {
+                          const preFilledService = services.find(s => s._id === formData.serviceId);
+                          if (preFilledService) {
+                            availableServices.push(preFilledService);
+                            serviceIds.add(preFilledService._id);
+                          }
+                        }
+
+                        // If no services available at all, fall back to all specialty services
+                        if (availableServices.length === 0 && Array.isArray(services) && services.length > 0) {
+                          services.forEach(service => {
+                            if (!serviceIds.has(service._id)) {
+                              availableServices.push(service);
+                              serviceIds.add(service._id);
+                            }
+                          });
+                        }
+
+                        return availableServices.length > 0 ? (
+                          availableServices.map(service => (
+                            <option key={service._id} value={service._id}>
+                              {service.name} - {service.price?.toLocaleString('vi-VN') || '0'} VNĐ
+                            </option>
+                          ))
+                        ) : (
+                          <option value="" disabled>Không có dịch vụ nào</option>
+                        );
+                      })()}
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
                       <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
@@ -2662,8 +2682,8 @@ const Appointment = () => {
                 <button
                   type="button"
                   className={`flex items-center px-6 py-3 rounded-lg text-white font-medium transition-all ${canProceedToNextStep()
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:text-white shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
-                      : 'bg-gray-400 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:text-white shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                    : 'bg-gray-400 cursor-not-allowed'
                     }`}
                   onClick={goToNextStep}
                   disabled={!canProceedToNextStep()}
@@ -2812,10 +2832,10 @@ const Appointment = () => {
                             >
                               <div className="text-xs font-medium">{slot.startTime} - {slot.endTime}</div>
                               <div className={`text-xs ${slot.isBooked
-                                  ? 'text-red-400'
-                                  : isLockedByOther
-                                    ? 'text-yellow-600 font-semibold'
-                                    : 'text-green-500'
+                                ? 'text-red-400'
+                                : isLockedByOther
+                                  ? 'text-yellow-600 font-semibold'
+                                  : 'text-green-500'
                                 }`}>
                                 {slot.isBooked
                                   ? 'Đã đầy'
@@ -2879,8 +2899,8 @@ const Appointment = () => {
                 <button
                   type="button"
                   className={`flex items-center px-6 py-3 rounded-lg text-white font-medium transition-all ${canProceedToNextStep()
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:text-white shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
-                      : 'bg-gray-400 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:text-white shadow-md hover:shadow-lg transform hover:-translate-y-0.5'
+                    : 'bg-gray-400 cursor-not-allowed'
                     }`}
                   onClick={goToNextStep}
                   disabled={!canProceedToNextStep()}
@@ -2988,8 +3008,8 @@ const Appointment = () => {
                   <button
                     type="button"
                     className={`px-4 py-3 rounded-lg font-medium transition-all ${validatingCoupon
-                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                        : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                       }`}
                     onClick={handleValidateCoupon}
                     disabled={validatingCoupon}

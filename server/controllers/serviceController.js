@@ -11,11 +11,11 @@ const ServicePriceHistory = require('../models/ServicePriceHistory');
  */
 exports.createService = async (req, res) => {
   try {
-    const { 
-      name, 
+    const {
+      name,
       description,
       shortDescription,
-      price, 
+      price,
       specialtyId,
       duration,
       type,
@@ -42,11 +42,11 @@ exports.createService = async (req, res) => {
     }
 
     // Kiểm tra tên dịch vụ đã tồn tại trong chuyên khoa này chưa
-    const existingService = await Service.findOne({ 
-      name, 
-      specialtyId 
+    const existingService = await Service.findOne({
+      name,
+      specialtyId
     });
-    
+
     if (existingService) {
       return res.status(400).json({
         success: false,
@@ -151,7 +151,7 @@ exports.createService = async (req, res) => {
 exports.updateService = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -160,7 +160,7 @@ exports.updateService = async (req, res) => {
     }
 
     const service = await Service.findById(id);
-    
+
     if (!service) {
       return res.status(404).json({
         success: false,
@@ -247,7 +247,7 @@ exports.updateService = async (req, res) => {
 exports.deleteService = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -256,7 +256,7 @@ exports.deleteService = async (req, res) => {
     }
 
     const service = await Service.findById(id);
-    
+
     if (!service) {
       return res.status(404).json({
         success: false,
@@ -267,7 +267,7 @@ exports.deleteService = async (req, res) => {
     // Check if service is used in appointments
     const Appointment = require('../models/Appointment');
     const appointmentsCount = await Appointment.countDocuments({ serviceId: id });
-    
+
     if (appointmentsCount > 0) {
       return res.status(400).json({
         success: false,
@@ -312,7 +312,7 @@ exports.deleteService = async (req, res) => {
  */
 exports.getServices = async (req, res) => {
   try {
-    const { 
+    const {
       name,
       specialtyId,
       minPrice,
@@ -321,15 +321,15 @@ exports.getServices = async (req, res) => {
       page = 1,
       limit = 10
     } = req.query;
-    
+
     // Build query
     const query = {};
-    
+
     // Filter by name
     if (name) {
       query.name = { $regex: name, $options: 'i' };
     }
-    
+
     // Filter by specialty
     if (specialtyId) {
       if (!mongoose.Types.ObjectId.isValid(specialtyId)) {
@@ -340,32 +340,32 @@ exports.getServices = async (req, res) => {
       }
       query.specialtyId = specialtyId;
     }
-    
+
     // Filter by price range
     if (minPrice || maxPrice) {
       query.price = {};
       if (minPrice) query.price.$gte = Number(minPrice);
       if (maxPrice) query.price.$lte = Number(maxPrice);
     }
-    
+
     // Filter by active status
     if (isActive !== undefined) {
       query.isActive = isActive === 'true';
     }
-    
+
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     // Execute query with pagination
     const services = await Service.find(query)
       .populate('specialtyId', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
-    
+
     // Count total matching documents
     const total = await Service.countDocuments(query);
-    
+
     return res.status(200).json({
       success: true,
       count: services.length,
@@ -392,24 +392,24 @@ exports.getServices = async (req, res) => {
 exports.getServiceById = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
         message: 'ID dịch vụ không hợp lệ'
       });
     }
-    
+
     const service = await Service.findById(id)
       .populate('specialtyId', 'name description imageUrl');
-    
+
     if (!service) {
       return res.status(404).json({
         success: false,
         message: 'Không tìm thấy dịch vụ'
       });
     }
-    
+
     return res.status(200).json({
       success: true,
       data: service
@@ -475,7 +475,7 @@ exports.uploadServiceImage = async (req, res) => {
 
     // Tạo buffer từ dữ liệu file trong memory
     const buffer = req.file.buffer;
-    
+
     // Tạo base64 string từ buffer để tải lên Cloudinary
     const base64String = `data:${req.file.mimetype};base64,${buffer.toString('base64')}`;
 
@@ -485,7 +485,7 @@ exports.uploadServiceImage = async (req, res) => {
     // Cập nhật thông tin ảnh trong database
     const updatedService = await Service.findByIdAndUpdate(
       id,
-      { 
+      {
         image: cloudinaryResult,
         imageUrl: cloudinaryResult.secureUrl // Cập nhật cả imageUrl để tương thích với code cũ
       },
@@ -516,7 +516,7 @@ exports.uploadServiceImage = async (req, res) => {
 exports.getPriceHistory = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -541,10 +541,10 @@ exports.getPriceHistory = async (req, res) => {
 
     // Add current price as the latest entry if it's not in the history yet
     const historyWithCurrentPrice = [...priceHistory];
-    
+
     // If there's no history or the latest history's new price is different from current price
     if (
-      priceHistory.length === 0 || 
+      priceHistory.length === 0 ||
       priceHistory[0].newPrice !== service.price
     ) {
       historyWithCurrentPrice.unshift({
@@ -562,8 +562,8 @@ exports.getPriceHistory = async (req, res) => {
     // Get price change statistics
     const stats = {
       currentPrice: service.price,
-      initialPrice: historyWithCurrentPrice.length > 0 ? 
-        historyWithCurrentPrice[historyWithCurrentPrice.length - 1].previousPrice || service.price : 
+      initialPrice: historyWithCurrentPrice.length > 0 ?
+        historyWithCurrentPrice[historyWithCurrentPrice.length - 1].previousPrice || service.price :
         service.price,
       priceChangesCount: priceHistory.length,
       averagePriceChange: 0,
@@ -578,10 +578,10 @@ exports.getPriceHistory = async (req, res) => {
       const prices = [service.price]; // start with current price
       let totalIncrease = 0;
       let totalDecrease = 0;
-      
+
       for (const entry of priceHistory) {
         prices.push(entry.previousPrice);
-        
+
         const change = entry.newPrice - entry.previousPrice;
         if (change > 0) {
           totalIncrease += change;
@@ -589,12 +589,12 @@ exports.getPriceHistory = async (req, res) => {
           totalDecrease += Math.abs(change);
         }
       }
-      
+
       stats.highestPrice = Math.max(...prices);
       stats.lowestPrice = Math.min(...prices);
       stats.totalPriceIncrease = totalIncrease;
       stats.totalPriceDecrease = totalDecrease;
-      stats.averagePriceChange = priceHistory.length > 0 ? 
+      stats.averagePriceChange = priceHistory.length > 0 ?
         (totalIncrease - totalDecrease) / priceHistory.length : 0;
     }
 
