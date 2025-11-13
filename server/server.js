@@ -126,9 +126,15 @@ const server = http.createServer(app); // Create HTTP server
 const { initializeSocket } = require('./config/socketConfig');
 const io = initializeSocket(server);
 
+//Mobile App
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'http://localhost',],//https://gkplh9lm-3000.asse.devtunnels.ms
+  origin: process.env.FRONTEND_URL || [
+    'http://localhost:3000', 
+    'http://localhost',
+    'http://10.0.2.2:5000',  // Android emulator
+    /^http:\/\/192\.168\.\d+\.\d+:5000$/  // Physical devices on WiFi
+  ],
     
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -190,7 +196,15 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/medical-records', medicalRecordRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-
+//Mobile App
+// Health check endpoint for mobile app 
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Xử lý callback ở đường dẫn gốc (root URL)
 app.get('/', (req, res) => {
