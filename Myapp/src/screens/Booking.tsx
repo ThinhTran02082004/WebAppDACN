@@ -23,60 +23,6 @@ function buildNextDays(total: number): string[] {
   return days;
 }
 
-const PAYMENT_METHOD_OPTIONS: Array<{
-  key: 'cash' | 'momo' | 'paypal';
-  label: string;
-  description: string;
-  icon: string;
-  badge?: string;
-}> = [
-  {
-    key: 'cash',
-    label: 'Tiền mặt tại bệnh viện',
-    description: 'Thanh toán trực tiếp tại quầy khi đến khám.',
-    icon: 'cash-outline',
-  },
-  {
-    key: 'momo',
-    label: 'MoMo',
-    description: 'Thanh toán trực tuyến thông qua ví MoMo sau khi đặt lịch.',
-    icon: 'wallet-outline',
-    badge: 'Online',
-  },
-  {
-    key: 'paypal',
-    label: 'PayPal',
-    description: 'Thanh toán trực tuyến bằng tài khoản PayPal sau khi đặt lịch.',
-    icon: 'card-outline',
-    badge: 'Online',
-  },
-];
-
-const getPaymentMethodLabel = (method?: string) => {
-  switch ((method || '').toLowerCase()) {
-    case 'cash':
-      return 'Tiền mặt tại bệnh viện';
-    case 'momo':
-      return 'MoMo';
-    case 'paypal':
-      return 'PayPal';
-    default:
-      return method || '';
-  }
-};
-
-const getPaymentMethodHint = (method?: string) => {
-  switch ((method || '').toLowerCase()) {
-    case 'cash':
-      return 'Bạn sẽ thanh toán trực tiếp tại bệnh viện khi đến khám.';
-    case 'momo':
-      return 'Sau khi hoàn tất đặt lịch, bạn có thể thanh toán trực tuyến qua ví MoMo trong phần chi tiết lịch hẹn.';
-    case 'paypal':
-      return 'Sau khi hoàn tất đặt lịch, bạn có thể thanh toán trực tuyến bằng PayPal trong phần chi tiết lịch hẹn.';
-    default:
-      return 'Bạn có thể lựa chọn phương thức thanh toán phù hợp.';
-  }
-};
 
 
 export default function BookingAllInOne() {
@@ -119,7 +65,6 @@ export default function BookingAllInOne() {
   const [doctorSchedules, setDoctorSchedules] = useState<any[]>([]);
 
   // Step 4
-  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [appointmentType, setAppointmentType] = useState<string>('first-visit');
   const [symptoms, setSymptoms] = useState<string>('');
   const [medicalHistory, setMedicalHistory] = useState<string>('');
@@ -411,8 +356,10 @@ export default function BookingAllInOne() {
         symptoms: symptoms || '',
         medicalHistory: medicalHistory || '',
         notes: notes || '',
-        paymentMethod,
         couponCode: discountCode || undefined,
+        // Set default payment method to 'momo' (online payment)
+        // This prevents auto-paid status, user can pay later in AppointmentDetail
+        paymentMethod: 'momo',
       };
       try {
         const response = await apiService.createAppointment(payload);
@@ -915,61 +862,8 @@ export default function BookingAllInOne() {
             </View>
             <View style={styles.paymentInfo}>
               <Ionicons name="information-circle" size={16} color="#2563eb" />
-              <Text style={styles.paymentInfoText}>{getPaymentMethodHint(paymentMethod)}</Text>
+              <Text style={styles.paymentInfoText}>Bạn có thể thanh toán trực tuyến bằng PayPal hoặc MoMo trong phần chi tiết lịch hẹn sau khi đặt lịch thành công.</Text>
             </View>
-          </View>
-
-          <View style={styles.paymentMethodBox}>
-            <Text style={styles.paymentMethodTitle}>Chọn phương thức thanh toán</Text>
-            <Text style={styles.paymentMethodCaption}>Bạn có thể thay đổi lựa chọn này trước khi hoàn tất đặt lịch.</Text>
-            {PAYMENT_METHOD_OPTIONS.map((option) => {
-              const selected = paymentMethod === option.key;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  activeOpacity={0.85}
-                  onPress={() => setPaymentMethod(option.key)}
-                  style={[
-                    styles.paymentMethodOption,
-                    selected && styles.paymentMethodOptionActive,
-                  ]}
-                >
-                  <View style={styles.paymentMethodOptionLeft}>
-                    <View style={styles.paymentMethodRadio}>
-                      <Ionicons
-                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-                        size={20}
-                        color={selected ? '#2563eb' : '#9ca3af'}
-                      />
-                    </View>
-                    <View style={styles.paymentMethodOptionText}>
-                      <View style={styles.paymentMethodLabelRow}>
-                        <Ionicons
-                          name={option.icon as any}
-                          size={18}
-                          color={selected ? '#2563eb' : '#4b5563'}
-                          style={{ marginRight: 6 }}
-                        />
-                        <Text
-                          style={[
-                            styles.paymentMethodOptionTitle,
-                            selected && styles.paymentMethodOptionTitleActive,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </View>
-                      <Text style={styles.paymentMethodOptionDesc}>{option.description}</Text>
-                    </View>
-                  </View>
-                  {option.badge ? (
-                    <View style={styles.paymentMethodBadge}>
-                      <Text style={styles.paymentMethodBadgeText}>{option.badge}</Text>
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
-              );
-            })}
           </View>
           
           {/* Mã giảm giá */}
@@ -1150,14 +1044,14 @@ export default function BookingAllInOne() {
           <View style={styles.confirmBox}>
             <Text style={styles.confirmTitle}>Thông tin thanh toán</Text>
             <View style={styles.confirmRow}>
-              <View style={styles.confirmCol}>
-                <Text style={styles.confirmLabel}>Phương thức</Text>
-                <Text style={styles.confirmValue}>{getPaymentMethodLabel(paymentMethod) || '—'}</Text>
-              </View>
               <View style={[styles.confirmCol, { alignItems: 'flex-end' }]}> 
                 <Text style={styles.confirmLabel}>Tổng chi phí</Text>
                 <Text style={[styles.confirmValue, { color: '#2563eb', fontWeight: '700' }]}>{priceDetails.finalTotal.toLocaleString('vi-VN')} VNĐ</Text>
               </View>
+            </View>
+            <View style={styles.paymentInfo}>
+              <Ionicons name="information-circle" size={16} color="#2563eb" />
+              <Text style={styles.paymentInfoText}>Bạn có thể thanh toán trực tuyến bằng PayPal hoặc MoMo trong phần chi tiết lịch hẹn sau khi đặt lịch thành công.</Text>
             </View>
           </View>
 

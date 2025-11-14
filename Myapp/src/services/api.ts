@@ -578,10 +578,10 @@ class ApiService {
     }
   }
 
-  async getUserAppointments(): Promise<ApiResponse<any>> {
+  async getUserAppointments(params?: { page?: number; limit?: number; status?: string }): Promise<ApiResponse<any>> {
     try {
       await this.probeBackend();
-      const res = await this.client.get('/appointments/user/patient');
+      const res = await this.client.get('/appointments/user/patient', { params });
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);
@@ -628,10 +628,11 @@ class ApiService {
     }
   }
 
-  async cancelAppointment(appointmentId: string): Promise<ApiResponse<any>> {
+  async cancelAppointment(appointmentId: string, reason?: string): Promise<ApiResponse<any>> {
     try {
       await this.probeBackend();
-      const res = await this.client.delete(`/appointments/${appointmentId}`);
+      const config = reason ? { data: { cancellationReason: reason } } : undefined;
+      const res = await this.client.delete(`/appointments/${appointmentId}`, config);
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);

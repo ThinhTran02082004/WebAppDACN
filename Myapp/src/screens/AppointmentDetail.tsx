@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -176,11 +178,16 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   const [refreshing, setRefreshing] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [shouldRetryRefresh, setShouldRetryRefresh] = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [cancellationError, setCancellationError] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
   const hasRefreshedRef = useRef(false);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshAppointmentRef = useRef<((delay?: number, retryCount?: number, forceRetry?: boolean) => Promise<void>) | null>(null);
 
   // Helper function to check if consultation fee is paid
+  // Consistent with client web app - checks bill status directly
   const isConsultationFeePaid = useCallback((appt: Appointment | null): boolean => {
     if (!appt) return false;
     
@@ -193,15 +200,18 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     const consultationStatus = bill.consultationStatus || 'pending';
     const consultationAmount = bill.consultationAmount || 0;
     
-    // If consultation amount is 0, consider it as "paid" (no fee to pay)
-    // Otherwise, check if consultation status is 'paid'
     return consultationAmount === 0 || consultationStatus === 'paid';
   }, []);
 
-  // Helper function to check if payment is fully paid (for UI display purposes)
-  // This version checks payment status regardless of appointment status
+
   const isPaymentFullyPaidForActions = useCallback((appt: Appointment | null): boolean => {
     if (!appt) return false;
+    
+    const appointmentStatus = appt.status || 'pending';
+    
+    if (appointmentStatus === 'pending') {
+      return false;
+    }
     
     if (!appt.bill) {
       // If no bill exists, check old paymentStatus field
@@ -235,32 +245,24 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     return allPaid && overallStatus === 'paid';
   }, []);
 
-  // Helper function to check if payment is fully paid (similar to client logic)
-  // This version respects appointment status for display purposes
+
   const isPaymentFullyPaid = useCallback((appt: Appointment | null): boolean => {
     if (!appt) return false;
     
     const appointmentStatus = appt.status || 'pending';
     
-    // IMPORTANT: If appointment is still pending, don't show as paid even if server has set status='paid'
-    // This is because server may set paid status when creating appointment (especially for cash payments),
-    // but actual payment happens later (at hospital for cash, or after online payment completes)
-    // Only show "paid" if appointment is confirmed or completed
+
     if (appointmentStatus === 'pending') {
       return false;
     }
     
     if (!appt.bill) {
-      // If no bill exists, check old paymentStatus field
-      // But still respect appointment status - don't show paid if pending
-      // (appointmentStatus is already checked above, so it's not 'pending' here)
+
       return appt.paymentStatus === 'paid';
     }
     
     const bill = appt.bill;
-    
-    // Use flattened fields from server response (consultationStatus, medicationStatus, hospitalizationStatus)
-    // Server returns flattened structure: consultationStatus, medicationStatus, hospitalizationStatus
+
     const consultationStatus = bill.consultationStatus || 'pending';
     const medicationStatus = bill.medicationStatus || 'pending';
     const hospitalizationStatus = bill.hospitalizationStatus || 'pending';
@@ -274,11 +276,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     const medicationAmount = bill.medicationAmount || 0;
     const hospitalizationAmount = bill.hospitalizationAmount || 0;
     
-    // Check if all applicable fees are paid
-    // Only consider paid if:
-    // 1. Consultation is paid (if consultation amount > 0)
-    // 2. Medication is paid (if medication amount > 0) OR medication amount is 0
-    // 3. Hospitalization is paid (if hospitalization amount > 0) OR hospitalization amount is 0
+
     const allPaid = (consultationAmount === 0 || consultationPaid) && 
                     (medicationAmount === 0 || medicationPaid) &&
                     (hospitalizationAmount === 0 || hospitalizationPaid);
@@ -850,43 +848,72 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     }
   };
 
-  const handleCancelAppointment = async (appt: Appointment) => {
-    Alert.alert(
-      'Xác nhận hủy lịch',
-      'Bạn có chắc chắn muốn hủy lịch hẹn này?',
-      [
-        { text: 'Không', style: 'cancel' },
-        {
-          text: 'Hủy lịch',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await apiService.cancelAppointment(appt._id);
-              Alert.alert('Thành công', 'Đã hủy lịch hẹn thành công.', [
-                {
-                  text: 'OK',
-                  onPress: () => navigation.goBack(),
-                },
-              ]);
-            } catch (error) {
-              Alert.alert('Lỗi', 'Không thể hủy lịch hẹn. Vui lòng thử lại.');
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
-    );
+  const openCancelModal = () => {
+    setCancellationReason('');
+    setCancellationError('');
+    setCancelModalVisible(true);
   };
 
+  const closeCancelModal = () => {
+    setCancelModalVisible(false);
+    setCancellationReason('');
+    setCancellationError('');
+  };
 
-  const handleReschedule = (appt: Appointment) => {
-    if (!(appt.status === 'pending' || appt.status === 'rescheduled')) {
-      Alert.alert('Không thể đổi lịch', 'Chỉ có thể đổi lịch khi đang chờ xác nhận.');
+  const handleCancelAppointment = () => {
+    if (!appointment) return;
+    if (isPastAppointment(appointment) || ['cancelled', 'completed', 'rejected', 'confirmed'].includes(appointment.status)) {
+      Alert.alert('Không thể hủy lịch', 'Chỉ có thể hủy lịch khi lịch hẹn đang chờ xác nhận hoặc vừa được đổi lịch.');
       return;
     }
-    navigation.navigate('RescheduleAppointment', {
+    openCancelModal();
+  };
+
+  const handleConfirmCancelAppointment = async () => {
+    if (!appointment) return;
+    if (!cancellationReason.trim()) {
+      setCancellationError('Vui lòng nhập lý do hủy lịch');
+      return;
+    }
+    setCancellationError('');
+    setIsCancelling(true);
+    try {
+      await apiService.cancelAppointment(appointment._id, cancellationReason.trim());
+      if (refreshAppointmentRef.current) {
+        await refreshAppointmentRef.current(0, 0, true);
+      } else {
+        setAppointment((prev) =>
+          prev ? { ...prev, status: 'cancelled', cancellationReason: cancellationReason.trim() } : prev
+        );
+      }
+      closeCancelModal();
+      Alert.alert('Thành công', 'Đã hủy lịch hẹn thành công.', [
+        {
+          text: 'OK',
+          onPress: () => navigation.goBack(),
+        },
+      ]);
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message || error?.message || 'Không thể hủy lịch hẹn. Vui lòng thử lại.';
+      Alert.alert('Lỗi', message);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const canRescheduleAppointment = (appt: Appointment | null) => {
+    if (!appt) return false;
+    if (isPastAppointment(appt)) return false;
+    return !['cancelled', 'completed', 'rejected', 'confirmed'].includes(appt.status);
+  };
+
+  const handleReschedule = (appt: Appointment) => {
+    if (!canRescheduleAppointment(appt)) {
+      Alert.alert('Không thể đổi lịch', 'Chỉ có thể đổi lịch khi lịch hẹn đang chờ xác nhận hoặc vừa được đổi lịch.');
+      return;
+    }
+    navigation.navigate('Reschedule', {
       appointmentId: appt._id,
       doctorId: (appt.doctorId as any)?._id || appt.doctorId,
       currentDate: appt.appointmentDate,
@@ -923,7 +950,8 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   const serviceFee = appointment.serviceFee || appointment.serviceId?.price || 0;
   const totalAmount = appointment.totalAmount || (consultationFee + serviceFee);
   const rescheduleCount = appointment.rescheduleCount ?? ((appointment as any)?.rescheduleCount ?? 0);
-  const canModifyAppointment = !isPast && (appointment.status === 'pending' || appointment.status === 'rescheduled');
+  const hasReachedRescheduleLimit = rescheduleCount >= 2;
+  const canModifyAppointment = !isPast && !['cancelled', 'completed', 'rejected', 'confirmed'].includes(appointment.status);
   const hospitalization = appointment.hospitalization;
   const roomInfoText = getRoomInfo(appointment);
   const prescriptionMap = new Map<string, Prescription>();
@@ -1259,10 +1287,10 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
               </>
             )}
             
-            {/* Reschedule and Cancel buttons for pending or rescheduled - only if not fully paid */}
-            {(appointment.status === 'pending' || appointment.status === 'rescheduled') && !isPaymentFullyPaidForActions(appointment) && (
+            {/* Reschedule and Cancel buttons - align with Schedule screen */}
+            {canModifyAppointment && (
               <>
-                {rescheduleCount >= 2 ? (
+                {hasReachedRescheduleLimit ? (
                   <View style={[styles.actionButton, styles.actionButtonDisabled]}>
                     <Ionicons name="refresh-outline" size={18} color="#9ca3af" />
                     <Text style={[styles.actionButtonText, styles.actionButtonTextDisabled]}>Đã hết lượt</Text>
@@ -1278,10 +1306,10 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
                 )}
                 <TouchableOpacity
                   style={[styles.actionButton, styles.actionButtonRed]}
-                  onPress={() => handleCancelAppointment(appointment)}
-                  disabled={loading}
+                  onPress={handleCancelAppointment}
+                  disabled={isCancelling}
                 >
-                  {loading ? (
+                  {isCancelling ? (
                     <ActivityIndicator size="small" color="#ef4444" />
                   ) : (
                     <>
@@ -1523,19 +1551,40 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
                     </View>
                   </View>
                   
-                  {(!isConsultationFeePaid(appointment) && appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'rejected') && (
+                  {/* Show payment buttons if not fully paid and appointment is not completed/cancelled/rejected */}
+                  {(!isPaymentFullyPaidForActions(appointment) && 
+                    appointment.status !== 'completed' && 
+                    appointment.status !== 'cancelled' && 
+                    appointment.status !== 'rejected' &&
+                    ((appointment.bill?.remainingAmount ?? 0) > 0 || appointment.bill?.overallStatus === 'unpaid' || appointment.bill?.overallStatus === 'partial')) && (
                     <View style={styles.paymentActionsRow}>
                       <TouchableOpacity
                         style={[styles.paymentActionButton, styles.paypalActionButton]}
                         onPress={() => startPaypalPayment()}
+                        disabled={loading}
                       >
-                        <Text style={styles.paymentActionText}>PayPal</Text>
+                        {loading ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="logo-paypal" size={18} color="#fff" style={{ marginRight: 6 }} />
+                            <Text style={styles.paymentActionText}>PayPal</Text>
+                          </>
+                        )}
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.paymentActionButton, styles.momoActionButton]}
                         onPress={startMomoPayment}
+                        disabled={loading}
                       >
-                        <Text style={styles.paymentActionText}>MoMo</Text>
+                        {loading ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="wallet-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+                            <Text style={styles.paymentActionText}>MoMo</Text>
+                          </>
+                        )}
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1587,19 +1636,40 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
                       <Text style={styles.paymentMethodValue}>{getPaymentMethodText(appointment.paymentMethod)}</Text>
                     </View>
                   )}
-                  {(!isConsultationFeePaid(appointment) && appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'rejected') && (
+                  {/* Show payment buttons if not fully paid and appointment is not completed/cancelled/rejected */}
+                  {(!isPaymentFullyPaidForActions(appointment) && 
+                    appointment.status !== 'completed' && 
+                    appointment.status !== 'cancelled' && 
+                    appointment.status !== 'rejected' &&
+                    appointment.paymentStatus !== 'paid') && (
                     <View style={styles.paymentActionsRow}>
                       <TouchableOpacity
                         style={[styles.paymentActionButton, styles.paypalActionButton]}
                         onPress={() => startPaypalPayment()}
+                        disabled={loading}
                       >
-                        <Text style={styles.paymentActionText}>PayPal</Text>
+                        {loading ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="logo-paypal" size={18} color="#fff" style={{ marginRight: 6 }} />
+                            <Text style={styles.paymentActionText}>PayPal</Text>
+                          </>
+                        )}
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.paymentActionButton, styles.momoActionButton]}
                         onPress={startMomoPayment}
+                        disabled={loading}
                       >
-                        <Text style={styles.paymentActionText}>MoMo</Text>
+                        {loading ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="wallet-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+                            <Text style={styles.paymentActionText}>MoMo</Text>
+                          </>
+                        )}
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1609,6 +1679,101 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
           </View>
         )}
       </ScrollView>
+      {cancelModalVisible && appointment && (
+        <Modal
+          visible={cancelModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeCancelModal}
+        >
+          <View style={styles.cancelModalOverlay}>
+            <View style={styles.cancelModalContainer}>
+              <View style={styles.cancelModalHeader}>
+                <Ionicons name="close-circle-outline" size={22} color="#fff" />
+                <Text style={styles.cancelModalHeaderText}>Xác nhận hủy lịch hẹn</Text>
+              </View>
+              <View style={styles.cancelModalBody}>
+                <View style={styles.cancelModalInfoBox}>
+                  {appointment.bookingCode ? (
+                    <View style={styles.cancelModalInfoRow}>
+                      <Ionicons name="pricetag-outline" size={18} color="#ef4444" style={{ marginRight: 8 }} />
+                      <Text style={styles.cancelModalInfoValue}>
+                        Mã đặt lịch: <Text style={{ fontWeight: '700' }}>{appointment.bookingCode}</Text>
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.cancelModalInfoRow}>
+                    <Ionicons name="calendar-outline" size={18} color={IconColors.primary} style={{ marginRight: 8 }} />
+                    <View>
+                      <Text style={styles.cancelModalInfoLabel}>Ngày hẹn</Text>
+                      <Text style={styles.cancelModalInfoValue}>{formatDate(appointment.appointmentDate)}</Text>
+                    </View>
+                  </View>
+                  {appointment.timeSlot ? (
+                    <View style={styles.cancelModalInfoRow}>
+                      <Ionicons name="time-outline" size={18} color={IconColors.primary} style={{ marginRight: 8 }} />
+                      <View>
+                        <Text style={styles.cancelModalInfoLabel}>Giờ hẹn</Text>
+                        <Text style={styles.cancelModalInfoValue}>
+                          {formatHourRange(appointment.timeSlot.startTime, appointment.timeSlot.endTime)}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.cancelModalLabel}>Lý do hủy lịch</Text>
+                <TextInput
+                  style={styles.cancelModalTextarea}
+                  placeholder="Vui lòng cho chúng tôi biết lý do bạn muốn hủy lịch..."
+                  placeholderTextColor="#9ca3af"
+                  multiline
+                  numberOfLines={4}
+                  value={cancellationReason}
+                  onChangeText={(text) => {
+                    setCancellationReason(text);
+                    if (cancellationError) {
+                      setCancellationError('');
+                    }
+                  }}
+                />
+                {cancellationError ? (
+                  <Text style={styles.cancelModalErrorText}>{cancellationError}</Text>
+                ) : null}
+                <View style={styles.cancelModalNote}>
+                  <Ionicons name="information-circle-outline" size={16} color="#2563eb" style={{ marginRight: 6 }} />
+                  <Text style={styles.cancelModalNoteText}>
+                    Thao tác này không thể hoàn tác. Bạn có thể đặt lại lịch bất cứ lúc nào trong tương lai.
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.cancelModalFooter}>
+                <TouchableOpacity
+                  style={[styles.cancelModalButton, styles.cancelModalSecondaryButton]}
+                  onPress={closeCancelModal}
+                  disabled={isCancelling}
+                >
+                  <Text style={[styles.cancelModalButtonText, { color: '#374151' }]}>Quay lại</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.cancelModalButton,
+                    styles.cancelModalPrimaryButton,
+                    (isCancelling || !cancellationReason.trim()) && styles.cancelModalPrimaryButtonDisabled,
+                  ]}
+                  onPress={handleConfirmCancelAppointment}
+                  disabled={isCancelling || !cancellationReason.trim()}
+                >
+                  {isCancelling ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.cancelModalButtonText}>Xác nhận hủy</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -2031,6 +2196,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
   paypalActionButton: {
     backgroundColor: '#2563eb',
@@ -2183,5 +2350,123 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  cancelModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  cancelModalContainer: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  cancelModalHeader: {
+    backgroundColor: '#f87171',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cancelModalHeaderText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  cancelModalBody: {
+    padding: 16,
+  },
+  cancelModalInfoBox: {
+    backgroundColor: '#fff1f2',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  cancelModalInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  cancelModalInfoLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 2,
+  },
+  cancelModalInfoValue: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '600',
+  },
+  cancelModalLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  cancelModalTextarea: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: '#111827',
+    minHeight: 90,
+    textAlignVertical: 'top',
+    marginBottom: 4,
+  },
+  cancelModalErrorText: {
+    color: '#dc2626',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  cancelModalNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    marginTop: 8,
+  },
+  cancelModalNoteText: {
+    flex: 1,
+    color: '#1e3a8a',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  cancelModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    padding: 16,
+    backgroundColor: '#f9fafb',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  cancelModalButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelModalSecondaryButton: {
+    backgroundColor: '#e5e7eb',
+    marginRight: 8,
+  },
+  cancelModalPrimaryButton: {
+    backgroundColor: '#dc2626',
+  },
+  cancelModalPrimaryButtonDisabled: {
+    backgroundColor: '#fca5a5',
+  },
+  cancelModalButtonText: {
+    color: '#fff',
+    fontWeight: '700',
   },
 });
