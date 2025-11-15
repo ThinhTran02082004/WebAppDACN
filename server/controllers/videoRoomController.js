@@ -181,7 +181,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
   if (!appointment) {
     return res.status(404).json({
       success: false,
-      message: 'Lß╗ïch hß║╣n kh├┤ng tß╗ôn tß║íi'
+      message: 'Lịch hẹn không tồn tại'
     });
   }
 
@@ -197,7 +197,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
   if (!isDoctor && !isPatient && !isAdmin) {
     return res.status(403).json({
       success: false,
-      message: 'Bß║ín kh├┤ng c├│ quyß╗ün tß║ío ph├▓ng cho lß╗ïch hß║╣n n├áy'
+      message: 'Bạn không có quyền tạo phòng cho lịch hẹn này'
     });
   }
 
@@ -210,7 +210,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
   if (videoRoom) {
     return res.status(200).json({
       success: true,
-      message: 'Ph├▓ng ─æ├ú tß╗ôn tß║íi',
+      message: 'Phòng đã tồn tại',
       data: videoRoom
     });
   }
@@ -221,7 +221,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
   if (totalRoomsCount >= 3) {
     return res.status(400).json({
       success: false,
-      message: '─É├ú ─æß║ít giß╗¢i hß║ín tß╗æi ─æa 3 ph├▓ng video cho lß╗ïch hß║╣n n├áy. Kh├┤ng thß╗â tß║ío th├¬m ph├▓ng mß╗¢i.Vui l├▓ng li├¬n hß╗ç holine',
+      message: 'Đã đạt giới hạn tạo đa 3 phòng video cho lịch hẹn này. Không thể tạo thêm phòng mới.Vui lòng liên hệ holine',
       limit: 3,
       current: totalRoomsCount
     });
@@ -258,7 +258,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
       if (existingRoom) {
         return res.status(200).json({
           success: true,
-          message: 'Ph├▓ng ─æ├ú tß╗ôn tß║íi',
+          message: 'Phòng đã tồn tại',
           data: existingRoom
         });
       }
@@ -267,7 +267,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
     console.error('Error creating video room:', error);
     return res.status(500).json({
       success: false,
-      message: 'Kh├┤ng thß╗â tß║ío ph├▓ng video',
+      message: 'Không thể tạo phòng video',
       error: error.message
     });
   }
@@ -288,7 +288,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
     console.error('Error creating video room in LiveKit:', livekitError);
     return res.status(500).json({
       success: false,
-      message: 'Kh├┤ng thß╗â tß║ío ph├▓ng video',
+      message: 'Không thể tạo phòng video',
       error: livekitError.message
     });
   }
@@ -299,7 +299,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
   if (global.io) {
     // Determine caller and receiver
     const callerUserId = userId;
-    const callerName = req.user.fullName || 'Ng╞░ß╗¥i d├╣ng';
+    const callerName = req.user.fullName || 'Người dùng';
     const callerRole = isDoctor ? 'doctor' : isPatient ? 'patient' : 'admin';
 
     let receiverUserId = null;
@@ -326,7 +326,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    message: 'Tß║ío ph├▓ng video th├ánh c├┤ng',
+    message: 'Tạo phòng video thành công',
     data: videoRoom
   });
 });
@@ -351,7 +351,7 @@ exports.joinVideoRoom = asyncHandler(async (req, res) => {
   if (!videoRoom) {
     return res.status(404).json({
       success: false,
-      message: 'Ph├▓ng video kh├┤ng tß╗ôn tß║íi'
+      message: 'Phòng video không tồn tại'
     });
   }
 
@@ -359,12 +359,12 @@ exports.joinVideoRoom = asyncHandler(async (req, res) => {
   if (!['waiting', 'active'].includes(videoRoom.status)) {
     return res.status(400).json({
       success: false,
-      message: 'Ph├▓ng video ─æ├ú kß║┐t th├║c hoß║╖c bß╗ï hß╗ºy'
+      message: 'Phòng video đã kết thúc hoặc bị hủy'
     });
   }
 
   // Determine user role
-  let role = 'viewer';
+  let role = 'patient';
   let participantName = req.user.fullName || 'Unknown';
 
   // Handle both populated and non-populated fields
@@ -378,27 +378,27 @@ exports.joinVideoRoom = asyncHandler(async (req, res) => {
 
   if (doctorUserId && doctorUserId.toString() === userId) {
     role = 'doctor';
-    participantName = `B├íc s─⌐ ${req.user.fullName}`;
+    participantName = `Bác sĩ ${req.user.fullName}`;
     isAuthorized = true;
   } else if (patientIdStr && patientIdStr === userId) {
     role = 'patient';
-    participantName = `Bß╗çnh nh├ón ${req.user.fullName}`;
+    participantName = `Bệnh nhân ${req.user.fullName}`;
     isAuthorized = true;
   } else if (req.user.role === 'admin' || req.user.roleType === 'admin') {
     role = 'admin';
     participantName = `Admin ${req.user.fullName}`;
     isAuthorized = true;
   } else if (videoRoom.isPublic) {
-    // If room is public, anyone can join as viewer
-    role = 'viewer';
-    participantName = req.user.fullName || 'Kh├ích';
+    // If room is public, anyone can join as patient
+    role = 'patient';
+    participantName = req.user.fullName || 'Khách';
     isAuthorized = true;
   }
 
   if (!isAuthorized) {
     return res.status(403).json({
       success: false,
-      message: 'Bß║ín kh├┤ng c├│ quyß╗ün tham gia ph├▓ng n├áy'
+      message: 'Bạn không có quyền tham gia phòng này'
     });
   }
 
@@ -508,7 +508,7 @@ exports.endVideoRoom = asyncHandler(async (req, res) => {
   if (!videoRoom) {
     return res.status(404).json({
       success: false,
-      message: 'Ph├▓ng video kh├┤ng tß╗ôn tß║íi'
+      message: 'Phòng video không tồn tại'
     });
   }
 
@@ -531,7 +531,7 @@ exports.endVideoRoom = asyncHandler(async (req, res) => {
   if (!isAuthorized) {
     return res.status(403).json({
       success: false,
-      message: 'Bß║ín kh├┤ng c├│ quyß╗ün kß║┐t th├║c ph├▓ng n├áy'
+      message: 'Bạn không có quyền kết thúc phòng này'
     });
   }
 
@@ -539,7 +539,7 @@ exports.endVideoRoom = asyncHandler(async (req, res) => {
     await finalizeVideoRoom(videoRoom);
     res.json({
       success: true,
-      message: 'Kß║┐t th├║c ph├▓ng video th├ánh c├┤ng',
+      message: 'Kết thúc phòng video thành công',
       data: {
         roomId: videoRoom._id,
         duration: videoRoom.duration
@@ -549,7 +549,7 @@ exports.endVideoRoom = asyncHandler(async (req, res) => {
     console.error('Error ending video room:', error);
     res.status(500).json({
       success: false,
-      message: 'Kh├┤ng thß╗â kß║┐t th├║c ph├▓ng video',
+      message: 'Không thể kết thúc phòng video',
       error: error.message
     });
   }
@@ -573,7 +573,7 @@ exports.leaveVideoRoom = asyncHandler(async (req, res) => {
   if (!videoRoom) {
     return res.status(404).json({
       success: false,
-      message: 'Ph├▓ng video kh├┤ng tß╗ôn tß║íi'
+      message: 'Phòng video không tồn tại'
     });
   }
 
@@ -581,7 +581,7 @@ exports.leaveVideoRoom = asyncHandler(async (req, res) => {
     return res.json({
       success: true,
       autoEnded: true,
-      message: 'Ph├▓ng video ─æ├ú kß║┐t th├║c'
+      message: 'Phòng video đã kết thúc'
     });
   }
 
@@ -638,7 +638,7 @@ exports.leaveVideoRoom = asyncHandler(async (req, res) => {
     return res.json({
       success: true,
       autoEnded: true,
-      message: 'Cuß╗Öc gß╗ìi ─æ├ú kß║┐t th├║c v├¼ kh├┤ng c├▓n ng╞░ß╗¥i tham gia'
+      message: 'Cuộc gọi đã kết thúc vì không còn người tham gia'
     });
   }
 
@@ -670,7 +670,7 @@ exports.getVideoRoomDetails = asyncHandler(async (req, res) => {
   if (!videoRoom) {
     return res.status(404).json({
       success: false,
-      message: 'Ph├▓ng video kh├┤ng tß╗ôn tß║íi'
+      message: 'Phòng video không tồn tại'
     });
   }
 
@@ -689,7 +689,7 @@ exports.getVideoRoomDetails = asyncHandler(async (req, res) => {
   if (!isAuthorized) {
     return res.status(403).json({
       success: false,
-      message: 'Bß║ín kh├┤ng c├│ quyß╗ün xem th├┤ng tin ph├▓ng n├áy'
+      message: 'Bạn không có quyền xem thông tin phòng này'
     });
   }
 
@@ -780,7 +780,7 @@ exports.getActiveLiveKitRooms = asyncHandler(async (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({
       success: false,
-      message: 'Chß╗ë admin mß╗¢i c├│ quyß╗ün xem danh s├ích ph├▓ng hoß║ít ─æß╗Öng'
+      message: 'Chỉ admin mới có quyền xem danh sách phòng hoạt động'
     });
   }
 
@@ -809,7 +809,7 @@ exports.getActiveLiveKitRooms = asyncHandler(async (req, res) => {
     console.error('Error getting active rooms:', error);
     res.status(500).json({
       success: false,
-      message: 'Kh├┤ng thß╗â lß║Ñy danh s├ích ph├▓ng hoß║ít ─æß╗Öng',
+      message: 'Không thể lấy danh sách phòng hoạt động',
       error: error.message
     });
   }
@@ -820,7 +820,7 @@ exports.removeParticipantFromRoom = asyncHandler(async (req, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({
       success: false,
-      message: 'Chß╗ë admin mß╗¢i c├│ quyß╗ün x├│a ng╞░ß╗¥i tham gia'
+      message: 'Chỉ admin mới có quyền xóa người tham gia'
     });
   }
 
@@ -831,13 +831,13 @@ exports.removeParticipantFromRoom = asyncHandler(async (req, res) => {
 
     res.json({
       success: true,
-      message: '─É├ú x├│a ng╞░ß╗¥i tham gia khß╗Åi ph├▓ng'
+      message: 'Đã xóa người tham gia khỏi phòng'
     });
   } catch (error) {
     console.error('Error removing participant:', error);
     res.status(500).json({
       success: false,
-      message: 'Kh├┤ng thß╗â x├│a ng╞░ß╗¥i tham gia',
+      message: 'Không thể xóa người tham gia',
       error: error.message
     });
   }
@@ -861,7 +861,7 @@ exports.getRoomByAppointmentId = asyncHandler(async (req, res) => {
   if (!appointment) {
     return res.status(404).json({
       success: false,
-      message: 'Lß╗ïch hß║╣n kh├┤ng tß╗ôn tß║íi'
+      message: 'Lịch hẹn không tồn tại'
     });
   }
 
@@ -881,7 +881,7 @@ exports.getRoomByAppointmentId = asyncHandler(async (req, res) => {
     return res.json({
       success: true,
       data: null,
-      message: 'Kh├┤ng c├│ ph├▓ng video hoß║ít ─æß╗Öng cho lß╗ïch hß║╣n n├áy'
+      message: 'Không có phòng video hoạt động cho lịch hẹn này'
     });
   }
 
@@ -898,7 +898,7 @@ exports.getRoomByAppointmentId = asyncHandler(async (req, res) => {
   if (!isAuthorized) {
     return res.status(403).json({
       success: false,
-      message: 'Bß║ín kh├┤ng c├│ quyß╗ün xem th├┤ng tin ph├▓ng n├áy'
+      message: 'Bạn không có quyền xem thông tin phòng này'
     });
   }
 
@@ -938,7 +938,7 @@ exports.getVideoCallHistory = asyncHandler(async (req, res) => {
     if (!doctor) {
       return res.status(404).json({
         success: false,
-        message: 'Kh├┤ng t├¼m thß║Ñy th├┤ng tin b├íc s─⌐'
+        message: 'Không tìm thấy thông tin bác sĩ'
       });
     }
 
@@ -1050,7 +1050,7 @@ exports.getVideoCallHistoryDetail = asyncHandler(async (req, res) => {
   if (!videoRoom) {
     return res.status(404).json({
       success: false,
-      message: 'Kh├┤ng t├¼m thß║Ñy ph├▓ng video'
+      message: 'Không tìm thấy phòng video'
     });
   }
 
@@ -1071,7 +1071,7 @@ exports.getVideoCallHistoryDetail = asyncHandler(async (req, res) => {
   if (!isAuthorized) {
     return res.status(403).json({
       success: false,
-      message: 'Bß║ín kh├┤ng c├│ quyß╗ün xem th├┤ng tin ph├▓ng n├áy'
+      message: 'Bạn không có quyền xem thông tin phòng này'
     });
   }
 
@@ -1123,7 +1123,7 @@ exports.validateRoomCode = asyncHandler(async (req, res) => {
   if (!code) {
     return res.status(400).json({
       success: false,
-      message: 'Vui l├▓ng cung cß║Ñp m├ú ph├▓ng'
+      message: 'Vui lòng cung cấp mã phòng'
     });
   }
 
@@ -1143,7 +1143,7 @@ exports.validateRoomCode = asyncHandler(async (req, res) => {
   if (!videoRoom) {
     return res.status(404).json({
       success: false,
-      message: 'Kh├┤ng t├¼m thß║Ñy ph├▓ng video hoß║ít ─æß╗Öng vß╗¢i m├ú n├áy'
+      message: 'Không tìm thấy phòng video hoạt động với mã này'
     });
   }
 
@@ -1172,7 +1172,7 @@ exports.joinByRoomCode = asyncHandler(async (req, res) => {
   if (!roomCode) {
     return res.status(400).json({
       success: false,
-      message: 'Vui l├▓ng cung cß║Ñp m├ú ph├▓ng'
+      message: 'Vui lòng cung cấp mã phòng'
     });
   }
 
@@ -1194,7 +1194,7 @@ exports.joinByRoomCode = asyncHandler(async (req, res) => {
   if (!videoRoom) {
     return res.status(404).json({
       success: false,
-      message: 'Kh├┤ng t├¼m thß║Ñy ph├▓ng video hoß║ít ─æß╗Öng vß╗¢i m├ú n├áy'
+      message: 'Không tìm thấy phòng video hoạt động với mã này'
     });
   }
 
@@ -1203,12 +1203,12 @@ exports.joinByRoomCode = asyncHandler(async (req, res) => {
   if (activeParticipants.length >= videoRoom.metadata.maxParticipants) {
     return res.status(400).json({
       success: false,
-      message: 'Ph├▓ng ─æ├ú ─æß║ºy, kh├┤ng thß╗â tham gia'
+      message: 'Phòng đã đầy, không thể tham gia'
     });
   }
 
   // Determine user role
-  let role = 'viewer';
+  let role = 'patient';
   let participantName = req.user.fullName || 'Unknown';
 
   const doctorUserId = videoRoom.doctorId && videoRoom.doctorId.user ?
@@ -1218,20 +1218,20 @@ exports.joinByRoomCode = asyncHandler(async (req, res) => {
 
   if (doctorUserId && doctorUserId.toString() === userId) {
     role = 'doctor';
-    participantName = `B├íc s─⌐ ${req.user.fullName}`;
+    participantName = `Bác sĩ ${req.user.fullName}`;
   } else if (patientIdStr && patientIdStr === userId) {
     role = 'patient';
-    participantName = `Bß╗çnh nh├ón ${req.user.fullName}`;
+    participantName = `Bệnh nhân ${req.user.fullName}`;
   } else if (req.user.role === 'admin' || req.user.roleType === 'admin') {
     role = 'admin';
     participantName = `Admin ${req.user.fullName}`;
   } else if (req.user.role === 'doctor' || req.user.roleType === 'doctor') {
     role = 'doctor';
-    participantName = `B├íc s─⌐ ${req.user.fullName}`;
+    participantName = `Bác sĩ ${req.user.fullName}`;
   } else {
-    // Default to viewer for public rooms
-    role = 'viewer';
-    participantName = req.user.fullName || 'Kh├ích';
+    // Default to patient for public rooms
+    role = 'patient';
+    participantName = req.user.fullName || 'Khách';
   }
 
   // Generate access token
@@ -1292,7 +1292,7 @@ exports.joinByRoomCode = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Tham gia ph├▓ng th├ánh c├┤ng',
+    message: 'Tham gia phòng thành công',
     data: {
       token,
       wsUrl: process.env.LIVEKIT_WS_URL,
@@ -1371,7 +1371,7 @@ exports.getActiveRooms = asyncHandler(async (req, res) => {
     console.error('Error fetching active rooms:', error);
     res.status(500).json({
       success: false,
-      message: 'Kh├┤ng thß╗â lß║Ñy danh s├ích ph├▓ng hoß║ít ─æß╗Öng',
+      message: 'Không thể lấy danh sách phòng hoạt động',
       error: error.message
     });
   }
