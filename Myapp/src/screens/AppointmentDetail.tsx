@@ -920,6 +920,89 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     });
   };
 
+  const handleChatWithDoctor = async () => {
+    try {
+      if (!appointment) return;
+      
+      // Get doctor's user ID
+      const doctorUser = appointment?.doctorId?.user || (appointment?.doctorId as any)?.user;
+      const doctorUserId = (doctorUser as any)?._id || doctorUser;
+      
+      if (!doctorUserId) {
+        Alert.alert('Lỗi', 'Không thể tìm thấy thông tin bác sĩ');
+        return;
+      }
+
+      // Create or get existing conversation
+      const response = await apiService.createConversation({
+        participantId: doctorUserId,
+        appointmentId: appointment._id
+      });
+
+      if (response?.success && response?.data?._id) {
+        // Navigate to ChatDetail screen
+        navigation.navigate('ChatDetail', {
+          conversationId: response.data._id,
+          conversation: response.data
+        });
+      } else {
+        Alert.alert('Lỗi', response?.message || 'Không thể bắt đầu trò chuyện. Vui lòng thử lại sau.');
+      }
+    } catch (error: any) {
+      console.error('Error starting chat:', error);
+      Alert.alert('Lỗi', error?.response?.data?.message || 'Không thể bắt đầu trò chuyện. Vui lòng thử lại sau.');
+    }
+  };
+
+  const handleShareToChat = async () => {
+    try {
+      if (!appointment) return;
+      
+      const doctorUser = appointment?.doctorId?.user || (appointment?.doctorId as any)?.user;
+      const doctorUserId = (doctorUser as any)?._id || doctorUser;
+      
+      if (!doctorUserId) {
+        Alert.alert('Lỗi', 'Không thể tìm thấy thông tin bác sĩ');
+        return;
+      }
+
+      // Create or get conversation
+      const response = await apiService.createConversation({
+        participantId: doctorUserId,
+        appointmentId: appointment._id
+      });
+
+      if (response?.success && response?.data?._id) {
+        const conversationId = response.data._id;
+        
+        // Send appointment to chat
+        const shareResponse = await apiService.sendAppointmentToChat(conversationId, appointment._id);
+        
+        if (shareResponse?.success) {
+          Alert.alert('Thành công', 'Đã chia sẻ lịch hẹn vào chat', [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate to ChatDetail screen
+                navigation.navigate('ChatDetail', {
+                  conversationId: conversationId,
+                  conversation: response.data
+                });
+              },
+            },
+          ]);
+        } else {
+          Alert.alert('Lỗi', 'Không thể chia sẻ lịch hẹn');
+        }
+      } else {
+        Alert.alert('Lỗi', response?.message || 'Không thể tạo cuộc trò chuyện');
+      }
+    } catch (error: any) {
+      console.error('Error sharing appointment:', error);
+      Alert.alert('Lỗi', 'Không thể chia sẻ lịch hẹn');
+    }
+  };
+
   const isPastAppointment = (appt: Appointment | null) => {
     if (!appt?.appointmentDate) return false;
     try {
@@ -1266,20 +1349,14 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
               <>
                 <TouchableOpacity
                   style={styles.actionButton}
-                  onPress={() => {
-                    // TODO: Implement chat with doctor
-                    Alert.alert('Thông báo', 'Tính năng chat với bác sĩ đang được phát triển');
-                  }}
+                  onPress={handleChatWithDoctor}
                 >
                   <Ionicons name="chatbubble-outline" size={18} color="#10b981" />
                   <Text style={styles.actionButtonText}>Chat</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionButton}
-                  onPress={() => {
-                    // TODO: Implement share to chat
-                    Alert.alert('Thông báo', 'Tính năng chia sẻ vào chat đang được phát triển');
-                  }}
+                  onPress={handleShareToChat}
                 >
                   <Ionicons name="share-outline" size={18} color="#2563eb" />
                   <Text style={styles.actionButtonText}>Chia sẻ</Text>

@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { ServiceItem, Doctor, apiService } from '../services/api';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -29,6 +30,7 @@ export default function ServiceDetailScreen() {
   const route = useRoute();
   const { serviceId } = route.params as { serviceId: string };
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   
   const [service, setService] = useState<ServiceItem | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -97,7 +99,11 @@ export default function ServiceDetailScreen() {
   };
 
   const handleBookService = () => {
-    (navigation as any).navigate('Booking');
+    if (!user) {
+      (navigation as any).navigate('Login');
+    } else {
+      (navigation as any).navigate('Booking');
+    }
   };
 
 

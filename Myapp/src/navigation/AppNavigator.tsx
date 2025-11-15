@@ -23,10 +23,12 @@ import FavoriteDoctorsScreen from '../screens/FavoriteDoctors';
 import AppointmentDetailScreen from '../screens/AppointmentDetail';
 import BookingNavigator from './BookingNavigator';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { SocketProvider } from '../contexts/SocketContext';
 import PaymentWebView from '../screens/PaymentWebView';
 import PaymentResultScreen from '../screens/PaymentResult';
 import RescheduleScreen from '../screens/Reschedule';
 import PaymentHistoryScreen from '../screens/PaymentHistory';
+import ChatDetailScreen from '../screens/ChatDetail';
 
 function RootNavigator() {
   const { loading } = useAuth();
@@ -61,6 +63,7 @@ function RootNavigator() {
       <Stack.Screen name="PaymentResult" component={PaymentResultScreen} />
       <Stack.Screen name="Reschedule" component={RescheduleScreen} />
       <Stack.Screen name="PaymentHistory" component={PaymentHistoryScreen} />
+      <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
     </Stack.Navigator>
   );
 }
@@ -92,6 +95,7 @@ export type RootStackParamList = {
   PaymentResult: { orderId?: string; resultCode?: string; paymentId?: string; PayerID?: string; mode?: 'momo' | 'paypal'; appointmentId?: string };
   Reschedule: { appointmentId: string; doctorId: string; currentDate: string };
   PaymentHistory: undefined;
+  ChatDetail: { conversationId: string; conversation?: any };
 };
 
 // const Stack = createStackNavigator<RootStackParamList>();
@@ -99,9 +103,11 @@ export type RootStackParamList = {
 export default function AppNavigator() {
   return (
     <AuthProvider>
-      <NavigationContainer>
-        <RootNavigator />
-      </NavigationContainer>
+      <SocketProvider>
+        <NavigationContainer>
+          <RootNavigator />
+        </NavigationContainer>
+      </SocketProvider>
     </AuthProvider>
   );
 }

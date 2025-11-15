@@ -292,12 +292,20 @@ export default function Home({ navigation }: Props) {
 
   const handleFacilityBookingPress = (facility: Hospital) => {
     console.log('Facility booking pressed:', facility.name);
-    navigation.navigate('Booking');
+    if (!user) {
+      navigation.navigate('Login');
+    } else {
+      navigation.navigate('Booking');
+    }
   };
 
   const handleSpecialtyBookingPress = (specialty: Specialty) => {
     console.log('Specialty booking pressed:', specialty.name);
-    navigation.navigate('Booking');
+    if (!user) {
+      navigation.navigate('Login');
+    } else {
+      navigation.navigate('Booking');
+    }
   };
 
   const handleDoctorConsultPress = (doctor: any) => {
@@ -413,7 +421,11 @@ export default function Home({ navigation }: Props) {
                     style={styles.bookingButton}
                     onPress={(e) => {
                       e.stopPropagation();
-                      navigation.navigate('Booking');
+                      if (!user) {
+                        navigation.navigate('Login');
+                      } else {
+                        navigation.navigate('Booking');
+                      }
                     }}
                   >
                     <Text style={styles.bookingButtonText}>Đặt khám</Text>

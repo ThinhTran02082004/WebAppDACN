@@ -15,6 +15,7 @@ import {
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { apiService, Hospital } from '../services/api';
 import { AppIcons, IconColors, IconSizes } from '../config/icons';
+import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -29,6 +30,7 @@ interface FacilityDetailProps {
 
 export default function FacilityDetail({ route, navigation }: FacilityDetailProps) {
   const { id } = route.params;
+  const { user } = useAuth();
   const [hospital, setHospital] = useState<Hospital | null>(null);
   const [loading, setLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
@@ -114,7 +116,11 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
 
   const handleBookAppointment = () => {
     console.log('Book appointment at hospital:', hospital?._id);
-    navigation.navigate('Booking');
+    if (!user) {
+      navigation.navigate('Login');
+    } else {
+      navigation.navigate('Booking');
+    }
   };
 
   if (loading) {

@@ -19,6 +19,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Specialty, Doctor, ServiceItem, apiService } from '../services/api';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { AppIcons } from '../config/icons';
+import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -27,6 +28,7 @@ export default function SpecialtyDetailScreen() {
   const route = useRoute();
   const { specialtyId } = route.params as { specialtyId: string };
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   
   const [specialty, setSpecialty] = useState<Specialty | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -385,7 +387,13 @@ export default function SpecialtyDetailScreen() {
         <View style={[styles.fixedBookingContainer, { paddingBottom: insets.bottom + 12 }]}>
           <TouchableOpacity 
             style={styles.fixedBookingButton}
-            onPress={() => navigation.navigate('Booking')}
+            onPress={() => {
+              if (!user) {
+                navigation.navigate('Login');
+              } else {
+                navigation.navigate('Booking');
+              }
+            }}
           >
             <Ionicons name="calendar" size={20} color="#fff" />
             <Text style={styles.bookingButtonText}>Đặt khám ngay</Text>

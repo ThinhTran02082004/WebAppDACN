@@ -702,6 +702,61 @@ class ApiService {
       this.handleError(e);
     }
   }
+
+  // Chat APIs
+  async getConversations(): Promise<ApiResponse<any[]>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get('/chat/conversations');
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getConversationMessages(conversationId: string): Promise<ApiResponse<any[]>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/chat/conversations/${conversationId}/messages`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async sendMessage(conversationId: string, content: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post(`/chat/conversations/${conversationId}/messages`, {
+        content
+      });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async createConversation(params: { participantId: string; appointmentId?: string }): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post('/chat/conversations', params);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async sendAppointmentToChat(conversationId: string, appointmentId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post(`/chat/conversations/${conversationId}/send-appointment`, {
+        appointmentId
+      });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
 }
 
 export const apiService = new ApiService();
