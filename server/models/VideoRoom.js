@@ -6,22 +6,6 @@ const videoRoomSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-<<<<<<< HEAD
-  appointmentId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Appointment',
-    required: true
-  },
-  doctorId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Doctor',
-    required: true
-  },
-  patientId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-=======
   roomCode: {
     type: String,
     unique: true,
@@ -49,7 +33,6 @@ const videoRoomSchema = new mongoose.Schema({
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
   },
   status: {
     type: String,
@@ -97,11 +80,7 @@ const videoRoomSchema = new mongoose.Schema({
   metadata: {
     maxParticipants: {
       type: Number,
-<<<<<<< HEAD
-      default: 2
-=======
       default: 10
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
     },
     enableRecording: {
       type: Boolean,
@@ -126,9 +105,6 @@ const videoRoomSchema = new mongoose.Schema({
 });
 
 // Indexes
-<<<<<<< HEAD
-videoRoomSchema.index({ appointmentId: 1 });
-=======
 // Note: roomCode already has unique index from field definition
 videoRoomSchema.index(
   { appointmentId: 1 },
@@ -138,15 +114,13 @@ videoRoomSchema.index(
     partialFilterExpression: { status: { $in: ['waiting', 'active'] } }
   }
 );
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
+
 videoRoomSchema.index({ doctorId: 1 });
 videoRoomSchema.index({ patientId: 1 });
 videoRoomSchema.index({ status: 1 });
 videoRoomSchema.index({ createdAt: -1 });
-<<<<<<< HEAD
-=======
+
 videoRoomSchema.index({ meetingType: 1, status: 1 });
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
 
 // Virtual for room duration calculation
 videoRoomSchema.virtual('calculatedDuration').get(function() {
@@ -185,8 +159,6 @@ videoRoomSchema.methods.endRoom = function() {
   return this.save();
 };
 
-<<<<<<< HEAD
-=======
 // Static method to generate unique room code
 videoRoomSchema.statics.generateRoomCode = async function() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -228,8 +200,6 @@ videoRoomSchema.pre('save', async function(next) {
   }
   next();
 });
-
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
 const VideoRoom = mongoose.model('VideoRoom', videoRoomSchema);
 
 module.exports = VideoRoom;

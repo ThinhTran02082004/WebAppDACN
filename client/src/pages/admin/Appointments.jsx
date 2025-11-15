@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FaEdit, FaSearch, FaFilter, FaDownload, FaCalendarAlt, FaUserMd, FaUser, FaHospital } from 'react-icons/fa';
 import api from '../../utils/api';
 import { toast } from 'react-toastify';
-
+import { useNavigate } from 'react-router-dom';
 
 const Appointments = () => {
   const navigate = useNavigate();
@@ -326,7 +326,7 @@ const Appointments = () => {
   };
 
   return (
-    <div className="w-full">
+    <div className="min-h-screen min-w-screen">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Quản lý lịch hẹn</h1>
       </div>

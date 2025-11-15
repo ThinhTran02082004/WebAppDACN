@@ -134,9 +134,10 @@ if (!/^https?:\/\//i.test(QDRANT_URL)) {
 
 // console.log(`[Qdrant] Using URL: ${QDRANT_URL}`);
 
-// Tên 2 collection của chúng ta
+// Tên 3 collection của chúng ta
 const SPAM_COLLECTION = "irrelevant_questions";
 const CACHE_COLLECTION = "common_answers";
+const MAPPER_COLLECTION = "specialty_mapper";
 
 // 2. Khởi tạo Client
 const qdrantClient = new QdrantClient({
@@ -164,6 +165,12 @@ const initializeCollections = async () => {
       console.log(`Đang tạo collection (Bộ đệm): ${CACHE_COLLECTION}...`);
       await qdrantClient.recreateCollection(CACHE_COLLECTION, vectorConfig);
       console.log("Tạo collection (Bộ đệm) thành công!");
+    }
+
+    if (!collectionNames.includes(MAPPER_COLLECTION)) {
+      console.log(`Đang tạo collection (Bộ ánh xạ chuyên khoa): ${MAPPER_COLLECTION}...`);
+      await qdrantClient.recreateCollection(MAPPER_COLLECTION, vectorConfig);
+      console.log("Tạo collection (Bộ ánh xạ chuyên khoa) thành công!");
     }
     
     console.log("Qdrant collections đã sẵn sàng.");
@@ -222,11 +229,74 @@ const isIrrelevant = async (userPrompt) => {
 };
 
 /**
+ * Kiểm tra xem câu trả lời có chứa thông tin cụ thể về lịch hẹn không
+ * @param {string} aiResponse - Câu trả lời của AI
+ * @returns {boolean} - True nếu có thông tin cụ thể
+ */
+const hasSpecificAppointmentInfo = (aiResponse) => {
+  if (!aiResponse) return false;
+  
+  const lowerResponse = aiResponse.toLowerCase();
+  
+  // Kiểm tra có bookingCode (format: APT-XXXXX, ví dụ: APT-OTH3WP63)
+  if (/apt-[a-z0-9]{6,10}/i.test(aiResponse)) {
+    return true;
+  }
+  
+  // Kiểm tra có ngày cụ thể (format: dd/mm/yyyy hoặc dd-mm-yyyy)
+  if (/\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/.test(aiResponse)) {
+    return true;
+  }
+  
+  // Kiểm tra có giờ cụ thể (format: HH:MM)
+  if (/\d{1,2}:\d{2}/.test(aiResponse)) {
+    // Nhưng chỉ coi là cụ thể nếu có kèm theo "mã đặt lịch" hoặc "bác sĩ" hoặc "bệnh viện"
+    if (lowerResponse.includes('mã đặt lịch') || 
+        lowerResponse.includes('bác sĩ') || 
+        lowerResponse.includes('bệnh viện') ||
+        lowerResponse.includes('bookingcode')) {
+      return true;
+    }
+  }
+  
+  return false;
+};
+
+/**
+ * Kiểm tra xem prompt có phải là câu trả lời ngắn/xác nhận không
+ * @param {string} userPrompt - Câu hỏi của người dùng
+ * @returns {boolean} - True nếu là câu trả lời ngắn
+ */
+const isShortConfirmation = (userPrompt) => {
+  if (!userPrompt) return false;
+  
+  const trimmed = userPrompt.trim().toLowerCase();
+  const shortConfirmations = [
+    'ok', 'okay', 'đúng', 'đúng rồi', 'đúng vậy', 'chắc chắn', 'có', 'yes', 
+    'yep', 'yeah', 'đồng ý', 'tôi đồng ý', 'tôi chọn', 'chọn', 'l1', 'l2', 
+    'l3', 'l4', 'l5', 'l6', 'l7', 'l8', 'l9', 'l10'
+  ];
+  
+  // Nếu prompt ngắn hơn 10 ký tự và là một trong các từ xác nhận
+  if (trimmed.length <= 10 && shortConfirmations.includes(trimmed)) {
+    return true;
+  }
+  
+  return false;
+};
+
+/**
  * 6. LỚP 2: Tìm câu trả lời trong cache
  * @returns {Promise<string|null>} - Trả về câu trả lời nếu tìm thấy, ngược lại null
  */
 const findCachedAnswer = async (userPrompt) => {
   try {
+    // KHÔNG cache cho các câu trả lời ngắn/xác nhận (có thể là trong flow đặt lịch)
+    if (isShortConfirmation(userPrompt)) {
+      console.log(`[Qdrant Cache] BỎ QUA CACHE cho câu trả lời ngắn/xác nhận: "${userPrompt}"`);
+      return null;
+    }
+    
     const userVector = await getEmbedding(userPrompt);
     const SIMILARITY_THRESHOLD = 0.95; // Ngưỡng cache (phải cao hơn, gần như giống hệt)
 
@@ -238,8 +308,16 @@ const findCachedAnswer = async (userPrompt) => {
     });
 
     if (searchResult.length > 0) {
+      const cachedResponse = searchResult[0].payload.aiResponse;
+      
+      // KIỂM TRA: Nếu câu trả lời cache có thông tin cụ thể về lịch hẹn, KHÔNG trả về
+      if (hasSpecificAppointmentInfo(cachedResponse)) {
+        console.log(`[Qdrant Cache] BỎ QUA CACHE vì có thông tin cụ thể về lịch hẹn: "${userPrompt}"`);
+        return null;
+      }
+      
       console.log(`[Qdrant Cache] TRÚNG CACHE: "${userPrompt}" (Score: ${searchResult[0].score})`);
-      return searchResult[0].payload.aiResponse; // Trả về câu trả lời đã lưu
+      return cachedResponse; // Trả về câu trả lời đã lưu
     }
     return null; // KHÔNG CÓ TRONG CACHE
   } catch (error) {
@@ -253,6 +331,19 @@ const findCachedAnswer = async (userPrompt) => {
  */
 const cacheAnswer = async (userPrompt, aiResponse) => {
   try {
+    // KHÔNG cache nếu:
+    // 1. Câu trả lời có thông tin cụ thể về lịch hẹn (bookingCode, ngày giờ cụ thể)
+    // 2. Prompt là câu trả lời ngắn/xác nhận (có thể là trong flow đặt lịch)
+    if (hasSpecificAppointmentInfo(aiResponse)) {
+      console.log(`[Qdrant Cache] KHÔNG LƯU CACHE vì có thông tin cụ thể về lịch hẹn: "${userPrompt}"`);
+      return;
+    }
+    
+    if (isShortConfirmation(userPrompt)) {
+      console.log(`[Qdrant Cache] KHÔNG LƯU CACHE cho câu trả lời ngắn/xác nhận: "${userPrompt}"`);
+      return;
+    }
+    
     const vector = await getEmbedding(userPrompt);
     await qdrantClient.upsert(CACHE_COLLECTION, {
       wait: true,
@@ -268,10 +359,45 @@ const cacheAnswer = async (userPrompt, aiResponse) => {
   }
 };
 
+/**
+ * LỚP 4: Tìm chuyên khoa từ triệu chứng (Bộ ánh xạ)
+ * @param {string} symptomQuery - Triệu chứng hoặc từ khóa người dùng nhập (ví dụ: "tiêm vaccine", "đau tim")
+ * @returns {Promise<{specialtyId: string, specialtyName: string} | null>}
+ */
+const findSpecialtyMapping = async (symptomQuery) => {
+  try {
+    const userVector = await getEmbedding(symptomQuery);
+    const SIMILARITY_THRESHOLD = 0.8; // Ngưỡng an toàn
+
+    const searchResult = await qdrantClient.search(MAPPER_COLLECTION, {
+      vector: userVector,
+      limit: 1,
+      with_payload: true,
+      score_threshold: SIMILARITY_THRESHOLD,
+    });
+
+    if (searchResult.length > 0) {
+      const mapping = searchResult[0].payload;
+      console.log(`[Qdrant Mapper] Đã map: "${symptomQuery}" -> "${mapping.specialtyName}" (Score: ${searchResult[0].score.toFixed(3)})`);
+      return { 
+        specialtyId: mapping.specialtyId, 
+        specialtyName: mapping.specialtyName 
+      };
+    }
+    
+    console.log(`[Qdrant Mapper] Không tìm thấy mapping cho: "${symptomQuery}"`);
+    return null; // Không tìm thấy
+  } catch (error) {
+    console.error("Lỗi khi Qdrant (tìm bộ ánh xạ):", error);
+    return null;
+  }
+};
+
 module.exports = {
   isIrrelevant,
   findCachedAnswer,
   cacheAnswer,
   initializeCollections, // Sửa tên hàm
-  addQuestionsToQdrant
+  addQuestionsToQdrant,
+  findSpecialtyMapping // Export hàm mới
 };

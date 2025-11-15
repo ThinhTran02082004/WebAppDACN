@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import React, { useEffect, useState } from 'react';
-=======
 import React, { useCallback, useEffect, useRef, useState } from 'react';
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
 import {
   LiveKitRoom,
   VideoConference,
@@ -15,23 +11,6 @@ import {
 import '@livekit/components-styles';
 import { Track } from 'livekit-client';
 import api from '../../utils/api';
-<<<<<<< HEAD
-import { FaTimes, FaSpinner } from 'react-icons/fa';
-import './VideoRoom.css';
-
-const VideoRoom = ({ roomId, onClose, userRole }) => {
-  const [token, setToken] = useState(null);
-  const [roomInfo, setRoomInfo] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [connected, setConnected] = useState(false);
-
-  useEffect(() => {
-    joinRoom();
-  }, [roomId]);
-
-  const joinRoom = async () => {
-=======
 import { FaTimes, FaSpinner, FaCopy, FaCheck } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import './VideoRoom.css';
@@ -148,8 +127,6 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
       setLoading(false);
       return;
     }
-
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
     try {
       setLoading(true);
       const response = await api.get(`/video-rooms/join/${roomId}`);
@@ -166,12 +143,6 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
     } finally {
       setLoading(false);
     }
-<<<<<<< HEAD
-  };
-
-  const handleDisconnected = () => {
-    setConnected(false);
-=======
   }, [roomId, initialToken, initialRoomInfo]);
 
   useEffect(() => {
@@ -201,7 +172,6 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
     setConnected(false);
     setRoomEnded(true);
     notifyLeave();
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
     console.log('Disconnected from room');
   };
 
@@ -211,8 +181,6 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
   };
 
   const handleLeave = async () => {
-<<<<<<< HEAD
-=======
     if (meetingMode) {
       const targetMeetingId = roomInfo?.meetingId || roomIdRef.current;
 
@@ -236,23 +204,12 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
       return;
     }
 
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
     if (userRole === 'doctor' && roomInfo) {
       // If doctor leaves, optionally end the room
       const confirmEnd = window.confirm('Bạn có muốn kết thúc cuộc gọi cho tất cả người tham gia không?');
       if (confirmEnd) {
         try {
           await api.post(`/video-rooms/${roomId}/end`);
-<<<<<<< HEAD
-        } catch (error) {
-          console.error('Error ending room:', error);
-        }
-      }
-    }
-    onClose();
-  };
-
-=======
           hasLeftRef.current = true;
         } catch (error) {
           console.error('Error ending room:', error);
@@ -277,8 +234,6 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
       });
     }
   };
-
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
   if (loading) {
     return (
       <div className="video-room-container">
@@ -310,13 +265,9 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
     <div className="video-room-container">
       <div className="video-room-header">
         <div className="room-info">
-<<<<<<< HEAD
-          <h3 className="text-lg font-semibold text-white">Phòng video khám bệnh</h3>
-=======
           <h3 className="text-lg font-semibold text-white">
             {roomInfo?.meetingType === 'internal' ? 'Cuộc họp nội bộ' : 'Phòng video khám bệnh'}
           </h3>
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
           {roomInfo?.appointmentInfo && (
             <div className="text-sm text-gray-200">
               <span>Bác sĩ: {roomInfo.appointmentInfo.doctorName}</span>
@@ -324,8 +275,6 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
               <span>Bệnh nhân: {roomInfo.appointmentInfo.patientName}</span>
             </div>
           )}
-<<<<<<< HEAD
-=======
           {roomInfo?.roomCode && (
             <div className="flex items-center gap-2 mt-1">
               <span className="text-sm text-gray-200">
@@ -341,7 +290,6 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
               </button>
             </div>
           )}
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
         </div>
         <button 
           onClick={handleLeave}
@@ -351,12 +299,7 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
           <FaTimes />
         </button>
       </div>
-
-<<<<<<< HEAD
-      {token && roomInfo && (
-=======
       {token && roomInfo && !roomEnded && (
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
         <LiveKitRoom
           video={true}
           audio={true}
@@ -371,8 +314,6 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
           <RoomAudioRenderer />
         </LiveKitRoom>
       )}
-<<<<<<< HEAD
-=======
       {roomEnded && (
         <div className="video-room-ended">
           <p className="text-lg text-gray-600 mb-4">Cuộc gọi video đã kết thúc</p>
@@ -384,7 +325,6 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
           </button>
         </div>
       )}
->>>>>>> 78151d69be06d1d5326202c25c4ce002ec62c673
     </div>
   );
 };

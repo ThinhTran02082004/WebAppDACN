@@ -113,6 +113,7 @@ import UserVideoCallHistory from './pages/user/VideoCallHistory';
 import UserChat from './pages/user/Chat';
 import DoctorChat from './pages/doctor/Chat';
 import ChatWidget from './components/chat/ChatWidget';
+import AIChatPopup from './components/AIChatPopup';
 
 function AppContent() {
   const { isAuthenticated, loading, user } = useAuth();
@@ -275,6 +276,9 @@ function AppContent() {
 
       {/* Video call notification for all authenticated users */}
       {isAuthenticated && <VideoCallNotification />}
+      
+      {/* AI Chat Popup - Available for all users (authenticated or not) */}
+      <AIChatPopup />
     </div>
   );
 }
