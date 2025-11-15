@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { FaSearch, FaCircle } from 'react-icons/fa';
+import { FaSearch, FaCircle, FaDoorOpen } from 'react-icons/fa';
 import { useSocket } from '../../context/SocketContext';
+import RoomCodeInput from '../VideoRoom/RoomCodeInput';
+import VideoRoom from '../VideoRoom/VideoRoom';
+import { useAuth } from '../../context/AuthContext';
 
 const ConversationList = ({ conversations, onSelectConversation, selectedConversationId, currentUserId }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredConversations, setFilteredConversations] = useState(conversations);
+  const [showRoomCodeInput, setShowRoomCodeInput] = useState(false);
+  const [activeVideoRoom, setActiveVideoRoom] = useState(null);
   const { isUserOnline } = useSocket();
+  const { user: authUser } = useAuth();
 
   useEffect(() => {
     if (searchTerm.trim()) {
@@ -41,8 +47,58 @@ const ConversationList = ({ conversations, onSelectConversation, selectedConvers
     return conv.unreadCount.get ? conv.unreadCount.get(currentUserId) : conv.unreadCount[currentUserId] || 0;
   };
 
+  const handleJoinRoom = (roomData) => {
+    setActiveVideoRoom(roomData.roomId);
+    setShowRoomCodeInput(false);
+  };
+
+  const handleCloseVideoRoom = () => {
+    setActiveVideoRoom(null);
+  };
+
+  // Show video room if active
+  if (activeVideoRoom) {
+    return <VideoRoom roomId={activeVideoRoom} onClose={handleCloseVideoRoom} userRole={authUser?.role} />;
+  }
+
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
+      {/* Room Code Input Section - Above Search */}
+      <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <button
+          onClick={() => setShowRoomCodeInput(!showRoomCodeInput)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-white border-2 border-blue-300 rounded-lg hover:bg-blue-50 hover:border-blue-400 transition-all duration-200 shadow-sm hover:shadow-md group"
+        >
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+              <FaDoorOpen className="text-blue-600 text-lg" />
+            </div>
+            <div className="text-left">
+              <p className="font-semibold text-gray-800 text-sm">Tham gia phòng video</p>
+              <p className="text-xs text-gray-500">Nhập mã phòng để tham gia</p>
+            </div>
+          </div>
+          <svg 
+            className={`w-5 h-5 text-blue-600 transition-transform duration-200 ${showRoomCodeInput ? 'rotate-180' : ''}`}
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {/* Room Code Input Form */}
+        {showRoomCodeInput && (
+          <div className="mt-3 p-3 bg-white border border-blue-200 rounded-lg shadow-sm animate-slideDown">
+            <RoomCodeInput 
+              onJoinRoom={handleJoinRoom}
+              compact={true}
+            />
+          </div>
+        )}
+      </div>
+
       {/* Search bar */}
       <div className="p-4 border-b border-gray-200">
         <div className="relative">

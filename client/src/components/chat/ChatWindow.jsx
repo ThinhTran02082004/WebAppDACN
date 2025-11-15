@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FaPaperPlane, FaCircle, FaVideo, FaPaperclip, FaCalendarAlt, FaDoorOpen } from 'react-icons/fa';
+import { FaPaperPlane, FaCircle, FaVideo, FaPaperclip, FaCalendarAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import MessageItem from './MessageItem';
 import AppointmentSelectorModal from './AppointmentSelectorModal';
 import MediaPreviewModal from './MediaPreviewModal';
-import RoomCodeInput from '../VideoRoom/RoomCodeInput';
 import VideoRoom from '../VideoRoom/VideoRoom';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
@@ -23,7 +22,6 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
   const [mediaCaption, setMediaCaption] = useState('');
   const [uploading, setUploading] = useState(false);
   const [activeVideoRoom, setActiveVideoRoom] = useState(null);
-  const [showRoomCodeInput, setShowRoomCodeInput] = useState(false);
   const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -42,9 +40,9 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
     if (conversationId) {
       // Reset marked messages when switching conversations
       markedMessagesRef.current.clear();
-      
+
       fetchMessages();
-      
+
       // Join conversation room for real-time updates
       if (isConnected) {
         emit('join_conversation', { conversationId });
@@ -66,7 +64,7 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
       if (message.conversationId === conversationId) {
         setMessages(prev => [...prev, message]);
         scrollToBottom();
-        
+
         // Mark as read if it's not from current user and not already marked
         const incomingSenderId = typeof message.senderId === 'object' ? message.senderId?._id : message.senderId;
         if (incomingSenderId && resolvedCurrentUserId && incomingSenderId !== resolvedCurrentUserId) {
@@ -150,7 +148,7 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
         const fetchedMessages = response.data.data;
         setMessages(fetchedMessages);
         setTimeout(() => scrollToBottom('auto'), 0);
-        
+
         // Mark unread messages as read (only if not already marked)
         const unreadMessageIds = fetchedMessages
           .filter(msg => {
@@ -160,7 +158,7 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
             return isUnread && notMarked;
           })
           .map(msg => msg._id);
-        
+
         if (unreadMessageIds.length > 0) {
           console.log('[ChatWindow] Marking', unreadMessageIds.length, 'messages as read');
           markMessagesAsRead(unreadMessageIds);
@@ -192,12 +190,12 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
   const handleTyping = () => {
     if (isConnected && receiverId) {
       emit('typing_start', { conversationId, receiverId });
-      
+
       // Clear previous timeout
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      
+
       // Stop typing after 2 seconds of no input
       typingTimeoutRef.current = setTimeout(() => {
         emit('typing_stop', { conversationId, receiverId });
@@ -207,19 +205,19 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    
+
     if (!newMessage.trim() || sending) return;
 
     try {
       setSending(true);
-      
+
       const response = await api.post(`/chat/conversations/${conversationId}/messages`, {
         content: newMessage.trim()
       });
 
       if (response.data.success) {
         setNewMessage('');
-        
+
         // Stop typing indicator
         if (isConnected && receiverId) {
           emit('typing_stop', { conversationId, receiverId });
@@ -247,7 +245,7 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
     // Check file type
     const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
-    
+
     if (!isImage && !isVideo) {
       toast.error('Chỉ hỗ trợ file ảnh và video');
       return;
@@ -257,7 +255,7 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
     const preview = URL.createObjectURL(file);
     setSelectedMedia({ file, preview, type: file.type });
     setShowMediaPreview(true);
-    
+
     // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -373,15 +371,6 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
 
         {/* Actions */}
         <div className="flex items-center space-x-2">
-          {/* Join Room by Code Button */}
-          <button
-            onClick={() => setShowRoomCodeInput(!showRoomCodeInput)}
-            className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-            title="Tham gia phòng bằng mã"
-          >
-            <FaDoorOpen className="w-5 h-5" />
-          </button>
-          
           {onClose && (
             <button
               onClick={onClose}
@@ -392,28 +381,6 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
           )}
         </div>
       </div>
-
-      {/* Room Code Input Modal */}
-      {showRoomCodeInput && (
-        <div className="px-4 py-3 bg-blue-50 border-b border-blue-200">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-blue-900">Tham gia phòng video bằng mã</h3>
-            <button
-              onClick={() => setShowRoomCodeInput(false)}
-              className="text-blue-600 hover:text-blue-800 text-sm"
-            >
-              ✕
-            </button>
-          </div>
-          <RoomCodeInput 
-            onJoinRoom={(data) => {
-              handleJoinRoom(data);
-              setShowRoomCodeInput(false);
-            }} 
-            compact={true}
-          />
-        </div>
-      )}
 
       {/* Messages */}
       <div
@@ -434,7 +401,7 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
               // Safely compare senderId with current user
               const messageSenderId = typeof message.senderId === 'object' ? message.senderId?._id : message.senderId;
               const isOwnMessage = resolvedCurrentUserId && messageSenderId === resolvedCurrentUserId;
-              
+
               return (
                 <MessageItem
                   key={message._id}
@@ -445,7 +412,7 @@ const ChatWindow = ({ conversation, currentUserId, onClose }) => {
                 />
               );
             })}
-            
+
             {/* Typing indicator */}
             {isTyping && (
               <div className="flex items-center space-x-2 text-gray-500 text-sm mb-4">
