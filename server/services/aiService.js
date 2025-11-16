@@ -52,6 +52,57 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
         toolCalled = true; 
         console.log(`[AI Request] Yêu cầu gọi hàm: ${call.name}`);
         
+        // ⚠️ INTERCEPT: Nếu AI gọi findAvailableSlots nhưng user đang chọn slot (L01, L02, etc.)
+        // thì redirect sang bookAppointment
+        if (call.name === 'findAvailableSlots') {
+            const slotPattern = /l\s*0?\d{1,2}/i;
+            if (slotPattern.test(userPrompt)) {
+                console.log(`[AI Service] INTERCEPT: User đang chọn slot "${userPrompt}" nhưng AI gọi findAvailableSlots. Tìm slotId từ cache...`);
+                
+                // Lấy availableSlots từ cache
+                const cache = require('./cacheService');
+                const availableSlots = cache.getAvailableSlots(sessionId);
+                
+                if (availableSlots && Array.isArray(availableSlots) && availableSlots.length > 0) {
+                    // Extract reference code từ userPrompt (L01, L1, L02, etc.)
+                    const refMatch = userPrompt.match(/l\s*0?(\d{1,2})/i);
+                    if (refMatch) {
+                        const slotNum = parseInt(refMatch[1]);
+                        const refCode = `L${String(slotNum).padStart(2, '0')}`;
+                        
+                        const foundSlot = availableSlots.find(s => s.referenceCode === refCode);
+                        if (foundSlot) {
+                            // Redirect sang bookAppointment
+                            console.log(`[AI Service] Tìm thấy slot ${refCode} trong cache: slotId=${foundSlot.slotId}, serviceId=${foundSlot.serviceId || 'null'}`);
+                            console.log(`[AI Service] Redirect sang bookAppointment`);
+                            const bookArgs = {
+                                slotId: foundSlot.slotId,
+                                serviceId: foundSlot.serviceId || undefined,
+                                sessionId: sessionId
+                            };
+                            
+                            try {
+                                const bookResult = await availableTools.bookAppointment(bookArgs);
+                                result = await chat.sendMessage(
+                                    JSON.stringify({
+                                        functionResponse: { name: 'bookAppointment', response: bookResult }
+                                    })
+                                );
+                                continue;
+                            } catch (e) {
+                                console.error(`[AI Service] Lỗi khi redirect sang bookAppointment:`, e);
+                                // Fallback: tiếp tục với findAvailableSlots như bình thường
+                            }
+                        } else {
+                            console.log(`[AI Service] Không tìm thấy slot ${refCode} trong cache, tiếp tục với findAvailableSlots`);
+                        }
+                    }
+                } else {
+                    console.log(`[AI Service] Không có slots trong cache, tiếp tục với findAvailableSlots`);
+                }
+            }
+        }
+        
         const tool = availableTools[call.name];
         
         if (!tool) {

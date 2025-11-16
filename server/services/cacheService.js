@@ -28,7 +28,34 @@ const getUserId = (sessionId) => {
   return userId;
 };
 
+/**
+ * Lưu availableSlots vào cache để có thể lấy lại khi user chọn slot
+ * @param {string} sessionId - ID tạm thời (UUID)
+ * @param {Array} availableSlots - Danh sách slots
+ */
+const setAvailableSlots = (sessionId, availableSlots) => {
+  const key = `slots_${sessionId}`;
+  sessionCache.set(key, availableSlots);
+  console.log(`[Cache] Đã lưu ${availableSlots.length} slots cho session ${sessionId}`);
+};
+
+/**
+ * Lấy availableSlots từ cache
+ * @param {string} sessionId - ID tạm thời (UUID)
+ * @returns {Array | undefined} - Danh sách slots
+ */
+const getAvailableSlots = (sessionId) => {
+  const key = `slots_${sessionId}`;
+  const slots = sessionCache.get(key);
+  if (slots) {
+    console.log(`[Cache] Đã lấy ${slots.length} slots từ cache cho session ${sessionId}`);
+  }
+  return slots;
+};
+
 module.exports = {
   setUserId,
-  getUserId
+  getUserId,
+  setAvailableSlots,
+  getAvailableSlots
 };

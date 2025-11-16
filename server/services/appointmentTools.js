@@ -90,7 +90,7 @@ const appointmentTools = {
         }
     },
 
-    "bookAppointment": async ({ slotId, sessionId }) => {
+    "bookAppointment": async ({ slotId, serviceId, sessionId }) => {
         const session = await mongoose.startSession();
         let broadcastPayload = null;
         try {
@@ -127,9 +127,15 @@ const appointmentTools = {
                 return { error: 'Mã lịch hẹn (slotId) không hợp lệ. Vui lòng chọn lại từ danh sách.' };
             }
             
-            // Kiểm tra scheduleId và timeSlotId có phải là ObjectId hợp lệ không
-            if (!mongoose.Types.ObjectId.isValid(scheduleId) || !mongoose.Types.ObjectId.isValid(timeSlotId)) {
-                console.error(`[Tool] slotId không phải ObjectId hợp lệ: scheduleId=${scheduleId}, timeSlotId=${timeSlotId}`);
+            // Kiểm tra scheduleId có phải là ObjectId hợp lệ không (có thể là ObjectId hoặc UUID)
+            // timeSlotId có thể là ObjectId hoặc UUID (subdocument _id)
+            let scheduleQuery;
+            if (mongoose.Types.ObjectId.isValid(scheduleId)) {
+                scheduleQuery = { _id: scheduleId };
+            } else {
+                // Nếu không phải ObjectId, có thể là UUID hoặc string khác
+                // Thử tìm bằng cách khác hoặc báo lỗi
+                console.error(`[Tool] scheduleId không phải ObjectId hợp lệ: ${scheduleId}`);
                 return { error: 'Mã lịch hẹn (slotId) không hợp lệ. Vui lòng chọn lại từ danh sách.' };
             }
 
@@ -137,11 +143,40 @@ const appointmentTools = {
             session.startTransaction();
 
             // 4. Tìm và khóa lịch
-            const schedule = await Schedule.findById(scheduleId).session(session);
-            if (!schedule) throw new Error("Lịch hẹn không còn tồn tại.");
+            const schedule = await Schedule.findOne(scheduleQuery).session(session);
+            if (!schedule) {
+                await session.abortTransaction();
+                throw new Error("Lịch hẹn không còn tồn tại.");
+            }
 
-            const timeSlot = schedule.timeSlots.id(timeSlotId);
-            if (!timeSlot) throw new Error("Giờ hẹn không còn tồn tại.");
+            // Tìm timeSlot - có thể là ObjectId hoặc string/UUID
+            let timeSlot = null;
+            
+            // Thử tìm bằng ObjectId trước
+            if (mongoose.Types.ObjectId.isValid(timeSlotId)) {
+                timeSlot = schedule.timeSlots.id(timeSlotId);
+            }
+            
+            // Nếu không tìm thấy, thử tìm bằng string comparison
+            if (!timeSlot) {
+                timeSlot = schedule.timeSlots.find(ts => {
+                    if (!ts._id) return false;
+                    const tsIdStr = ts._id.toString();
+                    // So sánh chính xác hoặc partial match
+                    return tsIdStr === timeSlotId || 
+                           tsIdStr.includes(timeSlotId) || 
+                           timeSlotId.includes(tsIdStr);
+                });
+            }
+            
+            if (!timeSlot) {
+                await session.abortTransaction();
+                console.error(`[Tool] Không tìm thấy timeSlot với ID: ${timeSlotId} trong schedule ${scheduleId}`);
+                console.error(`[Tool] Schedule có ${schedule.timeSlots.length} timeSlots. IDs: ${schedule.timeSlots.map(ts => ts._id?.toString()).join(', ')}`);
+                throw new Error("Giờ hẹn không còn tồn tại.");
+            }
+            
+            console.log(`[Tool] Đã tìm thấy timeSlot: ${timeSlot.startTime} - ${timeSlot.endTime} (ID: ${timeSlot._id})`);
 
             const currentBookedCount = timeSlot.bookedCount || 0;
             const maxBookings = timeSlot.maxBookings || 3;
@@ -153,6 +188,7 @@ const appointmentTools = {
             const doctor = await Doctor.findById(schedule.doctorId)
                 .populate('hospitalId')
                 .populate('user', 'fullName')
+                .populate('services')
                 .session(session);
 
             if (!doctor) throw new Error("Không tìm thấy bác sĩ.");
@@ -166,18 +202,94 @@ const appointmentTools = {
                 }
             }
 
-            // 5.2. Tính phí khám
+            // 5.2. Tính phí khám và tìm service phù hợp
             let consultationFee = doctor.consultationFee || 0;
             let additionalFees = 0;
-            let serviceId = null;
+            let finalServiceId = null;
 
-            // Nếu có serviceId trong schedule hoặc doctor, lấy service đầu tiên
-            if (doctor.services && doctor.services.length > 0) {
-                // Lấy service đầu tiên của bác sĩ
-                serviceId = doctor.services[0];
-                const service = await Service.findById(serviceId).session(session);
-                if (service) {
-                    additionalFees = service.price || 0;
+            // Ưu tiên sử dụng serviceId từ slot đã chọn (nếu có)
+            if (serviceId && mongoose.Types.ObjectId.isValid(serviceId)) {
+                const selectedService = await Service.findOne({
+                    _id: serviceId,
+                    specialtyId: doctor.specialtyId,
+                    isActive: true
+                }).session(session);
+                
+                if (selectedService) {
+                    // Kiểm tra xem bác sĩ có service này không
+                    const doctorHasService = doctor.services && doctor.services.some(
+                        s => {
+                            const serviceObjId = s._id ? s._id.toString() : s.toString();
+                            return serviceObjId === serviceId;
+                        }
+                    );
+                    
+                    if (doctorHasService) {
+                        finalServiceId = selectedService._id;
+                        additionalFees = selectedService.price || 0;
+                        console.log(`[Tool] Sử dụng service đã chọn từ slot: ${selectedService.name} (ID: ${finalServiceId}, Price: ${additionalFees})`);
+                    } else {
+                        console.log(`[Tool] WARNING: Service ${serviceId} không thuộc bác sĩ này, sẽ tìm service khác`);
+                    }
+                } else {
+                    console.log(`[Tool] WARNING: Service ${serviceId} không tồn tại hoặc không active, sẽ tìm service khác`);
+                }
+            }
+            
+            // Nếu không có serviceId từ slot hoặc service không hợp lệ, tìm service phù hợp
+            if (!finalServiceId) {
+                // Tìm service phù hợp theo thứ tự ưu tiên:
+                // 1. Service của doctor (nếu có và active)
+                // 2. Service của specialty (nếu không có service của doctor)
+                if (doctor.services && doctor.services.length > 0) {
+                    // Tìm service đầu tiên của doctor mà active và thuộc đúng specialty
+                    for (const docServiceId of doctor.services) {
+                        const service = await Service.findOne({
+                            _id: docServiceId,
+                            specialtyId: doctor.specialtyId,
+                            isActive: true
+                        }).session(session);
+                        
+                        if (service) {
+                            finalServiceId = service._id;
+                            additionalFees = service.price || 0;
+                            console.log(`[Tool] Đã chọn service của doctor: ${service.name} (ID: ${finalServiceId}, Price: ${additionalFees})`);
+                            break;
+                        }
+                    }
+                }
+                
+                // Nếu không tìm thấy service của doctor, tìm service theo specialtyId
+                if (!finalServiceId) {
+                    const specialtyService = await Service.findOne({
+                        specialtyId: doctor.specialtyId,
+                        isActive: true,
+                        type: 'examination' // Ưu tiên dịch vụ khám bệnh
+                    })
+                    .sort({ price: 1 }) // Ưu tiên giá thấp nhất
+                    .session(session);
+                    
+                    if (specialtyService) {
+                        finalServiceId = specialtyService._id;
+                        additionalFees = specialtyService.price || 0;
+                        console.log(`[Tool] Đã chọn service theo specialty: ${specialtyService.name} (ID: ${finalServiceId}, Price: ${additionalFees})`);
+                    } else {
+                        // Nếu không tìm thấy service examination, tìm bất kỳ service nào của specialty
+                        const anyService = await Service.findOne({
+                            specialtyId: doctor.specialtyId,
+                            isActive: true
+                        })
+                        .sort({ price: 1 })
+                        .session(session);
+                        
+                        if (anyService) {
+                            finalServiceId = anyService._id;
+                            additionalFees = anyService.price || 0;
+                            console.log(`[Tool] Đã chọn service bất kỳ của specialty: ${anyService.name} (ID: ${finalServiceId}, Price: ${additionalFees})`);
+                        } else {
+                            console.log(`[Tool] Không tìm thấy service nào cho specialty ${doctor.specialtyId}, appointment sẽ không có serviceId`);
+                        }
+                    }
                 }
             }
 
@@ -224,8 +336,8 @@ const appointmentTools = {
             };
 
             // Thêm serviceId nếu có
-            if (serviceId) {
-                appointmentData.serviceId = serviceId;
+            if (finalServiceId) {
+                appointmentData.serviceId = finalServiceId;
             }
 
             // Thêm roomId nếu có
@@ -623,10 +735,10 @@ const appointmentTools = {
 
             for (const schedule of schedules) {
                 for (const timeSlot of schedule.timeSlots) {
-                    // Kiểm tra nếu time slot còn chỗ
+                    // Kiểm tra nếu time slot còn chỗ - logic chính xác: bookedCount < maxBookings
                     const maxBookings = timeSlot.maxBookings || 3;
                     const bookedCount = timeSlot.bookedCount || 0;
-                    const isAvailable = !timeSlot.isBooked || (bookedCount < maxBookings);
+                    const isAvailable = bookedCount < maxBookings;
 
                     // Nếu có preferredTime, kiểm tra xem có khớp không
                     if (preferredTime) {

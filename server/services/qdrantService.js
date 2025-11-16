@@ -263,9 +263,9 @@ const hasSpecificAppointmentInfo = (aiResponse) => {
 };
 
 /**
- * Kiểm tra xem prompt có phải là câu trả lời ngắn/xác nhận không
+  * Kiểm tra xem prompt có phải là câu trả lời ngắn/xác nhận hoặc câu lệnh đặt lịch không
  * @param {string} userPrompt - Câu hỏi của người dùng
- * @returns {boolean} - True nếu là câu trả lời ngắn
+ * @returns {boolean} - True nếu là câu trả lời ngắn hoặc câu lệnh đặt lịch
  */
 const isShortConfirmation = (userPrompt) => {
   if (!userPrompt) return false;
@@ -273,9 +273,27 @@ const isShortConfirmation = (userPrompt) => {
   const trimmed = userPrompt.trim().toLowerCase();
   const shortConfirmations = [
     'ok', 'okay', 'đúng', 'đúng rồi', 'đúng vậy', 'chắc chắn', 'có', 'yes', 
-    'yep', 'yeah', 'đồng ý', 'tôi đồng ý', 'tôi chọn', 'chọn', 'l1', 'l2', 
-    'l3', 'l4', 'l5', 'l6', 'l7', 'l8', 'l9', 'l10'
+    'yep', 'yeah', 'đồng ý', 'tôi đồng ý', 'tôi chọn', 'chọn'
   ];
+  
+  // Kiểm tra có chứa mã slot (L01, L02, L1, L2, v.v.) - đây là câu lệnh đặt lịch
+  // Pattern: L + số (có thể có số 0 đứng trước)
+  if (/l\s*0?\d{1,2}/i.test(trimmed)) {
+    console.log(`[Qdrant Cache] Nhận diện câu lệnh đặt lịch: "${userPrompt}"`);
+    return true;
+  }
+  
+  // Kiểm tra các từ khóa đặt lịch
+  const bookingKeywords = [
+    'chọn l', 'chọn cho tôi l', 'tôi chọn l', 'đặt l', 'book l',
+    'lựa chọn l', 'muốn l', 'lấy l'
+  ];
+  for (const keyword of bookingKeywords) {
+    if (trimmed.includes(keyword) && /l\s*0?\d{1,2}/i.test(trimmed)) {
+      console.log(`[Qdrant Cache] Nhận diện câu lệnh đặt lịch với từ khóa "${keyword}": "${userPrompt}"`);
+      return true;
+    }
+  }
   
   // Nếu prompt ngắn hơn 10 ký tự và là một trong các từ xác nhận
   if (trimmed.length <= 10 && shortConfirmations.includes(trimmed)) {

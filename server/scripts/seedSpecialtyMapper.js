@@ -1,5 +1,6 @@
 const dotenv = require('dotenv');
 const path = require('path'); 
+const mongoose = require('mongoose');
 
 // ⭐ Nạp .env TRƯỚC TIÊN
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
@@ -7,6 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 const { QdrantClient } = require("@qdrant/js-client-rest");
 const { getEmbedding } = require('../services/embeddingService');
 const { v4: uuidv4 } = require('uuid');
+const Specialty = require('../models/Specialty');
 
 // 1. Cấu hình Qdrant (xử lý URL giống qdrantService.js)
 let QDRANT_URL = (process.env.QDRANT_URL || 'http://localhost:6333').trim();
@@ -46,56 +48,104 @@ const qdrantClient = new QdrantClient({
   apiKey: QDRANT_API_KEY 
 });
 
-// ID thật từ CSDL MongoDB
-const MAPPINGS = [
+// Mapping template - sẽ được cập nhật với ID thật từ database
+// Format: { text: "từ khóa", specialtyName: "Tên chuyên khoa" }
+const MAPPING_TEMPLATES = [
   // Nhi khoa
-  { text: "tiêm vaccine cho trẻ", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
-  { text: "khám cho trẻ em", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
-  { text: "khám nhi", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
-  { text: "tiêm vaccine", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
-  { text: "trẻ em", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
-  { text: "bé", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
-  { text: "trẻ sơ sinh", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
-  { text: "trẻ nhỏ", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
-  { text: "sốt ở trẻ", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
-  { text: "ho ở trẻ", specialtyId: "68fd980bdcfa11c6c0b3e6c4", specialtyName: "Nhi khoa" },
+  { text: "tiêm vaccine cho trẻ", specialtyName: "Nhi khoa" },
+  { text: "tiêm vaccien cho trẻ", specialtyName: "Nhi khoa" }, // Lỗi chính tả phổ biến
+  { text: "tiêm vacxin cho trẻ", specialtyName: "Nhi khoa" }, // Biến thể khác
+  { text: "khám cho trẻ em", specialtyName: "Nhi khoa" },
+  { text: "khám nhi", specialtyName: "Nhi khoa" },
+  { text: "tiêm vaccine", specialtyName: "Nhi khoa" },
+  { text: "trẻ em", specialtyName: "Nhi khoa" },
+  { text: "bé", specialtyName: "Nhi khoa" },
+  { text: "trẻ sơ sinh", specialtyName: "Nhi khoa" },
+  { text: "trẻ nhỏ", specialtyName: "Nhi khoa" },
+  { text: "sốt ở trẻ", specialtyName: "Nhi khoa" },
+  { text: "ho ở trẻ", specialtyName: "Nhi khoa" },
   
   // Sản khoa
-  { text: "khám thai", specialtyId: "68fd980bdcfa11c6c0b3e6c3", specialtyName: "Sản khoa" },
-  { text: "siêu âm thai", specialtyId: "68fd980bdcfa11c6c0b3e6c3", specialtyName: "Sản khoa" },
-  { text: "mang thai", specialtyId: "68fd980bdcfa11c6c0b3e6c3", specialtyName: "Sản khoa" },
-  { text: "thai kỳ", specialtyId: "68fd980bdcfa11c6c0b3e6c3", specialtyName: "Sản khoa" },
-  { text: "sản khoa", specialtyId: "68fd980bdcfa11c6c0b3e6c3", specialtyName: "Sản khoa" },
-  { text: "phụ khoa", specialtyId: "68fd980bdcfa11c6c0b3e6c3", specialtyName: "Sản khoa" },
-  { text: "kinh nguyệt", specialtyId: "68fd980bdcfa11c6c0b3e6c3", specialtyName: "Sản khoa" },
+  { text: "khám thai", specialtyName: "Sản khoa" },
+  { text: "siêu âm thai", specialtyName: "Sản khoa" },
+  { text: "mang thai", specialtyName: "Sản khoa" },
+  { text: "thai kỳ", specialtyName: "Sản khoa" },
+  { text: "sản khoa", specialtyName: "Sản khoa" },
+  { text: "phụ khoa", specialtyName: "Sản khoa" },
+  { text: "kinh nguyệt", specialtyName: "Sản khoa" },
   
   // Nội khoa
-  { text: "đau đầu", specialtyId: "68fd980bdcfa11c6c0b3e6c1", specialtyName: "Nội khoa" },
-  { text: "sốt", specialtyId: "68fd980bdcfa11c6c0b3e6c1", specialtyName: "Nội khoa" },
-  { text: "ho", specialtyId: "68fd980bdcfa11c6c0b3e6c1", specialtyName: "Nội khoa" },
-  { text: "cảm cúm", specialtyId: "68fd980bdcfa11c6c0b3e6c1", specialtyName: "Nội khoa" },
-  { text: "đau bụng", specialtyId: "68fd980bdcfa11c6c0b3e6c1", specialtyName: "Nội khoa" },
-  { text: "nội khoa", specialtyId: "68fd980bdcfa11c6c0b3e6c1", specialtyName: "Nội khoa" },
-  { text: "khám tổng quát", specialtyId: "68fd980bdcfa11c6c0b3e6c1", specialtyName: "Nội khoa" },
+  { text: "khám chuyên khoa nội", specialtyName: "Nội khoa" },
+  { text: "chuyên khoa nội", specialtyName: "Nội khoa" },
+  { text: "khám tổng quát", specialtyName: "Nội khoa" },
+  { text: "tổng quát", specialtyName: "Nội khoa" },
+  { text: "khám sức khỏe tổng quát", specialtyName: "Nội khoa" },
+  { text: "đau đầu", specialtyName: "Nội khoa" },
+  { text: "sốt", specialtyName: "Nội khoa" },
+  { text: "ho", specialtyName: "Nội khoa" },
+  { text: "cảm cúm", specialtyName: "Nội khoa" },
+  { text: "đau bụng", specialtyName: "Nội khoa" },
+  { text: "nội khoa", specialtyName: "Nội khoa" },
   
   // Ngoại khoa
-  { text: "phẫu thuật", specialtyId: "68fd980bdcfa11c6c0b3e6c2", specialtyName: "Ngoại khoa" },
-  { text: "ngoại khoa", specialtyId: "68fd980bdcfa11c6c0b3e6c2", specialtyName: "Ngoại khoa" },
-  { text: "chấn thương", specialtyId: "68fd980bdcfa11c6c0b3e6c2", specialtyName: "Ngoại khoa" },
-  { text: "gãy xương", specialtyId: "68fd980bdcfa11c6c0b3e6c2", specialtyName: "Ngoại khoa" },
+  { text: "phẫu thuật", specialtyName: "Ngoại khoa" },
+  { text: "ngoại khoa", specialtyName: "Ngoại khoa" },
+  { text: "chấn thương", specialtyName: "Ngoại khoa" },
+  { text: "gãy xương", specialtyName: "Ngoại khoa" },
   
   // Da liễu
-  { text: "mụn", specialtyId: "68fd980bdcfa11c6c0b3e6c5", specialtyName: "Da liễu" },
-  { text: "dị ứng da", specialtyId: "68fd980bdcfa11c6c0b3e6c5", specialtyName: "Da liễu" },
-  { text: "phát ban", specialtyId: "68fd980bdcfa11c6c0b3e6c5", specialtyName: "Da liễu" },
-  { text: "da liễu", specialtyId: "68fd980bdcfa11c6c0b3e6c5", specialtyName: "Da liễu" },
-  { text: "ngứa da", specialtyId: "68fd980bdcfa11c6c0b3e6c5", specialtyName: "Da liễu" },
-  { text: "eczema", specialtyId: "68fd980bdcfa11c6c0b3e6c5", specialtyName: "Da liễu" }
+  { text: "khám da", specialtyName: "Da liễu" },
+  { text: "khám da liễu", specialtyName: "Da liễu" },
+  { text: "mụn", specialtyName: "Da liễu" },
+  { text: "dị ứng da", specialtyName: "Da liễu" },
+  { text: "phát ban", specialtyName: "Da liễu" },
+  { text: "da liễu", specialtyName: "Da liễu" },
+  { text: "ngứa da", specialtyName: "Da liễu" },
+  { text: "eczema", specialtyName: "Da liễu" }
 ];
 
 const seedMapper = async () => {
   try {
     console.log("\n=== BẮT ĐẦU SEEDING SPECIALTY MAPPER ===\n");
+    
+    // ⭐ BƯỚC 0: KẾT NỐI MONGODB VÀ LẤY DỮ LIỆU SPECIALTIES
+    console.log(`[Bước 0] Đang kết nối MongoDB...`);
+    const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hospitalweb';
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 30000,
+      connectTimeoutMS: 30000,
+    });
+    console.log("✅ [Bước 0] Đã kết nối MongoDB thành công!");
+    
+    console.log(`[Bước 0] Đang lấy danh sách specialties từ database...`);
+    const specialties = await Specialty.find({ isActive: { $ne: false } }).select('_id name');
+    console.log(`[Bước 0] Tìm thấy ${specialties.length} specialties trong database:`);
+    specialties.forEach(s => {
+      console.log(`  - ${s.name} (ID: ${s._id})`);
+    });
+    
+    // Tạo map từ tên specialty -> ID
+    const specialtyMap = {};
+    specialties.forEach(s => {
+      specialtyMap[s.name] = s._id.toString();
+    });
+    
+    // Cập nhật MAPPINGS với ID thật từ database
+    const MAPPINGS = MAPPING_TEMPLATES.map(template => {
+      const specialtyId = specialtyMap[template.specialtyName];
+      if (!specialtyId) {
+        console.warn(`⚠️  [Bước 0] CẢNH BÁO: Không tìm thấy specialty "${template.specialtyName}" trong database. Mapping này sẽ bị bỏ qua.`);
+        return null;
+      }
+      return {
+        text: template.text,
+        specialtyId: specialtyId,
+        specialtyName: template.specialtyName
+      };
+    }).filter(m => m !== null); // Loại bỏ các mapping không hợp lệ
+    
+    console.log(`[Bước 0] Đã tạo ${MAPPINGS.length} mappings hợp lệ từ ${MAPPING_TEMPLATES.length} templates.\n`);
     
     // ⭐ BƯỚC 1: CODE TỰ ĐỘNG TẠO COLLECTION (ĐÃ THÊM)
     console.log(`[Bước 1] Kiểm tra collection: ${COLLECTION_NAME}...`);
@@ -167,10 +217,17 @@ const seedMapper = async () => {
     }
 
     console.log("\n=== HOÀN TẤT SEEDING SPECIALTY MAPPER ===\n");
+    
+    // Đóng kết nối MongoDB
+    await mongoose.disconnect();
+    console.log("✅ Đã đóng kết nối MongoDB.");
 
   } catch (error) {
     console.error("\n❌ LỖI KHI NẠP BỘ ÁNH XẠ:", error);
     console.error("Chi tiết lỗi:", error);
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.disconnect();
+    }
     process.exit(1);
   }
 };
