@@ -12,5 +12,3 @@ logs/
 dist/
 .vscode/
 .kiro/specs/
-requests.log
-errors.log
