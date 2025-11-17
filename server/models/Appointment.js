@@ -240,26 +240,48 @@ const appointmentSchema = new Schema({
 appointmentSchema.pre('save', async function(next) {
   try {
     if (!this.bookingCode) {
+      // ⭐ Lấy 'session' từ lệnh .save({ session })
+      const session = this.$session(); 
+
       // Generate a random 8-character alphanumeric code
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       let bookingCode;
       let isUnique = false;
+      let attempts = 0;
+      const maxAttempts = 10;
 
       // Keep generating until we find a unique code
-      while (!isUnique) {
+      while (!isUnique && attempts < maxAttempts) {
         bookingCode = 'APT-';
         for (let i = 0; i < 8; i++) {
           bookingCode += chars.charAt(Math.floor(Math.random() * chars.length));
         }
 
-        // Check if the code is unique
-        const existingAppointment = await this.constructor.findOne({ bookingCode });
+        // ⭐ SỬA LỖI: Tạo query và gắn session nếu có
+        // Tạo query
+        const query = this.constructor.findOne({ bookingCode });
+
+        // Nếu 'session' tồn tại (đang trong transaction),
+        // hãy bảo query này tham gia vào transaction đó
+        if (session) {
+          query.session(session);
+        }
+        
+        // Chạy query đã được gắn session
+        const existingAppointment = await query;
+        
         if (!existingAppointment) {
           isUnique = true;
         }
+        attempts++;
+      }
+
+      if (!isUnique) {
+        return next(new Error('Không thể tạo mã đặt lịch duy nhất sau nhiều lần thử.'));
       }
 
       this.bookingCode = bookingCode;
+      console.log(`[Appointment Model] Đã tạo bookingCode: ${bookingCode} cho appointment ID: ${this._id}`);
     }
     next();
   } catch (error) {
