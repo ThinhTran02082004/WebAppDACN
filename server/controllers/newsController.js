@@ -238,8 +238,8 @@ exports.updateNews = async (req, res) => {
     if (summary) newsItem.summary = summary;
     if (category) newsItem.category = category;
     if (tags) newsItem.tags = tags.split(',').map(tag => tag.trim());
-    if (hospitalId !== undefined) newsItem.hospital = hospitalId || null;
-    if (doctorId !== undefined) newsItem.author = doctorId || null;
+    if (hospitalId !== undefined) newsItem.hospital = (hospitalId && hospitalId !== 'null') ? hospitalId : null;
+    if (doctorId !== undefined) newsItem.author = (doctorId && doctorId !== 'null') ? doctorId : null;
     if (isPublished !== undefined) newsItem.isPublished = isPublished;
     
     await newsItem.save();
