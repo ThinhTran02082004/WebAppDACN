@@ -25,6 +25,7 @@ import {
   UploadOutlined
 } from '@ant-design/icons';
 import api from '../../utils/api';
+import { toastSuccess, toastError } from '../../utils/toast';
 import dayjs from 'dayjs';
 const { Option } = Select;
 const { TextArea } = Input;
@@ -88,7 +89,7 @@ const News = () => {
       });
     } catch (error) {
       console.error('Error fetching news:', error);
-      message.error('Không thể tải danh sách tin tức');
+      toastError('Không thể tải danh sách tin tức');
     } finally {
       setLoading(false);
     }
@@ -183,21 +184,21 @@ const News = () => {
             'Content-Type': 'multipart/form-data'
           }
         });
-        message.success('Cập nhật tin tức thành công');
+        toastSuccess('Cập nhật tin tức thành công');
       } else {
         response = await api.post('/news', formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
           }
         });
-        message.success('Tạo tin tức thành công');
+        toastSuccess('Tạo tin tức thành công');
       }
 
       setIsModalVisible(false);
       fetchNews();
     } catch (error) {
       console.error('Error saving news:', error);
-      message.error('Lỗi khi lưu tin tức');
+      toastError('Lỗi khi lưu tin tức');
     } finally {
       setLoading(false);
     }
@@ -207,11 +208,11 @@ const News = () => {
     try {
       setLoading(true);
       await api.delete(`/news/${id}`);
-      message.success('Xóa tin tức thành công');
+      toastSuccess('Xóa tin tức thành công');
       fetchNews();
     } catch (error) {
       console.error('Error deleting news:', error);
-      message.error('Lỗi khi xóa tin tức');
+      toastError('Lỗi khi xóa tin tức');
     } finally {
       setLoading(false);
     }
