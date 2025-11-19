@@ -40,7 +40,7 @@ const ChatDock = ({ showSupportChat, currentUserId }) => {
           <FaRobot />
         </span>
         <div>
-          <p className="font-semibold text-gray-800">Trợ lý AI y tế</p>
+          <p className="font-semibold text-gray-800">Trợ lý đặt lịch khám</p>
           <p className="text-xs text-gray-500">Hỏi đáp & đặt lịch tự động</p>
         </div>
       </button>
