@@ -169,7 +169,7 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
 
             {/* Chat Popup Window */}
             {isOpen && (
-                <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 ai-chat-popup">
+                <div className="fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 ai-chat-popup">
                     {/* Header */}
                     <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 rounded-t-2xl flex items-center justify-between">
                         <div className="flex items-center gap-3">

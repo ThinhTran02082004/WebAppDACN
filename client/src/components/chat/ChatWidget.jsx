@@ -112,7 +112,7 @@ const ChatWidget = ({ currentUserId, isOpen: controlledOpen, onClose }) => {
 
       {isOpen && (
         <div
-          className={`fixed bottom-6 right-6 bg-white rounded-lg shadow-2xl transition-all duration-300 animate-slide-up max-md:fixed max-md:inset-0 max-md:w-full max-md:h-screen max-md:rounded-none max-md:bottom-0 max-md:right-0 w-[400px] ${
+          className={`fixed bottom-24 right-6 bg-white rounded-lg shadow-2xl transition-all duration-300 animate-slide-up max-md:fixed max-md:inset-0 max-md:w-full max-md:h-screen max-md:rounded-none max-md:bottom-0 max-md:right-0 w-[400px] ${
             isMinimized ? 'h-14' : 'h-[600px] max-md:h-screen'
           }`}
           style={{ zIndex: 1050 }}
