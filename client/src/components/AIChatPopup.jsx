@@ -4,8 +4,10 @@ import api from '../utils/api';
 import { toast } from 'react-toastify';
 import './AIChatPopup.css';
 
-const AIChatPopup = () => {
-    const [isOpen, setIsOpen] = useState(false);
+const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
+    const isControlled = typeof controlledOpen === 'boolean';
+    const [internalOpen, setInternalOpen] = useState(false);
+    const isOpen = isControlled ? controlledOpen : internalOpen;
     const [messages, setMessages] = useState([]);
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +33,14 @@ const AIChatPopup = () => {
             inputRef.current.focus();
         }
     }, [isOpen]);
+
+    const handleClose = () => {
+        if (isControlled) {
+            onClose?.();
+        } else {
+            setInternalOpen(false);
+        }
+    };
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -141,9 +151,9 @@ const AIChatPopup = () => {
     return (
         <>
             {/* Floating Chat Button */}
-            {!isOpen && (
+            {!isOpen && !isControlled && (
                 <button
-                    onClick={() => setIsOpen(true)}
+                    onClick={() => setInternalOpen(true)}
                     className="fixed bottom-6 right-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full p-4 shadow-lg hover:shadow-xl ai-chat-button z-50 group"
                     aria-label="Mở chat AI"
                 >
@@ -181,7 +191,7 @@ const AIChatPopup = () => {
                                 <FaTrash className="text-sm" />
                             </button>
                             <button
-                                onClick={() => setIsOpen(false)}
+                                onClick={handleClose}
                                 className="p-2 hover:bg-white/20 rounded-lg transition-colors"
                                 aria-label="Đóng chat"
                             >

@@ -112,8 +112,7 @@ import UserVideoCallHistory from './pages/user/VideoCallHistory';
 // Chat pages
 import UserChat from './pages/user/Chat';
 import DoctorChat from './pages/doctor/Chat';
-import ChatWidget from './components/chat/ChatWidget';
-import AIChatPopup from './components/AIChatPopup';
+import ChatDock from './components/ChatDock';
 
 function AppContent() {
   const { isAuthenticated, loading, user } = useAuth();
@@ -266,19 +265,15 @@ function AppContent() {
               </Routes>
             </div>
             <Footer />
-            <ChatWidget />
           </>
         } />
       </Routes>
 
-      {/* Chat widget for regular users (not in admin or doctor portals) */}
-      {showChatWidget && <ChatWidget currentUserId={user?.id} />}
-
       {/* Video call notification for all authenticated users */}
       {isAuthenticated && <VideoCallNotification />}
       
-      {/* AI Chat Popup - Available for all users (authenticated or not) */}
-      <AIChatPopup />
+      {/* Unified chat dock (AI + CSKH) */}
+      <ChatDock showSupportChat={showChatWidget} currentUserId={user?._id || user?.id} />
     </div>
   );
 }
