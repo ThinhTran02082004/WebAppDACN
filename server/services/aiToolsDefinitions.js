@@ -120,6 +120,19 @@ const tools = {
                 },
                 required: ["bookingCode", "preferredDate", "sessionId"]
             }
+        },
+        {
+            name: "checkInventoryAndPrescribe",
+            description: "Kiểm tra kho thuốc dựa trên hoạt chất/từ khóa và tạo đơn thuốc nháp nếu có hàng.",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    searchQuery: { type: "STRING", description: "Tên hoạt chất hoặc thuốc mà AI đã tìm được sau khi tra cứu (ví dụ: Paracetamol, Ibuprofen)." },
+                    symptom: { type: "STRING", description: "Triệu chứng của người dùng để lưu vào đơn." },
+                    sessionId: { type: "STRING", description: "ID phiên chat hiện tại (để xác định người dùng)." }
+                },
+                required: ["searchQuery", "symptom", "sessionId"]
+            }
         }
     ]
 };

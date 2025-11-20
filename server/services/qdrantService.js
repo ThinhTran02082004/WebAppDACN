@@ -138,6 +138,7 @@ if (!/^https?:\/\//i.test(QDRANT_URL)) {
 const SPAM_COLLECTION = "irrelevant_questions";
 const CACHE_COLLECTION = "common_answers";
 const MAPPER_COLLECTION = "specialty_mapper";
+const MEDICAL_COLLECTION = "medical_knowledge";
 
 // 2. Khởi tạo Client
 const qdrantClient = new QdrantClient({
@@ -171,6 +172,12 @@ const initializeCollections = async () => {
       console.log(`Đang tạo collection (Bộ ánh xạ chuyên khoa): ${MAPPER_COLLECTION}...`);
       await qdrantClient.recreateCollection(MAPPER_COLLECTION, vectorConfig);
       console.log("Tạo collection (Bộ ánh xạ chuyên khoa) thành công!");
+    }
+    
+    if (!collectionNames.includes(MEDICAL_COLLECTION)) {
+      console.log(`Đang tạo collection (Kiến thức y khoa): ${MEDICAL_COLLECTION}...`);
+      await qdrantClient.recreateCollection(MEDICAL_COLLECTION, vectorConfig);
+      console.log("Tạo collection (Kiến thức y khoa) thành công!");
     }
     
     console.log("Qdrant collections đã sẵn sàng.");
@@ -411,11 +418,31 @@ const findSpecialtyMapping = async (symptomQuery) => {
   }
 };
 
+/**
+ * Tìm kiếm kiến thức y khoa liên quan
+ * @param {string} query - Triệu chứng hoặc tên bệnh
+ */
+const searchMedicalKnowledge = async (query) => {
+  try {
+    const vector = await getEmbedding(query);
+    const searchResult = await qdrantClient.search(MEDICAL_COLLECTION, {
+      vector: vector,
+      limit: 3,
+      with_payload: true,
+    });
+    return searchResult.map(item => item.payload.content).join("\n\n---\n\n");
+  } catch (error) {
+    console.error("Lỗi tìm kiếm y khoa:", error);
+    return "";
+  }
+};
+
 module.exports = {
   isIrrelevant,
   findCachedAnswer,
   cacheAnswer,
   initializeCollections, // Sửa tên hàm
   addQuestionsToQdrant,
-  findSpecialtyMapping // Export hàm mới
+  findSpecialtyMapping,
+  searchMedicalKnowledge
 };
