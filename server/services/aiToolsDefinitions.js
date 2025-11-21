@@ -133,6 +133,43 @@ const tools = {
                 },
                 required: ["searchQuery", "symptom", "sessionId"]
             }
+        },
+        {
+            name: "getMyPrescriptions",
+            description: "Lấy danh sách các đơn thuốc hiện có của người dùng, bao gồm cả đơn nháp chờ duyệt.",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    status: { type: "STRING", description: "Trạng thái muốn lọc (ví dụ: pending, approved, dispensed, pending_approval)." },
+                    includeDrafts: { type: "BOOLEAN", description: "Có bao gồm các đơn thuốc nháp hay không (mặc định: true)." },
+                    limit: { type: "NUMBER", description: "Số lượng tối đa bản ghi cần lấy (mặc định: 10, tối đa: 50)." },
+                    sessionId: { type: "STRING", description: "ID phiên chat hiện tại (bắt buộc)." }
+                },
+                required: ["sessionId"]
+            }
+        },
+        {
+            name: "cancelPrescription",
+            description: "Hủy một đơn thuốc (đơn nháp hoặc đơn chính thức).",
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    prescriptionCode: {
+                        type: "STRING",
+                        description: "Mã đơn thuốc dạng PRS-XXXXXX (đối với đơn nháp)."
+                    },
+                    prescriptionId: {
+                        type: "STRING",
+                        description: "ID của đơn thuốc chính thức (nếu không có prescriptionCode)."
+                    },
+                    reason: {
+                        type: "STRING",
+                        description: "Lý do hủy đơn thuốc (tùy chọn)."
+                    },
+                    sessionId: { type: "STRING", description: "ID phiên chat hiện tại (bắt buộc)." }
+                },
+                required: ["sessionId"]
+            }
         }
     ]
 };

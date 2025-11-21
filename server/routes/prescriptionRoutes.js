@@ -11,6 +11,9 @@ const {
   getPatientPrescriptions,
   getUserPrescriptionHistory,
   getPrescriptionsForPharmacy,
+  getDoctorApprovalSummary,
+  getAdminPrescriptionFilters,
+  getPrescriptionsForAdmin,
   verifyPrescription,
   rejectPrescription,
   dispensePrescription
@@ -25,6 +28,9 @@ router.post('/validate-stock', validateStock);
 router.get('/user/history', getUserPrescriptionHistory); // For MedicalHistory page
 router.get('/appointment/:appointmentId', getPrescriptionsByAppointment);
 router.get('/patient/:patientId', getPatientPrescriptions);
+router.get('/admin', authorize('admin'), getPrescriptionsForAdmin);
+router.get('/doctor/approval-summary', authorize('doctor', 'admin'), getDoctorApprovalSummary);
+router.get('/admin/filters', authorize('admin'), getAdminPrescriptionFilters);
 router.get('/:id', getPrescriptionById);
 router.put('/:id', updatePrescription);
 router.post('/:id/cancel', cancelPrescription);

@@ -32,10 +32,57 @@ const prescriptionDraftSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Doctor'
   },
+  doctorName: {
+    type: String,
+    trim: true
+  },
+  hospitalId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Hospital'
+  },
+  hospitalName: {
+    type: String,
+    trim: true
+  },
+  specialtyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Specialty'
+  },
+  specialtyName: {
+    type: String,
+    trim: true
+  },
   medications: {
     type: [medicationEntrySchema],
     default: []
   },
+  hospitalAvailability: [{
+    hospitalId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Hospital'
+    },
+    hospitalName: String,
+    address: String,
+    totalInStock: Number,
+    inStock: [{
+      medicationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Medication'
+      },
+      name: String,
+      unitTypeDisplay: String,
+      unitPrice: Number,
+      stockQuantity: Number
+    }],
+    outOfStock: [{
+      medicationId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Medication'
+      },
+      name: String,
+      unitTypeDisplay: String
+    }]
+  }],
   symptom: {
     type: String,
     trim: true
@@ -50,7 +97,7 @@ const prescriptionDraftSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending_approval', 'approved', 'rejected', 'completed'],
+    enum: ['pending_approval', 'approved', 'rejected', 'completed', 'cancelled'],
     default: 'pending_approval'
   },
   note: {
@@ -62,6 +109,17 @@ const prescriptionDraftSchema = new mongoose.Schema({
     unique: true,
     sparse: true,
     trim: true
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedByRole: {
+    type: String,
+    enum: ['doctor', 'pharmacist', 'admin']
+  },
+  approvedAt: {
+    type: Date
   }
 }, { timestamps: true });
 
@@ -111,6 +169,7 @@ prescriptionDraftSchema.pre('save', async function(next) {
 
 prescriptionDraftSchema.index({ patientId: 1, createdAt: -1 });
 prescriptionDraftSchema.index({ prescriptionCode: 1 });
+prescriptionDraftSchema.index({ hospitalId: 1 });
 
 module.exports = mongoose.model('PrescriptionDraft', prescriptionDraftSchema);
 

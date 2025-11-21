@@ -3,10 +3,14 @@ const OpenAI = require("openai");
 const mongoose = require('mongoose');
 const Medication = require('../models/Medication');
 const PrescriptionDraft = require('../models/PrescriptionDraft');
+const Doctor = require('../models/Doctor');
+const Specialty = require('../models/Specialty');
 const cache = require('./cacheService');
 const searchTools = require('./searchTools');
 const appointmentTools = require('./appointmentTools');
 const { SYSTEM_INSTRUCTION } = require('./aiConfig');
+const prescriptionTools = require('./prescriptionTools');
+const { findSpecialtyMapping } = require('./qdrantService');
 const { tools } = require('./aiToolsDefinitions');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -171,35 +175,121 @@ const availableTools = {
             const userId = cache.getUserId(sessionId);
             if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
                 return { error: 'Vui lòng đăng nhập để chúng tôi có thể kê đơn.' };
-            }
+    }
 
             const medicalAdvice = await callSearchAgent(symptom);
             const keywords = extractKeywords(medicalAdvice, symptom);
             const textSearch = keywords.slice(0, 3).join(' ');
 
-            let medications = [];
+            const baseQuery = {
+                isActive: true
+            };
+
             if (textSearch) {
-                medications = await Medication.find({
-                    $text: { $search: textSearch },
-                    stockQuantity: { $gt: 0 },
-                    isActive: true
-                }).limit(3);
+                baseQuery.$text = { $search: textSearch };
+            } else if (keywords.length) {
+                baseQuery.$or = keywords.map(kw => ({ name: { $regex: kw, $options: 'i' } }));
+            } else {
+                return {
+                    advice: medicalAdvice || 'Không tìm thấy thông tin y khoa đáng tin cậy.',
+                    message: 'Hệ thống chưa đủ dữ liệu để gợi ý thuốc cho triệu chứng này. Bạn vui lòng mô tả chi tiết hơn.'
+                };
             }
 
-            if (medications.length === 0 && keywords.length) {
-                const regexConditions = keywords.map(kw => ({ name: { $regex: kw, $options: 'i' } }));
-                medications = await Medication.find({
-                    stockQuantity: { $gt: 0 },
-                    isActive: true,
-                    $or: regexConditions
-                }).limit(3);
-            }
+            const allMedications = await Medication.find(baseQuery)
+                .populate('hospitalId', 'name address')
+                .lean();
 
-            if (medications.length === 0) {
+            if (!allMedications.length) {
                 return {
                     advice: medicalAdvice || 'Không tìm thấy thông tin y khoa đáng tin cậy.',
                     message: 'Kho thuốc hiện không có mặt hàng phù hợp với lời khuyên y khoa vừa tra cứu.'
                 };
+            }
+
+            const groupedByHospital = {};
+            allMedications.forEach(med => {
+                const hospitalRef = med.hospitalId || {};
+                const hospitalId = hospitalRef._id?.toString() || med.hospitalId?.toString();
+                if (!hospitalId) return;
+
+                if (!groupedByHospital[hospitalId]) {
+                    groupedByHospital[hospitalId] = {
+                        hospitalId: hospitalRef._id || med.hospitalId,
+                        hospitalName: hospitalRef.name || 'Chi nhánh không xác định',
+                        address: hospitalRef.address,
+                        inStock: [],
+                        outOfStock: []
+                    };
+                }
+
+                const medInfo = {
+                    medicationId: med._id,
+                    name: med.name,
+                    unitTypeDisplay: med.unitTypeDisplay,
+                    unitPrice: med.unitPrice,
+                    stockQuantity: med.stockQuantity
+                };
+
+                if (med.stockQuantity > 0) {
+                    groupedByHospital[hospitalId].inStock.push(medInfo);
+                } else {
+                    groupedByHospital[hospitalId].outOfStock.push(medInfo);
+                }
+            });
+
+            const hospitalAvailability = Object.values(groupedByHospital).sort((a, b) => {
+                return b.inStock.length - a.inStock.length;
+            });
+
+            if (!hospitalAvailability.length) {
+                return {
+                    advice: medicalAdvice || 'Không tìm thấy thông tin y khoa đáng tin cậy.',
+                    message: 'Hiện không có chi nhánh nào còn thuốc phù hợp.'
+                };
+    }
+
+            const preferredHospitalEntry = hospitalAvailability.find(entry => entry.inStock.length > 0) || hospitalAvailability[0];
+            const preferredMedications = (preferredHospitalEntry.inStock || []).slice(0, 3);
+
+            if (!preferredMedications.length) {
+                return {
+                    advice: medicalAdvice || 'Không tìm thấy thông tin y khoa đáng tin cậy.',
+                    message: 'Các chi nhánh hiện đều hết thuốc phù hợp. Bạn vui lòng chọn bệnh viện khác hoặc đợi kho cập nhật.'
+                };
+            }
+
+            let specialtyInfo = null;
+            try {
+                const mapping = await findSpecialtyMapping(symptom);
+                if (mapping) {
+                    const specialtyDoc = await Specialty.findById(mapping.specialtyId).select('name').lean();
+                    specialtyInfo = {
+                        id: mapping.specialtyId,
+                        name: specialtyDoc?.name || mapping.specialtyName
+                    };
+                }
+            } catch (error) {
+                console.error('Lỗi khi xác định chuyên khoa cho đơn thuốc:', error);
+            }
+
+            let doctorInfo = null;
+            if (specialtyInfo?.id && preferredHospitalEntry?.hospitalId) {
+                const doctor = await Doctor.findOne({
+                    hospitalId: preferredHospitalEntry.hospitalId,
+                    specialtyId: specialtyInfo.id
+                })
+                    .populate('user', 'fullName')
+                    .select('title hospitalId specialtyId user')
+                    .lean();
+
+                if (doctor) {
+                    doctorInfo = {
+                        id: doctor._id,
+                        name: doctor.user?.fullName || doctor.title || 'Bác sĩ chuyên khoa',
+                        title: doctor.title
+                    };
+    }
             }
 
             const draft = await PrescriptionDraft.create({
@@ -207,20 +297,50 @@ const availableTools = {
                 diagnosis: symptom,
                 symptom,
                 keywords,
-                medications: medications.map(m => ({
-                    medicationId: m._id,
+                hospitalId: preferredHospitalEntry.hospitalId,
+                hospitalName: preferredHospitalEntry.hospitalName,
+                specialtyId: specialtyInfo?.id,
+                specialtyName: specialtyInfo?.name,
+                doctorId: doctorInfo?.id,
+                doctorName: doctorInfo?.name,
+                medications: preferredMedications.map(m => ({
+                    medicationId: m.medicationId,
                     name: m.name,
                     quantity: 1,
                     price: m.unitPrice || 0
                 })),
+                hospitalAvailability: hospitalAvailability.slice(0, 3).map(entry => ({
+                    hospitalId: entry.hospitalId,
+                    hospitalName: entry.hospitalName,
+                    address: entry.address,
+                    totalInStock: entry.inStock.length,
+                    inStock: entry.inStock.slice(0, 5),
+                    outOfStock: entry.outOfStock.slice(0, 5)
+                })),
                 note: medicalAdvice ? `Dựa trên khuyến nghị: ${medicalAdvice.slice(0, 120)}...` : undefined
             });
+
+            const hospitalContext = {
+                assignedHospital: preferredHospitalEntry
+                    ? {
+                        id: preferredHospitalEntry.hospitalId,
+                        name: preferredHospitalEntry.hospitalName,
+                        address: preferredHospitalEntry.address,
+                        availableMedications: preferredHospitalEntry.inStock.length,
+                        outOfStockMedications: preferredHospitalEntry.outOfStock.length
+                    }
+                    : null,
+                specialty: specialtyInfo,
+                doctor: doctorInfo,
+                branches: hospitalAvailability.slice(0, 3)
+            };
 
             return {
                 success: true,
                 advice: medicalAdvice,
-                medicinesFound: medications.map(m => m.name),
-                prescriptionCode: draft.prescriptionCode, // Mã tham chiếu ngắn gọn (ví dụ: PRS-ABC12345)
+                medicinesFound: preferredMedications.map(m => m.name),
+                prescriptionCode: draft.prescriptionCode,
+                hospitalContext,
                 message: 'Đơn thuốc nháp đã được tạo và chờ dược sĩ/bác sĩ duyệt.',
                 disclaimer: 'Thông tin chỉ mang tính tham khảo. Cần bác sĩ/dược sĩ xác nhận trước khi dùng thuốc.'
             };
@@ -241,6 +361,14 @@ const availableTools = {
 
     rescheduleAppointment: async ({ bookingCode, preferredDate, preferredTime, sessionId }) => {
         return appointmentTools.rescheduleAppointment({ bookingCode, preferredDate, preferredTime, sessionId });
+    },
+
+    getMyPrescriptions: async ({ status, includeDrafts, limit, sessionId }) => {
+        return prescriptionTools.getMyPrescriptions({ status, includeDrafts, limit, sessionId });
+    },
+
+    cancelPrescription: async ({ prescriptionCode, prescriptionId, reason, sessionId }) => {
+        return prescriptionTools.cancelPrescription({ prescriptionCode, prescriptionId, reason, sessionId });
     }
 };
 
@@ -252,7 +380,7 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
 
     let result;
     let toolCalled = false;
-
+    
     try {
         result = await chat.sendMessage(userPrompt);
     } catch (error) {
@@ -265,12 +393,12 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
         if (!call) {
             return {
                 text: result.response.text(),
-                usedTool: toolCalled
+                usedTool: toolCalled 
             };
         }
-
+        
         console.log(`[AI Request] ${call.name}`);
-
+        
         if (call.name === 'findAvailableSlots') {
             const ref = normalizeReferenceCode(userPrompt);
             if (ref) {
@@ -281,9 +409,9 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
                     userPrompt
                 });
 
-                toolCalled = true;
+                                    toolCalled = true;
                 if (directResult.success) {
-                    return {
+                                    return {
                         text: `Tôi đã đặt lịch ${ref.code} thành công. Mã đặt lịch của bạn là ${directResult.bookingCode}.`,
                         usedTool: true
                     };
@@ -295,18 +423,27 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
                 };
             }
         }
-
+        
         const toolImpl = availableTools[call.name];
         if (!toolImpl) {
             console.error(`Tool ${call.name} không tồn tại.`);
             result = await chat.sendMessage(JSON.stringify({
-                functionResponse: { name: call.name, response: { error: `Tool ${call.name} không tồn tại.` } }
+                    functionResponse: { name: call.name, response: { error: `Tool ${call.name} không tồn tại.` } }
             }));
-            continue;
+            continue; 
         }
 
         let args = call.args || {};
-        if (['findAvailableSlots', 'bookAppointment', 'checkInventoryAndPrescribe', 'getMyAppointments', 'cancelAppointment', 'rescheduleAppointment'].includes(call.name)) {
+        if ([
+            'findAvailableSlots',
+            'bookAppointment',
+            'checkInventoryAndPrescribe',
+            'getMyAppointments',
+            'cancelAppointment',
+            'rescheduleAppointment',
+            'getMyPrescriptions',
+            'cancelPrescription'
+        ].includes(call.name)) {
             args.sessionId = sessionId;
         }
         if (call.name === 'bookAppointment') {
@@ -324,7 +461,7 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
 
         try {
             result = await chat.sendMessage(JSON.stringify({
-                functionResponse: { name: call.name, response: toolResult }
+                    functionResponse: { name: call.name, response: toolResult }
             }));
         } catch (error) {
             console.error('Lỗi khi gửi kết quả tool:', error);

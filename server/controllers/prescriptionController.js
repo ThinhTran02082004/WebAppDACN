@@ -5,6 +5,7 @@ const Medication = require('../models/Medication');
 const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
 const MedicalRecord = require('../models/MedicalRecord');
+const User = require('../models/User');
 const asyncHandler = require('../middlewares/async');
 const mongoose = require('mongoose');
 
@@ -308,6 +309,132 @@ exports.getPrescriptionsByAppointment = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: prescriptions
+  });
+});
+
+// Doctor view: pending prescription summary grouped by specialty and doctor
+exports.getDoctorApprovalSummary = asyncHandler(async (req, res) => {
+  const doctorUserId = req.user.id;
+  const doctor = await Doctor.findOne({ user: doctorUserId }).populate('hospitalId');
+
+  if (!doctor) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy thông tin bác sĩ'
+    });
+  }
+
+  if (!doctor.hospitalId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Bác sĩ chưa được gán vào chi nhánh'
+    });
+  }
+
+  const query = {
+    hospitalId: doctor.hospitalId,
+    status: { $in: ['approved', 'verified'] }
+  };
+
+  const prescriptions = await Prescription.find(query)
+    .populate({
+      path: 'doctorId',
+      select: 'user specialtyId',
+      populate: [
+        { path: 'user', select: 'fullName' },
+        { path: 'specialtyId', select: 'name' }
+      ]
+    })
+    .populate('patientId', 'fullName')
+    .sort({ createdAt: -1 })
+    .limit(200);
+
+  const summary = {
+    totalPending: prescriptions.length,
+    bySpecialty: [],
+    byDoctor: [],
+    recent: []
+  };
+
+  const specialtyMap = new Map();
+  const doctorMap = new Map();
+
+  prescriptions.forEach((prescription) => {
+    const doctorInfo = prescription.doctorId;
+    const specialtyInfo = doctorInfo?.specialtyId;
+    const specialtyId = specialtyInfo?._id?.toString() || doctorInfo?.specialtyId?.toString();
+    const doctorId = doctorInfo?._id?.toString();
+
+    if (specialtyId) {
+      const current = specialtyMap.get(specialtyId) || {
+        specialtyId,
+        specialtyName: specialtyInfo?.name || 'Chưa xác định',
+        total: 0
+      };
+      current.total += 1;
+      specialtyMap.set(specialtyId, current);
+    }
+
+    if (doctorId) {
+      const current = doctorMap.get(doctorId) || {
+        doctorId,
+        doctorName: doctorInfo?.user?.fullName || 'Bác sĩ',
+        specialtyName: specialtyInfo?.name || 'Chưa xác định',
+        total: 0
+      };
+      current.total += 1;
+      doctorMap.set(doctorId, current);
+    }
+  });
+
+  summary.bySpecialty = Array.from(specialtyMap.values()).sort((a, b) => b.total - a.total);
+  summary.byDoctor = Array.from(doctorMap.values()).sort((a, b) => b.total - a.total);
+  summary.recent = prescriptions.slice(0, 5).map((item) => ({
+    id: item._id,
+    patientName: item.patientId?.fullName || 'Bệnh nhân',
+    doctorName: item.doctorId?.user?.fullName || 'Bác sĩ',
+    specialtyName: item.doctorId?.specialtyId?.name || 'Chuyên khoa',
+    status: item.status,
+    createdAt: item.createdAt
+  }));
+
+  res.json({
+    success: true,
+    data: summary
+  });
+});
+
+// Admin filter metadata for prescriptions
+exports.getAdminPrescriptionFilters = asyncHandler(async (req, res) => {
+  const doctors = await Doctor.find()
+    .populate('user', 'fullName email')
+    .populate('specialtyId', 'name');
+
+  const specialtyMap = new Map();
+
+  const doctorOptions = doctors.map((doctor) => {
+    if (doctor.specialtyId) {
+      const specialtyKey = doctor.specialtyId._id.toString();
+      specialtyMap.set(specialtyKey, {
+        id: specialtyKey,
+        name: doctor.specialtyId.name
+      });
+    }
+
+    return {
+      id: doctor._id.toString(),
+      name: doctor.user?.fullName || 'Bác sĩ',
+      specialtyId: doctor.specialtyId ? doctor.specialtyId._id.toString() : null,
+      specialtyName: doctor.specialtyId?.name || 'Chưa xác định'
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      specialties: Array.from(specialtyMap.values()),
+      doctors: doctorOptions
+    }
   });
 });
 
@@ -770,8 +897,6 @@ exports.getPrescriptionsForPharmacy = asyncHandler(async (req, res) => {
   const { page = 1, limit = 20, status } = req.query;
   const userId = req.user.id;
 
-  // Get pharmacist's hospitalId
-  const User = require('../models/User');
   const pharmacist = await User.findById(userId);
   if (!pharmacist || !pharmacist.hospitalId) {
     return res.status(400).json({
@@ -820,6 +945,92 @@ exports.getPrescriptionsForPharmacy = asyncHandler(async (req, res) => {
   });
 });
 
+// Get prescriptions overview for admin
+exports.getPrescriptionsForAdmin = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20, status, hospitalId, specialtyId, doctorId } = req.query;
+
+  const query = {};
+
+  if (status && status !== 'all') {
+    query.status = status;
+  }
+
+  if (hospitalId) {
+    query.hospitalId = hospitalId;
+  }
+
+  let specialtyDoctorIds = null;
+  if (specialtyId) {
+    const doctorsInSpecialty = await Doctor.find({ specialtyId }).select('_id');
+    specialtyDoctorIds = doctorsInSpecialty.map(doc => doc._id);
+
+    if (specialtyDoctorIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: {
+          total: 0,
+          page: parseInt(page),
+          pages: 0
+        }
+      });
+    }
+  }
+
+  if (doctorId && specialtyDoctorIds) {
+    const isDoctorInSpecialty = specialtyDoctorIds.some(id => id.toString() === doctorId);
+    if (!isDoctorInSpecialty) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: {
+          total: 0,
+          page: parseInt(page),
+          pages: 0
+        }
+      });
+    }
+    query.doctorId = doctorId;
+  } else if (doctorId) {
+    query.doctorId = doctorId;
+  } else if (specialtyDoctorIds) {
+    query.doctorId = { $in: specialtyDoctorIds };
+  }
+
+  const numericLimit = parseInt(limit);
+  const skip = (parseInt(page) - 1) * numericLimit;
+
+  const prescriptions = await Prescription.find(query)
+    .populate('medications.medicationId', 'name unitTypeDisplay')
+    .populate('appointmentId', 'appointmentDate bookingCode')
+    .populate('patientId', 'fullName email phoneNumber')
+    .populate('doctorId', 'title specialtyId')
+    .populate({
+      path: 'doctorId',
+      populate: {
+        path: 'user',
+        select: 'fullName'
+      }
+    })
+    .populate('verifiedBy', 'fullName')
+    .populate('hospitalId', 'name address')
+    .sort({ createdAt: -1 })
+    .limit(numericLimit)
+    .skip(skip);
+
+  const total = await Prescription.countDocuments(query);
+
+  res.json({
+    success: true,
+    data: prescriptions,
+    pagination: {
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / numericLimit)
+    }
+  });
+});
+
 // Verify prescription (pharmacist approval)
 exports.verifyPrescription = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -827,10 +1038,17 @@ exports.verifyPrescription = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const mongoose = require('mongoose');
 
-  // Get pharmacist's hospitalId
-  const User = require('../models/User');
-  const pharmacist = await User.findById(userId);
-  if (!pharmacist || !pharmacist.hospitalId) {
+  const staffUser = await User.findById(userId);
+  if (!staffUser) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy người dùng'
+    });
+  }
+
+  const isAdminActor = staffUser.roleType === 'admin' || staffUser.role === 'admin';
+
+  if (!isAdminActor && !staffUser.hospitalId) {
     return res.status(400).json({
       success: false,
       message: 'Dược sĩ chưa được gán vào chi nhánh'
@@ -849,7 +1067,7 @@ exports.verifyPrescription = asyncHandler(async (req, res) => {
     }
 
     // Validate pharmacist's hospitalId matches prescription's hospitalId
-    if (prescription.hospitalId.toString() !== pharmacist.hospitalId.toString()) {
+    if (!isAdminActor && prescription.hospitalId.toString() !== staffUser.hospitalId.toString()) {
       throw new Error('Bạn chỉ có thể phê duyệt đơn thuốc của chi nhánh mình');
     }
 
@@ -915,10 +1133,17 @@ exports.rejectPrescription = asyncHandler(async (req, res) => {
     });
   }
 
-  // Get pharmacist's hospitalId
-  const User = require('../models/User');
-  const pharmacist = await User.findById(userId);
-  if (!pharmacist || !pharmacist.hospitalId) {
+  const staffUser = await User.findById(userId);
+  if (!staffUser) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy người dùng'
+    });
+  }
+
+  const isAdminActor = staffUser.roleType === 'admin' || staffUser.role === 'admin';
+
+  if (!isAdminActor && !staffUser.hospitalId) {
     return res.status(400).json({
       success: false,
       message: 'Dược sĩ chưa được gán vào chi nhánh'
@@ -937,7 +1162,7 @@ exports.rejectPrescription = asyncHandler(async (req, res) => {
     }
 
     // Validate pharmacist's hospitalId matches prescription's hospitalId
-    if (prescription.hospitalId.toString() !== pharmacist.hospitalId.toString()) {
+    if (!isAdminActor && prescription.hospitalId.toString() !== staffUser.hospitalId.toString()) {
       throw new Error('Bạn chỉ có thể từ chối đơn thuốc của chi nhánh mình');
     }
 
@@ -987,7 +1212,6 @@ exports.dispensePrescription = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // Get pharmacist's hospitalId
-  const User = require('../models/User');
   const MedicationInventory = require('../models/MedicationInventory');
   const mongoose = require('mongoose');
   
