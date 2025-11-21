@@ -1,4 +1,5 @@
 const Prescription = require('../models/Prescription');
+const PrescriptionDraft = require('../models/PrescriptionDraft');
 const PrescriptionTemplate = require('../models/PrescriptionTemplate');
 const Medication = require('../models/Medication');
 const Appointment = require('../models/Appointment');
@@ -593,20 +594,25 @@ exports.cancelPrescription = asyncHandler(async (req, res) => {
   });
 });
 
-// Get user prescription history (for MedicalHistory page)
+// Get user prescription history (for MedicalHistory page) - include drafts
 exports.getUserPrescriptionHistory = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { page = 1, limit = 10, status } = req.query;
 
-  const query = { patientId: userId };
-  
+  const pageNumber = Math.max(1, parseInt(page, 10) || 1);
+  const limitNumber = Math.max(1, parseInt(limit, 10) || 10);
+  const startIndex = (pageNumber - 1) * limitNumber;
+  const endIndex = startIndex + limitNumber;
+
+  const prescriptionQuery = { patientId: userId };
+  const draftQuery = { patientId: userId };
+
   if (status) {
-    query.status = status;
+    prescriptionQuery.status = status;
+    draftQuery.status = status;
   }
 
-  const skip = (page - 1) * limit;
-
-  const prescriptions = await Prescription.find(query)
+  const prescriptions = await Prescription.find(prescriptionQuery)
     .populate('medications.medicationId', 'name unitTypeDisplay')
     .populate('appointmentId', 'appointmentDate bookingCode specialtyId')
     .populate({
@@ -632,25 +638,30 @@ exports.getUserPrescriptionHistory = asyncHandler(async (req, res) => {
       }
     })
     .sort({ createdAt: -1 })
-    .limit(limit * 1)
-    .skip(skip);
+    .lean();
 
-  const total = await Prescription.countDocuments(query);
+  const drafts = await PrescriptionDraft.find(draftQuery)
+    .sort({ createdAt: -1 })
+    .lean();
 
-  // Group by appointment for display
+  // Group official prescriptions by appointment
   const groupedByAppointment = {};
   prescriptions.forEach(prescription => {
     const appointmentId = prescription.appointmentId?._id?.toString() || 'unknown';
     if (!groupedByAppointment[appointmentId]) {
       groupedByAppointment[appointmentId] = {
+        isDraft: false,
+        type: 'official',
         appointmentId: prescription.appointmentId?._id,
         appointmentDate: prescription.appointmentId?.appointmentDate,
         bookingCode: prescription.appointmentId?.bookingCode,
         specialty: prescription.appointmentId?.specialtyId?.name || prescription.doctorId?.specialtyId?.name,
         doctor: prescription.doctorId?.user?.fullName || 'Không xác định',
-        prescriptions: []
+        prescriptions: [],
+        createdAt: prescription.appointmentId?.appointmentDate || prescription.createdAt || new Date()
       };
     }
+
     groupedByAppointment[appointmentId].prescriptions.push({
       _id: prescription._id,
       diagnosis: prescription.diagnosis,
@@ -661,15 +672,54 @@ exports.getUserPrescriptionHistory = asyncHandler(async (req, res) => {
       createdAt: prescription.createdAt,
       medicationsCount: prescription.medications.length
     });
+
+    const currentCreatedAt = prescription.createdAt || prescription.appointmentId?.appointmentDate;
+    if (currentCreatedAt && groupedByAppointment[appointmentId].createdAt < currentCreatedAt) {
+      groupedByAppointment[appointmentId].createdAt = currentCreatedAt;
+    }
   });
+
+  const officialRecords = Object.values(groupedByAppointment);
+
+  const draftRecords = drafts.map(draft => ({
+    isDraft: true,
+    type: 'draft',
+    prescriptionCode: draft.prescriptionCode,
+    symptom: draft.symptom,
+    diagnosis: draft.diagnosis,
+    status: draft.status,
+    note: draft.note,
+    keywords: draft.keywords || [],
+    medicationsCount: draft.medications?.length || 0,
+    medications: (draft.medications || []).map(med => ({
+      name: med.name,
+      quantity: med.quantity,
+      price: med.price
+    })),
+    createdAt: draft.createdAt,
+    updatedAt: draft.updatedAt
+  }));
+
+  const combinedRecords = [...officialRecords, ...draftRecords].sort((a, b) => {
+    const dateA = new Date(a.createdAt || 0);
+    const dateB = new Date(b.createdAt || 0);
+    return dateB - dateA;
+  });
+
+  const totalCombined = combinedRecords.length;
+  const paginatedRecords = combinedRecords.slice(startIndex, endIndex);
 
   res.json({
     success: true,
-    records: Object.values(groupedByAppointment),
+    records: paginatedRecords,
     pagination: {
-      total,
-      page: parseInt(page),
-      totalPages: Math.ceil(total / limit)
+      total: totalCombined,
+      page: pageNumber,
+      totalPages: Math.ceil(totalCombined / limitNumber)
+    },
+    stats: {
+      officialTotal: officialRecords.length,
+      draftTotal: draftRecords.length
     }
   });
 });

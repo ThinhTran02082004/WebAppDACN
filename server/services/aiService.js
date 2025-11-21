@@ -7,6 +7,7 @@ const cache = require('./cacheService');
 const searchTools = require('./searchTools');
 const appointmentTools = require('./appointmentTools');
 const { SYSTEM_INSTRUCTION } = require('./aiConfig');
+const { tools } = require('./aiToolsDefinitions');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -55,48 +56,8 @@ const mainModel = genAI.getGenerativeModel({
     systemInstruction: SYSTEM_INSTRUCTION
 });
 
-const toolDeclarations = {
-    functionDeclarations: [
-        {
-            name: "findAvailableSlots",
-            description: "Tìm lịch khám còn trống dựa trên nhu cầu người dùng.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    query: { type: "STRING" },
-                    city: { type: "STRING" },
-                    date: { type: "STRING" },
-                    sessionId: { type: "STRING" }
-                },
-                required: ["query", "sessionId"]
-            }
-        },
-        {
-            name: "bookAppointment",
-            description: "Đặt lịch dựa trên mã slot (L01, L02) hoặc chỉ số slot.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    slotIndex: { type: "STRING", description: "Mã slot (L01) hoặc số thứ tự (1)" },
-                    sessionId: { type: "STRING" }
-                },
-                required: ["slotIndex", "sessionId"]
-            }
-        },
-        {
-            name: "checkInventoryAndPrescribe",
-            description: "Hỏi dược sĩ AI, kiểm tra kho và tạo đơn thuốc nháp.",
-            parameters: {
-                type: "OBJECT",
-                properties: {
-                    symptom: { type: "STRING" },
-                    sessionId: { type: "STRING" }
-                },
-                required: ["symptom", "sessionId"]
-            }
-        }
-    ]
-};
+// Sử dụng tool declarations từ aiToolsDefinitions.js
+const toolDeclarations = tools;
 
 const normalizeReferenceCode = (text) => {
     if (!text || typeof text !== 'string') return null;
@@ -259,7 +220,7 @@ const availableTools = {
                 success: true,
                 advice: medicalAdvice,
                 medicinesFound: medications.map(m => m.name),
-                prescriptionId: draft._id,
+                prescriptionCode: draft.prescriptionCode, // Mã tham chiếu ngắn gọn (ví dụ: PRS-ABC12345)
                 message: 'Đơn thuốc nháp đã được tạo và chờ dược sĩ/bác sĩ duyệt.',
                 disclaimer: 'Thông tin chỉ mang tính tham khảo. Cần bác sĩ/dược sĩ xác nhận trước khi dùng thuốc.'
             };
@@ -267,6 +228,19 @@ const availableTools = {
             console.error('Lỗi checkInventoryAndPrescribe:', error);
             return { error: error.message };
         }
+    },
+
+    // Thêm các tool quản lý lịch hẹn
+    getMyAppointments: async ({ sessionId }) => {
+        return appointmentTools.getMyAppointments({ sessionId });
+    },
+
+    cancelAppointment: async ({ bookingCode, reason, sessionId }) => {
+        return appointmentTools.cancelAppointment({ bookingCode, reason, sessionId });
+    },
+
+    rescheduleAppointment: async ({ bookingCode, preferredDate, preferredTime, sessionId }) => {
+        return appointmentTools.rescheduleAppointment({ bookingCode, preferredDate, preferredTime, sessionId });
     }
 };
 
@@ -332,7 +306,7 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
         }
 
         let args = call.args || {};
-        if (['findAvailableSlots', 'bookAppointment', 'checkInventoryAndPrescribe'].includes(call.name)) {
+        if (['findAvailableSlots', 'bookAppointment', 'checkInventoryAndPrescribe', 'getMyAppointments', 'cancelAppointment', 'rescheduleAppointment'].includes(call.name)) {
             args.sessionId = sessionId;
         }
         if (call.name === 'bookAppointment') {

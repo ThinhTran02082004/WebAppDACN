@@ -56,10 +56,61 @@ const prescriptionDraftSchema = new mongoose.Schema({
   note: {
     type: String,
     trim: true
+  },
+  prescriptionCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true
   }
 }, { timestamps: true });
 
+// Tạo prescriptionCode duy nhất trước khi lưu
+prescriptionDraftSchema.pre('save', async function(next) {
+  try {
+    if (!this.prescriptionCode) {
+      const session = this.$session();
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let prescriptionCode;
+      let isUnique = false;
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      while (!isUnique && attempts < maxAttempts) {
+        prescriptionCode = 'PRS-';
+        for (let i = 0; i < 8; i++) {
+          prescriptionCode += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        const query = this.constructor.findOne({ prescriptionCode });
+        if (session) {
+          query.session(session);
+        }
+        
+        const existing = await query;
+        
+        if (!existing) {
+          isUnique = true;
+        }
+        attempts++;
+      }
+
+      if (!isUnique) {
+        return next(new Error('Không thể tạo mã đơn thuốc duy nhất sau nhiều lần thử.'));
+      }
+
+      this.prescriptionCode = prescriptionCode;
+      console.log(`[PrescriptionDraft Model] Đã tạo prescriptionCode: ${prescriptionCode} cho prescription ID: ${this._id}`);
+    }
+    next();
+  } catch (error) {
+    console.error('Error generating prescription code:', error);
+    next(error);
+  }
+});
+
 prescriptionDraftSchema.index({ patientId: 1, createdAt: -1 });
+prescriptionDraftSchema.index({ prescriptionCode: 1 });
 
 module.exports = mongoose.model('PrescriptionDraft', prescriptionDraftSchema);
 
