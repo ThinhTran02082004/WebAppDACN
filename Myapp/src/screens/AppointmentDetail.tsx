@@ -182,6 +182,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   const [cancellationReason, setCancellationReason] = useState('');
   const [cancellationError, setCancellationError] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isJoiningVideoCall, setIsJoiningVideoCall] = useState(false);
   const hasRefreshedRef = useRef(false);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshAppointmentRef = useRef<((delay?: number, retryCount?: number, forceRetry?: boolean) => Promise<void>) | null>(null);
@@ -862,8 +863,9 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
 
   const handleCancelAppointment = () => {
     if (!appointment) return;
-    if (isPastAppointment(appointment) || ['cancelled', 'completed', 'rejected', 'confirmed'].includes(appointment.status)) {
-      Alert.alert('Không thể hủy lịch', 'Chỉ có thể hủy lịch khi lịch hẹn đang chờ xác nhận hoặc vừa được đổi lịch.');
+    // Only allow cancel for pending appointments (Chờ xác nhận)
+    if (isPastAppointment(appointment) || appointment.status !== 'pending') {
+      Alert.alert('Không thể hủy lịch', 'Chỉ có thể hủy lịch khi lịch hẹn đang chờ xác nhận.');
       return;
     }
     openCancelModal();
@@ -905,12 +907,13 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   const canRescheduleAppointment = (appt: Appointment | null) => {
     if (!appt) return false;
     if (isPastAppointment(appt)) return false;
-    return !['cancelled', 'completed', 'rejected', 'confirmed'].includes(appt.status);
+    // Only allow reschedule for pending appointments (Chờ xác nhận)
+    return appt.status === 'pending';
   };
 
   const handleReschedule = (appt: Appointment) => {
     if (!canRescheduleAppointment(appt)) {
-      Alert.alert('Không thể đổi lịch', 'Chỉ có thể đổi lịch khi lịch hẹn đang chờ xác nhận hoặc vừa được đổi lịch.');
+      Alert.alert('Không thể đổi lịch', 'Chỉ có thể đổi lịch khi lịch hẹn đang chờ xác nhận.');
       return;
     }
     navigation.navigate('Reschedule', {
@@ -951,6 +954,82 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     } catch (error: any) {
       console.error('Error starting chat:', error);
       Alert.alert('Lỗi', error?.response?.data?.message || 'Không thể bắt đầu trò chuyện. Vui lòng thử lại sau.');
+    }
+  };
+
+  const handleVideoCall = async () => {
+    if (!appointment || isJoiningVideoCall) return;
+
+    try {
+      setIsJoiningVideoCall(true);
+
+      const eligibleStatuses = ['confirmed', 'completed'];
+      if (!eligibleStatuses.includes(appointment.status)) {
+        Alert.alert('Thông báo', 'Chỉ có thể gọi video khi lịch hẹn đã được xác nhận.');
+        return;
+      }
+
+      let activeRoom: any | null = null;
+
+      try {
+        const existingRoomResponse = await apiService.getVideoRoomByAppointment(appointment._id);
+        if (
+          existingRoomResponse?.success &&
+          existingRoomResponse.data &&
+          ['waiting', 'active'].includes(existingRoomResponse.data.status)
+        ) {
+          activeRoom = existingRoomResponse.data;
+        }
+      } catch (roomLookupError) {
+        console.warn('[AppointmentDetail] Không thể kiểm tra phòng video hiện có', roomLookupError);
+      }
+
+      if (!activeRoom) {
+        const createResponse = await apiService.createVideoRoom(appointment._id);
+
+        if (!createResponse?.success || !createResponse.data) {
+          Alert.alert('Lỗi', createResponse?.message || 'Không thể tạo phòng video. Vui lòng thử lại.');
+          return;
+        }
+
+        activeRoom = createResponse.data;
+      }
+
+      const roomId = activeRoom?._id || activeRoom?.roomId;
+
+      if (!roomId) {
+        Alert.alert('Lỗi', 'Không thể xác định phòng video.');
+        return;
+      }
+
+      const joinResponse = await apiService.joinVideoRoom(roomId);
+
+      if (!joinResponse?.success || !joinResponse.data) {
+        Alert.alert('Lỗi', joinResponse?.message || 'Không thể tham gia phòng video. Vui lòng thử lại.');
+        return;
+      }
+
+      const { token, wsUrl, roomName, role, appointmentInfo } = joinResponse.data;
+
+      if (!token || !wsUrl) {
+        Alert.alert('Lỗi', 'Thiếu thông tin kết nối phòng video.');
+        return;
+      }
+
+      navigation.navigate('VideoCall', {
+        roomId,
+        roomName: roomName || activeRoom?.roomName || `Phòng ${appointment.bookingCode || ''}`,
+        token,
+        wsUrl,
+        role,
+        appointmentInfo
+      });
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message || error?.message || 'Không thể bắt đầu cuộc gọi video. Vui lòng thử lại sau.';
+      Alert.alert('Lỗi', message);
+    } finally {
+      setIsJoiningVideoCall(false);
     }
   };
 
@@ -1034,7 +1113,18 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   const totalAmount = appointment.totalAmount || (consultationFee + serviceFee);
   const rescheduleCount = appointment.rescheduleCount ?? ((appointment as any)?.rescheduleCount ?? 0);
   const hasReachedRescheduleLimit = rescheduleCount >= 2;
-  const canModifyAppointment = !isPast && !['cancelled', 'completed', 'rejected', 'confirmed'].includes(appointment.status);
+  // Allow reschedule and cancel only for pending appointments (Chờ xác nhận)
+  // Show buttons for pending status regardless of whether it's past or not
+  const canModifyAppointment = appointment.status === 'pending';
+  
+  // Debug log to check status
+  console.log('[AppointmentDetail] Status check:', {
+    status: appointment.status,
+    canModifyAppointment,
+    isPast,
+    rescheduleCount,
+    hasReachedRescheduleLimit
+  });
   const hospitalization = appointment.hospitalization;
   const roomInfoText = getRoomInfo(appointment);
   const prescriptionMap = new Map<string, Prescription>();
@@ -1362,6 +1452,28 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
                   <Text style={styles.actionButtonText}>Chia sẻ</Text>
                 </TouchableOpacity>
               </>
+            )}
+            
+            {/* Video Call button for confirmed appointments only */}
+            {appointment.status === 'confirmed' && (
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.actionButtonPurple,
+                  isJoiningVideoCall && styles.actionButtonDisabled
+                ]}
+                onPress={handleVideoCall}
+                disabled={isJoiningVideoCall}
+              >
+                {isJoiningVideoCall ? (
+                  <ActivityIndicator size="small" color="#8b5cf6" />
+                ) : (
+                  <>
+                    <Ionicons name="videocam-outline" size={18} color="#8b5cf6" />
+                    <Text style={[styles.actionButtonText, { color: '#8b5cf6' }]}>Video Call</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             )}
             
             {/* Reschedule and Cancel buttons - align with Schedule screen */}
@@ -1984,6 +2096,10 @@ const styles = StyleSheet.create({
   actionButtonYellow: {
     backgroundColor: '#fef3c7',
     borderColor: '#f59e0b',
+  },
+  actionButtonPurple: {
+    backgroundColor: '#ede9fe',
+    borderColor: '#8b5cf6',
   },
   actionButtonDisabled: {
     backgroundColor: '#f3f4f6',

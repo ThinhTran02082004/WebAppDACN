@@ -41,7 +41,6 @@ export default function MessagesScreen() {
         setConversations([]);
       }
     } catch (error) {
-      console.error('Error fetching conversations:', error);
       setConversations([]);
     } finally {
       setLoading(false);

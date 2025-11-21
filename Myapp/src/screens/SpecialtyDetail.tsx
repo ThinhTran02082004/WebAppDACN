@@ -66,7 +66,21 @@ export default function SpecialtyDetailScreen() {
         
         const foundSpecialty = specialtiesData.find((item: Specialty) => item._id === specialtyId);
         if (foundSpecialty) {
-          setSpecialty(foundSpecialty);
+          // Normalize image - ensure it's always a string or undefined
+          let normalizedImage: string | undefined = undefined;
+          
+          if (typeof foundSpecialty.image === 'string' && foundSpecialty.image && foundSpecialty.image.trim()) {
+            normalizedImage = foundSpecialty.image;
+          } else if (typeof foundSpecialty.imageUrl === 'string' && foundSpecialty.imageUrl && foundSpecialty.imageUrl.trim()) {
+            normalizedImage = foundSpecialty.imageUrl;
+          } else if (foundSpecialty.image && typeof foundSpecialty.image === 'object') {
+            const secureUrl = (foundSpecialty.image as any)?.secureUrl;
+            if (typeof secureUrl === 'string' && secureUrl && secureUrl.trim()) {
+              normalizedImage = secureUrl;
+            }
+          }
+          
+          setSpecialty({ ...foundSpecialty, image: normalizedImage, imageUrl: normalizedImage || foundSpecialty.imageUrl } as Specialty);
         } else {
           setError('Không tìm thấy chuyên khoa');
         }
@@ -113,6 +127,36 @@ export default function SpecialtyDetailScreen() {
 
   const formatPrice = (price: number) => {
     return price.toLocaleString('vi-VN') + 'đ';
+  };
+
+  const getImageUri = (specialty: Specialty | null): string | null => {
+    if (!specialty) return null;
+    
+    // Try image property first
+    if (typeof specialty.image === 'string' && specialty.image && specialty.image.trim()) {
+      return specialty.image;
+    }
+    
+    // Try imageUrl property
+    if (typeof specialty.imageUrl === 'string' && specialty.imageUrl && specialty.imageUrl.trim()) {
+      return specialty.imageUrl;
+    }
+    
+    // Try image as object with secureUrl
+    if (specialty.image && typeof specialty.image === 'object') {
+      const secureUrl = (specialty.image as any)?.secureUrl;
+      if (typeof secureUrl === 'string' && secureUrl && secureUrl.trim()) {
+        return secureUrl;
+      }
+    }
+    
+    // Try accessing raw data properties
+    const rawData = specialty as any;
+    if (rawData.image?.secureUrl && typeof rawData.image.secureUrl === 'string') {
+      return rawData.image.secureUrl;
+    }
+    
+    return null;
   };
 
   const getFilteredDoctors = () => {
@@ -240,17 +284,26 @@ export default function SpecialtyDetailScreen() {
         >
           {/* Specialty Image */}
           <View style={styles.imageContainer}>
-            {typeof specialty.image === 'string' && specialty.image ? (
-              <Image 
-                source={{ uri: specialty.image }} 
-                style={styles.specialtyImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.placeholderImage}>
-                <Ionicons name="medical" size={64} color="#ccc" />
-              </View>
-            )}
+            {(() => {
+              const imageUri = getImageUri(specialty);
+              return imageUri ? (
+                <Image 
+                  source={{ uri: imageUri }} 
+                  style={styles.specialtyImage}
+                  resizeMode="cover"
+                  onError={(e) => {
+                    console.log('SpecialtyDetail image load error:', e.nativeEvent.error);
+                  }}
+                  onLoad={() => {
+                    console.log('SpecialtyDetail image loaded successfully:', imageUri);
+                  }}
+                />
+              ) : (
+                <View style={styles.placeholderImage}>
+                  <Ionicons name="medical" size={64} color="#ccc" />
+                </View>
+              );
+            })()}
           </View>
 
           {/* Specialty Content */}
@@ -496,6 +549,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 250,
     backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
   },
   specialtyImage: {
     width: '100%',

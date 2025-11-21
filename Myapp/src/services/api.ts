@@ -254,18 +254,7 @@ class ApiService {
     // const dt = start ? `${Date.now() - start}ms` : '';
 
     // Safe logging: don't throw from logging itself
-    try {
-      const urlInfo = conf?.url ? `${conf.url}` : `${this.client.defaults.baseURL || ''}`;
-      console.error(`[api] ERROR ${conf?.method?.toUpperCase() || 'GET'} ${urlInfo}`, e?.response?.data || e?.message || e);
-    } catch {
-      // Fallback logging
-      try {
-        console.error('[api] ERROR (logging failed)', e?.message || e);
-      } catch {
-        // last-resort
-        // nothing else to do
-      }
-    }
+    // Logging removed to reduce console noise
 
     // Common mapped errors
     if (e?.code === 'ECONNABORTED') {
@@ -697,6 +686,57 @@ class ApiService {
       const res = await this.client.get(`/payments/momo/result`, {
         params: { orderId, resultCode },
       });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  // Video Room APIs
+  async getVideoRoomByAppointment(appointmentId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/video-rooms/appointment/${appointmentId}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async createVideoRoom(appointmentId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post('/video-rooms/create', { appointmentId });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async joinVideoRoom(roomId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/video-rooms/join/${roomId}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async leaveVideoRoom(roomId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post(`/video-rooms/${roomId}/leave`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async endVideoRoom(roomId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post(`/video-rooms/${roomId}/end`);
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);

@@ -10,17 +10,20 @@ import {
   StatusBar,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Doctor, apiService } from '../services/api';
 import { AppIcons, IconColors, IconSizes } from '../config/icons';
+import { useAuth } from '../contexts/AuthContext';
 
 type Props = {
   navigation: any;
 };
 
 export default function DoctorListScreen({ navigation }: Props) {
+  const { user } = useAuth();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -172,7 +175,14 @@ export default function DoctorListScreen({ navigation }: Props) {
           style={styles.consultButton}
           onPress={(e) => {
             e.stopPropagation();
-            navigation.navigate('Booking');
+            if (!user) {
+              Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để đặt lịch khám', [
+                { text: 'Hủy', style: 'cancel' },
+                { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
+              ]);
+            } else {
+              navigation.navigate('Booking');
+            }
           }}
         >
           <Text style={styles.consultButtonText}>Đặt lịch ngay</Text>
@@ -422,7 +432,6 @@ const styles = StyleSheet.create({
     height: 140,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0f8ff',
   },
   doctorAvatar: {
     width: 80,

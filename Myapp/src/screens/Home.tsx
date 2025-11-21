@@ -13,7 +13,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { SpecialtyCard } from '../components/SpecialtyCard';
 import HeaderSearch from '../components/HeaderSearch';
 import QuickAccess from '../components/QuickAccess';
-import FacilityList from '../components/FacilityList';
 import DoctorCard from '../components/DoctorCard';
 import Banner from '../components/Banner';
 import { apiService, Hospital, Doctor, ServiceItem, NewsItem } from '../services/api';
@@ -29,23 +28,23 @@ import { AppIcons, IconColors, IconSizes } from '../config/icons';
 const quickAccessItems = [
   { 
     id: '1', 
-    title: 'Đặt khám tại\ncơ sở', 
+    title: 'Chi nhánh', 
     icon: AppIcons.hospital,
   },
   { 
     id: '2',
-    title: 'Đặt khám\nchuyên khoa', 
+    title: 'Chuyên khoa', 
     icon: AppIcons.specialtyOutline,
   },
   { 
     id: '3',
-    title: 'Gọi video\nvới bác sĩ', 
+    title: 'Video call', 
     icon: AppIcons.video,
   },
   { 
     id: '4',
-    title: 'Đặt lịch khám\nvới bác sĩ', 
-    icon: AppIcons.doctor,
+    title: 'Bác sĩ', 
+    icon: AppIcons.usersOutline,
   },
   { 
     id: '6',
@@ -80,17 +79,14 @@ export default function Home({ navigation }: Props) {
     // Initialize API configuration on app start
     const initApiConfig = async () => {
       try {
-        console.log('[Home] Initializing API configuration...');
         await clearApiHost(); // Clear any cached configuration
         resetApiHost(); // Reset to default configuration
-        console.log('[Home] API configuration initialized, current API_BASE:', typeof API_BASE === 'function' ? API_BASE() : API_BASE);
         
         // Wait a moment for configuration to be applied, then load data
         setTimeout(() => {
           loadData();
         }, 100);
       } catch (error) {
-        console.error('[Home] Failed to initialize API configuration:', error);
         // Still try to load data even if config fails
         loadData();
       }
@@ -102,15 +98,10 @@ export default function Home({ navigation }: Props) {
   }, []);
 
   const loadData = async () => {
-    console.log('Loading data...');
     try {
       setLoading(true);
       setDoctors([]);
-      
-      // Load data in parallel
-      console.log('Fetching data...');
-      console.log('API Base URL:', typeof API_BASE === 'function' ? API_BASE() : API_BASE);
-      
+       
             const [hospitalsResponse, doctorsResponse, specialtiesResponse, servicesResponse, newsResponse] = await Promise.all([
         apiService.getHospitals({ limit: 10, isActive: true }),
         apiService.getDoctors({}),
@@ -118,7 +109,6 @@ export default function Home({ navigation }: Props) {
         apiService.getServices({ limit: 12, isActive: true }),
         apiService.getNews({ limit: 6, isPublished: true as any })
       ]);
-      console.log('Data fetched successfully');
       
       // Defensive: API may return unexpected shapes or undefined data
       const hospitalsList = hospitalsResponse && (hospitalsResponse as any).data && (hospitalsResponse as any).data.hospitals
@@ -135,15 +125,6 @@ export default function Home({ navigation }: Props) {
       } else if (Array.isArray(doctorsResponse?.data)) {
         // Trường hợp API trả về trực tiếp mảng
         doctorsList = doctorsResponse.data;
-
-      } else {
-        console.log('No doctors found in expected structure');
-        console.log('Response structure:', {
-          hasResponse: !!doctorsResponse,
-          hasData: !!doctorsResponse?.data,
-          dataType: typeof doctorsResponse?.data,
-          dataKeys: doctorsResponse?.data ? Object.keys(doctorsResponse.data) : 'no data'
-        });
       }
 
       
@@ -151,8 +132,6 @@ export default function Home({ navigation }: Props) {
       const specialtiesList = specialtiesResponse && (specialtiesResponse as any).data && (specialtiesResponse as any).data.specialties
         ? (specialtiesResponse as any).data.specialties
         : [];
-      console.log('Specialties response:', specialtiesResponse);
-      console.log('Specialties list:', specialtiesList);
 
       // Services controller may return shape { data: ServiceItem[] } or nested
       let servicesList: ServiceItem[] = [];
@@ -162,30 +141,11 @@ export default function Home({ navigation }: Props) {
         else if (Array.isArray((data as any).services)) servicesList = (data as any).services as ServiceItem[];
         else if (Array.isArray(data)) servicesList = data as ServiceItem[];
       }
-      console.log('Services response:', servicesResponse);
-      console.log('Services list:', servicesList);
 
       const newsList = newsResponse && (newsResponse as any).data && Array.isArray((newsResponse as any).data.news)
         ? (newsResponse as any).data.news
         : [];
 
-      if (!Array.isArray(hospitalsList)) {
-        console.warn('Unexpected hospitals shape', hospitalsResponse);
-      }
-      if (!Array.isArray(doctorsList)) {
-        console.warn('Unexpected doctors shape', doctorsResponse);
-      } else {
-        console.log('Doctors data:', doctorsList);
-      }
-      if (!Array.isArray(specialtiesList)) {
-        console.warn('Unexpected specialties shape', specialtiesResponse);
-      }
-      if (!Array.isArray(servicesList)) {
-        console.warn('Unexpected services shape', servicesResponse);
-      }
-      if (!Array.isArray(newsList)) {
-        console.warn('Unexpected news shape', newsResponse);
-      }
 
       setHospitals(hospitalsList);
       setDoctors(doctorsList);
@@ -200,12 +160,10 @@ export default function Home({ navigation }: Props) {
       setServices(servicesList);
       setNews(newsList);
     } catch (error) {
-      console.error('Error loading data:', error);
       const errMsg = (error as any)?.message || String(error);
       
       // If network error, try to clear cache and reset API host
       if (errMsg.toLowerCase().includes('cannot reach backend') || errMsg.toLowerCase().includes('network error')) {
-        console.log('[Home] Network error detected, clearing API cache...');
         try {
           await clearApiHost();
           resetApiHost();
@@ -254,30 +212,24 @@ export default function Home({ navigation }: Props) {
     switch (item.id) {
       case '1':
         // Đặt khám tại cơ sở
-        console.log('Navigate to facility list');
         navigation.navigate('FacilityList');
         break;
       case '2':
         // Đặt khám chuyên khoa
-        console.log('Navigate to specialty list');
         navigation.navigate('SpecialtyList');
         break;
       case '3':
-        console.log('Navigate to video call');
         break;
       case '4':
         // Đặt lịch khám với bác sĩ
-        console.log('Navigate to doctor list');
         navigation.navigate('DoctorList');
         break;
       case '6':
         // Tin tức
-        console.log('Navigate to news list');
         navigation.navigate('NewsList');
         break;
       case '7':
         // Dịch vụ
-        console.log('Navigate to service list');
         navigation.navigate('ServiceList');
         break;
       default:
@@ -286,12 +238,10 @@ export default function Home({ navigation }: Props) {
   };
 
   const handleFacilityPress = (facility: Hospital) => {
-    console.log('Facility pressed:', facility.name);
     navigation.navigate('FacilityDetail', { id: facility._id });
   };
 
   const handleFacilityBookingPress = (facility: Hospital) => {
-    console.log('Facility booking pressed:', facility.name);
     if (!user) {
       navigation.navigate('Login');
     } else {
@@ -300,7 +250,6 @@ export default function Home({ navigation }: Props) {
   };
 
   const handleSpecialtyBookingPress = (specialty: Specialty) => {
-    console.log('Specialty booking pressed:', specialty.name);
     if (!user) {
       navigation.navigate('Login');
     } else {
@@ -310,14 +259,12 @@ export default function Home({ navigation }: Props) {
 
   const handleDoctorConsultPress = (doctor: any) => {
     requireLogin(() => {
-      console.log('Doctor consult pressed:', doctor.user.fullName);
       navigation.navigate('Booking');
     });
   };
 
   const handleDoctorCardPress = (doctor: any) => {
     // Card details should be viewable without login
-    console.log('Doctor card pressed:', doctor.user.fullName);
     navigation.navigate('DoctorDetail', { id: doctor._id });
   };
 
@@ -348,11 +295,50 @@ export default function Home({ navigation }: Props) {
             <Text style={styles.viewAllText}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>
-        <FacilityList 
-          facilities={hospitals} 
-          onFacilityPress={handleFacilityPress}
-          onBookingPress={handleFacilityBookingPress}
-        />
+        <View style={styles.facilityListContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.facilityScrollContent}
+          >
+            {hospitals.map((facility) => (
+              <TouchableOpacity
+                key={facility._id}
+                style={styles.facilityItem}
+                onPress={() => handleFacilityPress(facility)}
+                activeOpacity={0.7}
+              >
+                <Image
+                  source={{
+                    uri: facility.imageUrl || facility.image?.secureUrl || 'https://placehold.co/160x120',
+                  }}
+                  style={styles.facilityImage}
+                  defaultSource={{ uri: 'https://placehold.co/160x120' }}
+                />
+                <View style={styles.facilityContent}>
+                  <Text style={styles.facilityName} numberOfLines={2}>
+                    {facility.name}
+                  </Text>
+                  <View style={styles.locationContainer}>
+                    <Ionicons name="location" size={10} color="#666" />
+                    <Text style={styles.facilityAddress} numberOfLines={1}>
+                      {facility.address}
+                    </Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={styles.facilityBookingButton} 
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleFacilityBookingPress(facility);
+                    }}
+                  >
+                    <Text style={styles.facilityBookingButtonText}>Đặt khám ngay</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
       </View>
 
       <Banner />
@@ -371,7 +357,6 @@ export default function Home({ navigation }: Props) {
               <View key={specialty._id} style={styles.specialtyCardContainer}>
                 <SpecialtyCard
                   specialty={specialty}
-                  size="medium"
                   onPress={(specialty) => {
                     navigation.navigate('SpecialtyDetail', { specialtyId: specialty._id });
                   }}
@@ -684,5 +669,69 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: '#666',
+  },
+  facilityListContainer: {
+    marginBottom: 8,
+  },
+  facilityScrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  facilityItem: {
+    width: 160,
+    height: 255,
+    marginRight: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  facilityImage: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#f0f0f0',
+  },
+  facilityContent: {
+    padding: 12,
+    flex: 1,
+  },
+  facilityName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  facilityAddress: {
+    fontSize: 12,
+    color: '#666',
+    flex: 1,
+    marginLeft: 4,
+  },
+  facilityBookingButton: {
+    backgroundColor: '#0a84ff',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginTop: 8,
+    alignSelf: 'stretch',
+  },
+  facilityBookingButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

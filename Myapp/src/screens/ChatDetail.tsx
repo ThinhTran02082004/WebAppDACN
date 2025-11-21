@@ -27,6 +27,7 @@ interface Message {
   senderId: string | { _id: string; fullName: string; avatarUrl?: string };
   timestamp: string;
   type?: string;
+  messageType?: string;
 }
 
 export default function ChatDetailScreen() {
@@ -270,6 +271,28 @@ export default function ChatDetailScreen() {
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
+    // Check if this is a system message (video call start/end, system notifications)
+    const isSystemMessage = item.messageType === 'video_call_end' || 
+                           item.messageType === 'video_call_start' || 
+                           item.messageType === 'system';
+
+    if (isSystemMessage) {
+      // Render as system notification (centered, no avatar, different styling)
+      return (
+        <View style={styles.systemMessageContainer}>
+          <View style={styles.systemMessageBubble}>
+            <Text style={styles.systemMessageText}>
+              {item.content}
+            </Text>
+            <Text style={styles.systemMessageTime}>
+              {formatTime(item.timestamp || (item as any).createdAt)}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    // Regular message rendering
     const isMine = isMyMessage(item);
     const senderId = typeof item.senderId === 'object' ? item.senderId?._id : item.senderId;
     const senderName = typeof item.senderId === 'object' ? item.senderId?.fullName : 'Unknown';
@@ -637,7 +660,7 @@ const styles = StyleSheet.create({
   },
   senderName: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '400',
     color: '#4c6ef5',
     marginBottom: 4,
   },
@@ -688,6 +711,30 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  systemMessageContainer: {
+    alignItems: 'center',
+    marginVertical: 4,
+    marginBottom: 8,
+  },
+  systemMessageBubble: {
+    backgroundColor: '#e5e7eb',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    maxWidth: '55%',
+    alignItems: 'center',
+  },
+  systemMessageText: {
+    fontSize: 13,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  systemMessageTime: {
+    fontSize: 10,
+    color: '#9ca3af',
+    marginTop: 4,
   },
 });
 

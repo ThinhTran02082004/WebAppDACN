@@ -14,6 +14,9 @@ import { setApiHost, initApiHostFromStorage, clearApiHost, API_BASE } from './sr
 import { apiService } from './src/services/api';
 import Toast from 'react-native-toast-message';
 import { configureGoogleSignIn } from './src/config/googleConfig';
+import { ensureLivekitGlobals } from './src/utils/livekit';
+
+ensureLivekitGlobals();
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';

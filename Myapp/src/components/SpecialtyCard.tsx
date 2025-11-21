@@ -6,48 +6,51 @@ import { AppIcons, IconColors } from '../config/icons';
 
 interface SpecialtyCardProps {
   specialty: Specialty;
-  size?: 'small' | 'medium' | 'large';
   onPress?: (specialty: Specialty) => void;
   onBookingPress?: (specialty: Specialty) => void;
 }
 
-export const SpecialtyCard = ({ specialty, size = 'medium', onPress, onBookingPress }: SpecialtyCardProps) => {
-  const cardStyle = [
-    styles.card,
-    size === 'small' && styles.smallCard,
-    size === 'large' && styles.largeCard,
-  ];
+export const SpecialtyCard = ({ specialty, onPress, onBookingPress }: SpecialtyCardProps) => {
 
   return (
     <TouchableOpacity
-      style={cardStyle}
+      style={styles.card}
       onPress={() => onPress?.(specialty)}
       activeOpacity={0.7}
     >
       <Image
-        source={{ uri: (specialty as any).imageUrl || (specialty as any).image?.secureUrl || (specialty as any).image || 'https://placehold.co/160x120' }}
+        source={{ 
+          uri: (() => {
+            if (typeof (specialty as any).image === 'string' && (specialty as any).image) {
+              return (specialty as any).image;
+            }
+            if (typeof (specialty as any).imageUrl === 'string' && (specialty as any).imageUrl) {
+              return (specialty as any).imageUrl;
+            }
+            if ((specialty as any).image && typeof (specialty as any).image === 'object') {
+              const secureUrl = (specialty as any).image?.secureUrl;
+              if (typeof secureUrl === 'string' && secureUrl) {
+                return secureUrl;
+              }
+            }
+            return 'https://placehold.co/160x120';
+          })()
+        }}
         style={styles.specialtyImage}
         defaultSource={{ uri: 'https://placehold.co/160x120' }}
+        onError={(e) => {
+          console.log('SpecialtyCard image load error:', e.nativeEvent.error);
+        }}
       />
       <View style={styles.contentContainer}>
         <Text style={styles.title} numberOfLines={2}>
           {specialty.name}
         </Text>
-        {size !== 'small' && specialty.description && (
+        {specialty.description && (
           <Text style={styles.description} numberOfLines={2}>
             {specialty.description}
           </Text>
         )}
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <Ionicons name={AppIcons.doctor} size={14} color={IconColors.primary} />
-            <Text style={styles.statsText}>{specialty.doctorCount || 0} </Text>
-          </View>
-          <View style={styles.statItem}>
-            <Ionicons name={AppIcons.service} size={14} color={IconColors.primary} />
-            <Text style={styles.statsText}>{specialty.serviceCount || 0} </Text>
-          </View>
-        </View>
         <TouchableOpacity 
           style={styles.bookingButton} 
           onPress={(e) => {
@@ -72,18 +75,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     width: 160,
-    height: 280,
+    height: 245,
     marginRight: 12,
     marginBottom: 18,
     overflow: 'hidden',
-  },
-  smallCard: {
-    width: 120,
-    height: 140,
-  },
-  largeCard: {
-    width: 160,
-    height:280,
   },
   specialtyImage: {
     width: '100%',
@@ -104,30 +99,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
     marginBottom: 8,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
-    marginBottom: 4,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statIcon: {
-    fontSize: 12,
-    marginRight: 4,
-  },
-  statsText: {
-    fontSize: 12,
-    color: '#1e293b',
-    fontWeight: '600',
-    marginLeft: 4,
   },
   bookingButton: {
     backgroundColor: '#0a84ff',

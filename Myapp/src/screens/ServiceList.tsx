@@ -10,17 +10,20 @@ import {
   StatusBar,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { ServiceItem, apiService } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 type Props = {
   navigation: any;
 };
 
 export default function ServiceListScreen({ navigation }: Props) {
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [filteredServices, setFilteredServices] = useState<ServiceItem[]>([]);
@@ -206,7 +209,19 @@ export default function ServiceListScreen({ navigation }: Props) {
             </Text>
           )}
         </View>
-        <TouchableOpacity style={styles.bookingButton} onPress={() => navigation.navigate('Booking')}>
+        <TouchableOpacity 
+          style={styles.bookingButton} 
+          onPress={() => {
+            if (!user) {
+              Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để đặt khám', [
+                { text: 'Hủy', style: 'cancel' },
+                { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
+              ]);
+            } else {
+              navigation.navigate('Booking');
+            }
+          }}
+        >
           <Text style={styles.bookingButtonText}>Đặt khám ngay</Text>
         </TouchableOpacity>
       </View>

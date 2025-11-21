@@ -10,16 +10,19 @@ import {
   StatusBar,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Specialty, apiService, Doctor, ServiceItem } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 type Props = {
   navigation: any;
 };
 
 export default function SpecialtyListScreen({ navigation }: Props) {
+  const { user } = useAuth();
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [filteredSpecialties, setFilteredSpecialties] = useState<Specialty[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,7 +60,7 @@ export default function SpecialtyListScreen({ navigation }: Props) {
 
         let servicesList: ServiceItem[] = [];
         if (servicesResponse?.data) {
-          const svcData = servicesResponse.data;
+          const svcData = servicesResponse.data as any;
           if (Array.isArray(svcData?.data)) {
             servicesList = svcData.data;
           } else if (Array.isArray(svcData?.services)) {
@@ -75,8 +78,30 @@ export default function SpecialtyListScreen({ navigation }: Props) {
           const serviceCount = servicesList.filter((sv: any) => 
             (sv?.specialtyId?._id || sv?.specialtyId) === sp._id
           ).length;
-          const normalizedImage = sp.image || sp.imageUrl || sp.image?.secureUrl || (sp.image && sp.image.secureUrl) || undefined;
-          return { ...sp, doctorCount, serviceCount, image: normalizedImage } as Specialty;
+          
+          // Normalize image - ensure it's always a string or undefined
+          let normalizedImage: string | undefined = undefined;
+          
+          if (typeof sp.image === 'string' && sp.image && sp.image.trim()) {
+            normalizedImage = sp.image;
+            console.log('Normalized image (string):', normalizedImage);
+          } else if (typeof sp.imageUrl === 'string' && sp.imageUrl && sp.imageUrl.trim()) {
+            normalizedImage = sp.imageUrl;
+            console.log('Normalized image (imageUrl):', normalizedImage);
+          } else if (sp.image && typeof sp.image === 'object') {
+            const secureUrl = sp.image?.secureUrl;
+            if (typeof secureUrl === 'string' && secureUrl && secureUrl.trim()) {
+              normalizedImage = secureUrl;
+              console.log('Normalized image (secureUrl):', normalizedImage);
+            }
+          }
+          
+          // Also check if imageUrl exists in raw data
+          if (!normalizedImage && sp.imageUrl && typeof sp.imageUrl === 'string' && sp.imageUrl.trim()) {
+            normalizedImage = sp.imageUrl;
+          }
+          
+          return { ...sp, doctorCount, serviceCount, image: normalizedImage, imageUrl: normalizedImage || sp.imageUrl } as Specialty;
         });
 
         setSpecialties(enrichedSpecialties);
@@ -108,7 +133,6 @@ export default function SpecialtyListScreen({ navigation }: Props) {
   };
 
   const handleSpecialtyPress = (specialty: Specialty) => {
-    console.log('Specialty pressed:', specialty.name);
     navigation.navigate('SpecialtyDetail', { specialtyId: specialty._id });
   };
 
@@ -116,20 +140,66 @@ export default function SpecialtyListScreen({ navigation }: Props) {
     navigation.goBack();
   };
 
-  const renderSpecialtyCard = (specialty: Specialty) => (
-    <TouchableOpacity
-      key={specialty._id}
-      style={styles.specialtyCard}
-      onPress={() => handleSpecialtyPress(specialty)}
-      activeOpacity={0.7}
-    >
-      <Image
-        source={{
-          uri: specialty.image || specialty.imageUrl || (specialty as any).image?.secureUrl || 'https://placehold.co/200x120',
-        }}
-        style={styles.specialtyImage}
-        defaultSource={{ uri: 'https://placehold.co/200x120' }}
-      />
+  const getImageUri = (specialty: Specialty): string => {
+    // Debug: log specialty data to see what we're working with
+    
+    // Try image property first (normalized from loadSpecialties)
+    if (typeof specialty.image === 'string' && specialty.image && specialty.image.trim()) {
+      return specialty.image;
+    }
+    
+    // Try imageUrl property
+    if (typeof specialty.imageUrl === 'string' && specialty.imageUrl && specialty.imageUrl.trim()) {
+      return specialty.imageUrl;
+    }
+    
+    // Try image as object with secureUrl
+    if (specialty.image && typeof specialty.image === 'object') {
+      const secureUrl = (specialty.image as any)?.secureUrl;
+      if (typeof secureUrl === 'string' && secureUrl && secureUrl.trim()) {
+        return secureUrl;
+      }
+    }
+    
+    // Try accessing raw data properties
+    const rawData = specialty as any;
+    if (rawData.image?.secureUrl && typeof rawData.image.secureUrl === 'string') {
+      return rawData.image.secureUrl;
+    }
+    
+    console.log('No valid image found, using placeholder');
+    return 'https://placehold.co/200x120';
+  };
+
+  const renderSpecialtyCard = (specialty: Specialty) => {
+    const imageUri = getImageUri(specialty);
+    
+    return (
+      <TouchableOpacity
+        key={specialty._id}
+        style={styles.specialtyCard}
+        onPress={() => handleSpecialtyPress(specialty)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.imageContainer}>
+          {imageUri ? (
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.specialtyImage}
+              resizeMode="cover"
+              onError={(e) => {
+                console.log('Image load error for:', imageUri, e.nativeEvent.error);
+              }}
+              onLoad={() => {
+                console.log('Image loaded successfully:', imageUri);
+              }}
+            />
+          ) : (
+            <View style={[styles.specialtyImage, { backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center' }]}>
+              <Ionicons name="medical" size={32} color="#ccc" />
+            </View>
+          )}
+        </View>
       <View style={styles.specialtyContent}>
         <Text style={styles.specialtyName} numberOfLines={2}>
           {specialty.name}
@@ -151,13 +221,23 @@ export default function SpecialtyListScreen({ navigation }: Props) {
         </View>
         <TouchableOpacity 
           style={styles.bookingButton}
-          onPress={() => navigation.navigate('Booking')}
+          onPress={() => {
+            if (!user) {
+              Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để đặt khám', [
+                { text: 'Hủy', style: 'cancel' },
+                { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
+              ]);
+            } else {
+              navigation.navigate('Booking');
+            }
+          }}
         >
           <Text style={styles.bookingButtonText}>Đặt khám ngay</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -352,7 +432,6 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   specialtyCard: {
-    flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 12,
     marginBottom: 12,
@@ -366,13 +445,16 @@ const styles = StyleSheet.create({
     elevation: 3,
     overflow: 'hidden',
   },
+  imageContainer: {
+    width: '100%',
+    overflow: 'hidden',
+  },
   specialtyImage: {
-    width: 120,
-    height: 100,
+    width: '100%',
+    height: 150,
     backgroundColor: '#f0f0f0',
   },
   specialtyContent: {
-    flex: 1,
     padding: 12,
     justifyContent: 'space-between',
   },

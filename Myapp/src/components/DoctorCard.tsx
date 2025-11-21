@@ -11,9 +11,6 @@ import {
 import { Doctor } from '../services/api';
 import Ionicons from '@react-native-vector-icons/ionicons';
 
-// const { width } = Dimensions.get('window');
-// const cardWidth = width - 32; // Full width minus padding
-
 type Props = {
   doctor: Doctor;
   onConsultPress?: (doctor: Doctor) => void;
@@ -54,7 +51,7 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
             <ActivityIndicator 
               size="small" 
               color="#0a84ff" 
-              style={styles.loadingIndicator}
+              style={styles.loadingIndicatorVertical}
             />
           )}
           {imageError || !doctor.user?.avatarUrl ? (
@@ -213,7 +210,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#0a84ff',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f0f0fff0',
   },
   avatar: {
     width: 60,
@@ -245,7 +242,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   specialty: {
     fontSize: 14,
@@ -255,7 +252,7 @@ const styles = StyleSheet.create({
   hospital: {
     fontSize: 13,
     color: '#666',
-    marginBottom: 6,
+    marginBottom: 2,
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -310,23 +307,36 @@ const styles = StyleSheet.create({
   avatarContainerVertical: {
     position: 'relative',
     width: '100%',
-    height: 120,
-    backgroundColor: '#f0f0f0',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: '#ffffff',
   },
   avatarVertical: {
-    width: '100%',
-    height: 120,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: '#0a84ff',
   },
   defaultAvatarVertical: {
-    width: '100%',
-    height: 120,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#f0f8ff',
     justifyContent: 'center',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderWidth: 3,
+    borderColor: '#0a84ff',
+  },
+  loadingIndicatorVertical: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -10 }, { translateY: -10 }],
+    zIndex: 1,
   },
   verticalContent: {
     padding: 12,

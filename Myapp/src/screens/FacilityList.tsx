@@ -10,16 +10,19 @@ import {
   StatusBar,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Hospital, apiService } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 type Props = {
   navigation: any;
 };
 
 export default function FacilityListScreen({ navigation }: Props) {
+  const { user } = useAuth();
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [filteredHospitals, setFilteredHospitals] = useState<Hospital[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -127,7 +130,19 @@ export default function FacilityListScreen({ navigation }: Props) {
           <Text style={styles.rating}>4.5</Text>
           <Text style={styles.reviewCount}>(0 đánh giá)</Text>
         </View>
-        <TouchableOpacity style={styles.bookingButton} onPress={() => navigation.navigate('Booking')}>
+        <TouchableOpacity 
+          style={styles.bookingButton} 
+          onPress={() => {
+            if (!user) {
+              Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để đặt khám', [
+                { text: 'Hủy', style: 'cancel' },
+                { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
+              ]);
+            } else {
+              navigation.navigate('Booking');
+            }
+          }}
+        >
           <Text style={styles.bookingButtonText}>Đặt khám ngay</Text>
         </TouchableOpacity>
       </View>
