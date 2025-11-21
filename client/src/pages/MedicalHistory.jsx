@@ -70,6 +70,8 @@ const MedicalHistory = () => {
 
   // Filter is now handled by backend, but we can add client-side filtering if needed
   const filteredRecords = medicalRecords;
+  const showDraftSection = activeTab === 'all' || activeTab === 'pending_approval';
+  const visibleDraftCount = showDraftSection ? draftRecords.length : 0;
 
   const getStatusBadge = (status) => {
     if (!status) return 'bg-gray-100 text-gray-800';
@@ -162,7 +164,7 @@ const MedicalHistory = () => {
     return pages;
   };
 
-  const displayedCount = draftRecords.length + filteredRecords.length;
+  const displayedCount = visibleDraftCount + filteredRecords.length;
 
   if (loading) {
     return (
@@ -268,7 +270,7 @@ const MedicalHistory = () => {
             </div>
           </div>
 
-          {draftRecords.length > 0 && (
+          {showDraftSection && draftRecords.length > 0 && (
             <div className="px-6 py-5 border-b border-gray-200 bg-white">
               <div className="flex items-center justify-between">
                 <div>
@@ -299,14 +301,29 @@ const MedicalHistory = () => {
                         <p className="font-medium">{draft.createdAt ? format(new Date(draft.createdAt), 'dd/MM/yyyy HH:mm') : '—'}</p>
                       </div>
                       <div>
-                        <p className="text-gray-500">Triệu chứng</p>
-                        <p className="font-medium">{draft.symptom || 'Chưa xác định'}</p>
+                  <p className="text-gray-500">Triệu chứng</p>
+                  <p className="font-medium">{draft.symptom || 'Chưa xác định'}</p>
                       </div>
                       <div>
                         <p className="text-gray-500">Số thuốc đề xuất</p>
                         <p className="font-medium">{draft.medicationsCount || 0} loại</p>
                       </div>
                     </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+                <div>
+                  <p className="text-gray-500">Chi nhánh phụ trách</p>
+                  <p className="font-medium">{draft.hospital?.name || 'Đang xác định'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Chuyên khoa gợi ý</p>
+                  <p className="font-medium">{draft.specialty?.name || 'Chưa xác định'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Bác sĩ phụ trách</p>
+                  <p className="font-medium">{draft.doctor?.name || 'Chưa có bác sĩ'}</p>
+                </div>
+              </div>
 
                     {draft.medications && draft.medications.length > 0 && (
                       <div className="mt-3 text-sm text-gray-600">
@@ -323,6 +340,36 @@ const MedicalHistory = () => {
                         </div>
                       </div>
                     )}
+
+              {draft.hospitalAvailability && draft.hospitalAvailability.length > 0 && (
+                <div className="mt-4 text-sm text-gray-600">
+                  <p className="text-gray-500">Tình trạng thuốc tại các chi nhánh</p>
+                  <div className="mt-2 space-y-2">
+                    {draft.hospitalAvailability.map((branch, idx) => (
+                      <div key={`${draft.prescriptionCode || idx}-branch-${idx}`} className="bg-white border border-gray-200 rounded-lg p-3">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                          <p className="font-medium text-gray-900">{branch.hospitalName || 'Chi nhánh không xác định'}</p>
+                          <span className="text-xs text-gray-500 mt-1 md:mt-0">
+                            Còn {branch.totalInStock || 0} loại / Hết {branch.outOfStock?.length || 0} loại
+                          </span>
+                        </div>
+                        {branch.inStock && branch.inStock.length > 0 && (
+                          <p className="mt-2 text-xs text-gray-500">
+                            Thuốc còn: {branch.inStock.slice(0, 3).map(item => item.name).join(', ')}
+                            {branch.inStock.length > 3 ? '…' : ''}
+                          </p>
+                        )}
+                        {branch.outOfStock && branch.outOfStock.length > 0 && (
+                          <p className="mt-1 text-xs text-gray-400">
+                            Hết thuốc: {branch.outOfStock.slice(0, 3).map(item => item.name).join(', ')}
+                            {branch.outOfStock.length > 3 ? '…' : ''}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
                     <p className="mt-3 text-xs text-gray-500">
                       Đơn thuốc sẽ xuất hiện trong lịch sử chính thức sau khi được dược sĩ/bác sĩ phê duyệt.

@@ -96,6 +96,7 @@ import HistoryAI from './pages/admin/HistoryAI';
 import MedicationInventory from './pages/admin/MedicationInventory';
 import PrescriptionTemplates from './pages/admin/PrescriptionTemplates';
 import InpatientRooms from './pages/admin/InpatientRooms';
+import AdminPrescriptions from './pages/admin/Prescriptions';
 
 import Facilities from './pages/user/Facilities';
 import FacilitySurgery from './pages/user/FacilitySurgery';
@@ -149,6 +150,7 @@ function AppContent() {
           <Route path="medications" element={<AdminMedications />} />
           <Route path="medication-inventory" element={<MedicationInventory />} />
           <Route path="prescription-templates" element={<PrescriptionTemplates />} />
+          <Route path="prescriptions" element={<AdminPrescriptions />} />
           <Route path="inpatient-rooms" element={<InpatientRooms />} />
           <Route path="news" element={<AdminNews />} />
           <Route path="video-rooms" element={<VideoRoomManagement />} />

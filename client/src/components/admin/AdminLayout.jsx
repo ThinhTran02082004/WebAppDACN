@@ -7,7 +7,7 @@ import {
   FaStar, FaProcedures, FaDoorOpen, FaSignOutAlt,
   FaClock, FaSearch, FaBars, FaTimes,
   FaUserShield, FaLock, FaMedkit, FaVideo, FaHistory, FaRobot,
-  FaPills, FaBed, FaBoxes
+  FaPills, FaBed, FaBoxes, FaClipboardCheck
 } from 'react-icons/fa';
 
 const AdminLayout = ({ children }) => {
@@ -34,6 +34,7 @@ const AdminLayout = ({ children }) => {
     '/admin/medications',
     '/admin/medication-inventory',
     '/admin/prescription-templates',
+    '/admin/prescriptions',
     '/admin/inpatient-rooms',
     '/admin/news',
     '/admin/video-rooms',
@@ -130,6 +131,7 @@ const AdminLayout = ({ children }) => {
     { path: '/admin/medications', label: 'Danh sách thuốc', icon: <FaMedkit /> },
     { path: '/admin/medication-inventory', label: 'Kho thuốc', icon: <FaBoxes /> },
     { path: '/admin/prescription-templates', label: 'Đơn thuốc mẫu', icon: <FaPills /> },
+    { path: '/admin/prescriptions', label: 'Xét duyệt đơn thuốc', icon: <FaClipboardCheck /> },
     { path: '/admin/inpatient-rooms', label: 'Phòng nội trú', icon: <FaBed /> },
     { path: '/admin/appointments', label: 'Lịch hẹn', icon: <FaCalendarAlt /> },
     { path: '/admin/coupons', label: 'Mã giảm giá', icon: <FaPercentage /> },
@@ -142,16 +144,42 @@ const AdminLayout = ({ children }) => {
     { path: '/admin/history-ai', label: 'Lịch sử AI', icon: <FaRobot /> },
   ] : [];
 
-  // Group the navigation items for admin
-  const groupedNavItems = {
-    main: [navItems[0]].filter(Boolean), // Dashboard
-    users: navItems.length > 3 ? [navItems[1], navItems[2], navItems[3]].filter(Boolean) : [], // Users, Doctors, Pharmacists
-    scheduling: navItems.length > 13 ? [navItems[4], navItems[13]].filter(Boolean) : [], // Doctor schedules, Appointments
-    facilities: navItems.length > 12 ? [navItems[5], navItems[6], navItems[7], navItems[8], navItems[9], navItems[10], navItems[11], navItems[12]].filter(Boolean) : [], // Hospitals, Specialties, Services, Rooms, Medications, Inventory, Templates, Inpatient Rooms
-    business: navItems.length > 21
-      ? [navItems[14], navItems[15], navItems[16], navItems[17], navItems[18], navItems[19], navItems[20], navItems[21]].filter(Boolean)
-      : [] // Coupons, Payments, Reviews, News, Video Rooms, Doctor Meetings, Video Call History, History AI
+  const navItemMap = navItems.reduce((acc, item) => {
+    acc[item.path] = item;
+    return acc;
+  }, {});
+
+  const navGroupConfig = {
+    main: ['/admin/dashboard'],
+    users: ['/admin/users', '/admin/doctors', '/admin/pharmacists'],
+    scheduling: ['/admin/doctor-schedules', '/admin/appointments'],
+    facilities: [
+      '/admin/hospitals',
+      '/admin/specialties',
+      '/admin/services',
+      '/admin/rooms',
+      '/admin/medications',
+      '/admin/medication-inventory',
+      '/admin/prescription-templates',
+      '/admin/prescriptions',
+      '/admin/inpatient-rooms'
+    ],
+    business: [
+      '/admin/coupons',
+      '/admin/payments',
+      '/admin/reviews',
+      '/admin/news',
+      '/admin/video-rooms',
+      '/admin/doctor-meetings',
+      '/admin/video-call-history',
+      '/admin/history-ai'
+    ]
   };
+
+  const groupedNavItems = Object.entries(navGroupConfig).reduce((acc, [group, paths]) => {
+    acc[group] = paths.map((path) => navItemMap[path]).filter(Boolean);
+    return acc;
+  }, {});
 
   // Get the current page name for header
   const getCurrentPageName = () => {
