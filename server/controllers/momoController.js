@@ -27,6 +27,35 @@ const decodeMomoExtraData = (rawExtraData) => {
   }
 };
 
+// Build raw signature string for MoMo IPN verification (fields per MoMo v2 docs)
+const buildMomoIpnRawSignature = (data) => {
+  const {
+    amount = '',
+    extraData = '',
+    message = '',
+    orderId = '',
+    orderInfo = '',
+    orderType = '',
+    partnerCode = '',
+    payType = '',
+    requestId = '',
+    responseTime = '',
+    resultCode = '',
+    transId = ''
+  } = data || {};
+
+  return `accessKey=${momoConfig.accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
+};
+
+const verifyMomoIpnSignature = (data) => {
+  if (!momoConfig.secretKey || !data?.signature) return false;
+  const rawSignature = buildMomoIpnRawSignature(data);
+  const expectedSignature = crypto.createHmac('sha256', momoConfig.secretKey)
+    .update(rawSignature)
+    .digest('hex');
+  return expectedSignature === data.signature;
+};
+
 /**
  * Create MoMo payment request
  * @route POST /api/payments/momo/create
@@ -309,14 +338,78 @@ exports.momoIPN = async (req, res) => {
     console.log('MoMo IPN received:', req.body);
     
     // Validate signature (important for security)
-    // TODO: Implement proper signature validation
-    
-    // Update payment status based on resultCode
-    if (resultCode === 0) {
-      // Payment successful - update Bill/BillPayment
-    } else {
-      // Payment failed - do nothing
+    const isValidSignature = verifyMomoIpnSignature(req.body);
+    if (!isValidSignature) {
+      console.warn('MoMo IPN signature invalid for orderId:', orderId);
+      return res.status(400).json({
+        success: false,
+        message: 'Chữ ký IPN không hợp lệ'
+      });
     }
+    
+    const isSuccess = resultCode === 0 || resultCode === '0';
+
+    // If MoMo báo thất bại, đánh dấu BillPayment = failed (nếu tồn tại)
+    if (!isSuccess) {
+      try {
+        const BillPayment = require('../models/BillPayment');
+        const Bill = require('../models/Bill');
+
+        // Ưu tiên tìm BillPayment theo orderId/transactionId mà MoMo trả về
+        let billPayment = await BillPayment.findOne({
+          $or: [
+            { 'paymentDetails.orderId': orderId },
+            { transactionId: orderId }
+          ],
+          paymentStatus: { $ne: 'completed' }
+        }).populate('billId');
+
+        // Nếu chưa tìm thấy, thử tìm theo appointmentId trong extraData để không bỏ sót
+        if (!billPayment) {
+          const extraData = decodeMomoExtraData(req.body.extraData);
+          const appointmentId = extraData?.appointmentId;
+          if (appointmentId) {
+            billPayment = await BillPayment.findOne({
+              appointmentId,
+              paymentMethod: 'momo',
+              paymentStatus: { $ne: 'completed' }
+            }).populate('billId');
+          }
+        }
+
+        if (billPayment) {
+          billPayment.paymentStatus = 'failed';
+          billPayment.paymentDetails = {
+            ...billPayment.paymentDetails,
+            ...req.body,
+            ipnReceived: true,
+            ipnReceivedAt: new Date().toISOString()
+          };
+          await billPayment.save();
+          console.log(`Marked BillPayment ${billPayment._id} as failed via IPN (resultCode=${resultCode})`);
+
+          // Giữ nguyên trạng thái pending của Bill, chỉ cập nhật paymentMethod để phản ánh thanh toán bằng MoMo
+          if (billPayment.billId) {
+            const bill = billPayment.billId instanceof Bill ? billPayment.billId : await Bill.findById(billPayment.billId);
+            if (bill) {
+              if (billPayment.billType === 'consultation' && bill.consultationBill?.status === 'pending') {
+                bill.consultationBill.paymentMethod = 'momo';
+              } else if (billPayment.billType === 'medication' && bill.medicationBill?.status === 'pending') {
+                bill.medicationBill.paymentMethod = 'momo';
+              } else if (billPayment.billType === 'hospitalization' && bill.hospitalizationBill?.status === 'pending') {
+                bill.hospitalizationBill.paymentMethod = 'momo';
+              }
+              await bill.save();
+            }
+          }
+        } else {
+          console.warn(`No pending/failed BillPayment found to mark failed for orderId=${orderId}`);
+        }
+      } catch (failUpdateError) {
+        console.error('Error marking BillPayment failed from IPN:', failUpdateError);
+      }
+    }
+
     // Update Bill and BillPayment for partial billType payments
     try {
       const extraData = decodeMomoExtraData(req.body.extraData);
@@ -324,7 +417,7 @@ exports.momoIPN = async (req, res) => {
       const appointmentId = extraData?.appointmentId;
       const prescriptionId = extraData?.prescriptionId;
       
-      if (billType && resultCode === 0 && appointmentId) {
+      if (billType && isSuccess && appointmentId) {
         const Bill = require('../models/Bill');
         const BillPayment = require('../models/BillPayment');
         const bill = await Bill.findOne({ appointmentId });

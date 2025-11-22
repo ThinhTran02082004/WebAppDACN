@@ -304,7 +304,7 @@ exports.executePaypalPayment = async (req, res) => {
     if (actualPaymentId.startsWith('EC-')) {
       return res.status(400).json({
         success: false,
-        message: 'Không thể tìm thấy payment ID từ order ID. Vui lòng thử lại.'
+        message: 'Không thể tìm thấy payment ID từ order ID. Vui lòng tải lại trang thanh toán và thử lại, hoặc khởi tạo thanh toán PayPal mới.'
       });
     }
     
@@ -321,7 +321,7 @@ exports.executePaypalPayment = async (req, res) => {
         
         return res.status(500).json({
           success: false,
-          message: 'Lỗi khi xác nhận thanh toán PayPal',
+          message: 'Lỗi khi xác nhận thanh toán PayPal. Vui lòng thử lại hoặc chọn phương thức khác.',
           error: error.message
         });
       }
