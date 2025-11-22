@@ -3734,6 +3734,64 @@ exports.getDoctorAppointments = async (req, res) => {
  * @route   GET /api/appointments/user/patient
  * @access  Private (patient)
  */
+// Get the number of appointments a patient already has on a specific date.
+// Mirrors the server-side rule that limits patients to three active appointments per day.
+exports.getPatientDailyAppointmentCount = async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng cung cấp ngày cần kiểm tra'
+      });
+    }
+
+    const parsedDate = new Date(date);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ngày không hợp lệ'
+      });
+    }
+
+    const startOfDay = new Date(parsedDate);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(parsedDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const count = await Appointment.countDocuments({
+      patientId: req.user.id,
+      appointmentDate: {
+        $gte: startOfDay,
+        $lte: endOfDay
+      },
+      status: { $nin: ['cancelled', 'rejected'] }
+    });
+
+    const maxPatientDailyAppointments = 3;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        count,
+        limit: maxPatientDailyAppointments
+      },
+      message: count >= maxPatientDailyAppointments
+        ? `Bạn đã có ${count}/${maxPatientDailyAppointments} cuộc hẹn trong ngày này`
+        : 'Bạn có thể đặt lịch cho ngày này'
+    });
+  } catch (error) {
+    console.error('Get daily appointment count error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi kiểm tra số lượng lịch hẹn trong ngày',
+      error: error.message
+    });
+  }
+};
+
 exports.getPatientAppointments = async (req, res) => {
   try {
     const userId = req.user.id;
