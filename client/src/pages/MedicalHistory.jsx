@@ -29,8 +29,12 @@ const MedicalHistory = () => {
       
       if (response.data && response.data.records) {
         setMedicalRecords(response.data.records);
-        setTotalItems(response.data.pagination.total);
-        setTotalPages(response.data.pagination.totalPages);
+        const pagination = response.data.pagination || {};
+        setTotalItems(pagination.total || 0);
+        setTotalPages(pagination.pages || pagination.totalPages || 1);
+        if (pagination.page) {
+          setCurrentPage(pagination.page);
+        }
       } else {
         setMedicalRecords([]);
         setTotalItems(0);

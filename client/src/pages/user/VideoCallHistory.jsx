@@ -49,9 +49,13 @@ const VideoCallHistory = () => {
       const response = await api.get(url);
       if (response.data.success) {
         setHistory(response.data.data);
+        const p = response.data.pagination || {};
         setPagination(prev => ({
           ...prev,
-          ...response.data.pagination
+          page: p.page || p.currentPage || prev.page,
+          pages: p.pages || p.totalPages || prev.pages,
+          total: p.total || prev.total,
+          limit: p.limit || prev.limit
         }));
       }
     } catch (error) {
