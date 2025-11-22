@@ -21,13 +21,13 @@ const Patients = () => {
   const [totalPatients, setTotalPatients] = useState(0);
   const [itemsPerPage] = useState(10);
   const [error, setError] = useState(null);
+  // Legacy modal booking state removed; define placeholders to avoid undefined refs
+  const showAppointmentModal = false;
+  const selectedPatient = null;
+  const patientAppointments = [];
+  const loadingAppointments = false;
+  const handleAppointmentSelect = () => {};
   
-  // State for appointment popup
-  const [showAppointmentModal, setShowAppointmentModal] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [patientAppointments, setPatientAppointments] = useState([]);
-  const [loadingAppointments, setLoadingAppointments] = useState(false);
-
   useEffect(() => {
     fetchPatients();
   }, [currentPage, sortBy, sortOrder, searchTerm]);
@@ -89,19 +89,6 @@ const Patients = () => {
     } finally {
       setLoadingAppointments(false);
     }
-  };
-
-  // Handle patient row click
-  const handlePatientClick = async (patient) => {
-    setSelectedPatient(patient);
-    setShowAppointmentModal(true);
-    await fetchPatientAppointments(patient._id);
-  };
-
-  // Handle appointment selection
-  const handleAppointmentSelect = (appointmentId) => {
-    setShowAppointmentModal(false);
-    navigate(`/doctor/appointments/${appointmentId}`);
   };
 
   // Xem hồ sơ y tế của bệnh nhân
@@ -538,8 +525,7 @@ const Patients = () => {
                   {patients.map((patient) => (
                     <tr 
                       key={patient._id} 
-                      className="hover:bg-blue-50/50 transition-colors cursor-pointer"
-                      onClick={() => handlePatientClick(patient)}
+                      className="hover:bg-blue-50/50 transition-colors"
                     >
                       <td className="px-4 md:px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -622,14 +608,7 @@ const Patients = () => {
                             <FaFileAlt className="mr-1.5" />
                             <span className="hidden sm:inline">Hồ sơ</span>
                           </button>
-                          <button
-                            onClick={(e) => viewPatientAppointments(patient._id, e)}
-                            className="inline-flex items-center px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors text-xs font-medium"
-                            title="Xem lịch hẹn"
-                          >
-                            <FaEye className="mr-1.5" />
-                            <span className="hidden sm:inline">Lịch hẹn</span>
-                          </button>
+                          {/* Nút lịch hẹn đã bỏ theo yêu cầu */}
                         </div>
                       </td>
                     </tr>
