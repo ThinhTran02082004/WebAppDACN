@@ -25,6 +25,9 @@ const AdminAppointmentDetail = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [activeTab, setActiveTab] = useState('prescription'); // 'prescription', 'hospitalization', 'billing'
   const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
+  const isRescheduled = appointment?.status === 'rescheduled' ||
+    (appointment?.rescheduleCount && appointment.rescheduleCount > 0) ||
+    (appointment?.rescheduleHistory && appointment.rescheduleHistory.length > 0);
   useEffect(() => {
     fetchAppointmentDetail();
   }, [id]);
@@ -149,7 +152,14 @@ const AdminAppointmentDetail = () => {
           </div>
         </div>
         <div>
-          {getStatusBadge(appointment.status)}
+          <div className="flex items-center gap-2">
+            {getStatusBadge(appointment.status)}
+            {isRescheduled && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-medium">
+                <FaCalendarAlt className="mr-1" /> Lịch đã đổi
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

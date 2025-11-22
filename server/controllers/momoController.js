@@ -696,8 +696,8 @@ exports.momoPaymentResult = async (req, res) => {
               appointment.paymentStatus = 'completed';
               appointment.paymentMethod = 'momo';
               
-              // Automatically confirm appointment if it's pending or pending_payment
-              if (appointment.status === 'pending' || appointment.status === 'pending_payment') {
+              // Automatically confirm appointment if it's pending, pending_payment, or rescheduled
+              if (appointment.status === 'pending' || appointment.status === 'pending_payment' || appointment.status === 'rescheduled') {
                 appointment.status = 'confirmed';
               }
               

@@ -350,8 +350,8 @@ exports.executePaypalPayment = async (req, res) => {
           appointment.paymentStatus = 'completed';
           appointment.paymentMethod = 'paypal';
           
-          // Nếu cuộc hẹn đang ở trạng thái pending hoặc pending_payment, tự động chuyển sang confirmed
-          if (appointment.status === 'pending' || appointment.status === 'pending_payment') {
+          // Nếu cuộc hẹn đang ở trạng thái pending, pending_payment hoặc rescheduled, tự động chuyển sang confirmed
+          if (appointment.status === 'pending' || appointment.status === 'pending_payment' || appointment.status === 'rescheduled') {
             console.log(`Tự động xác nhận cuộc hẹn do đã thanh toán: ${appointment._id}`);
             appointment.status = 'confirmed';
           }

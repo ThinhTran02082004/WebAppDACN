@@ -26,6 +26,9 @@ const AppointmentDetail = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [activeTab, setActiveTab] = useState('info'); // 'info', 'prescription', 'hospitalization', 'billing'
   const [showPrescriptionForm, setShowPrescriptionForm] = useState(false);
+  const isRescheduled = appointment?.status === 'rescheduled' ||
+    (appointment?.rescheduleCount && appointment.rescheduleCount > 0) ||
+    (appointment?.rescheduleHistory && appointment.rescheduleHistory.length > 0);
 
   useEffect(() => {
     fetchAppointmentDetail();
@@ -371,8 +374,13 @@ const AppointmentDetail = () => {
               </div>
             </div>
           </div>
-          <div>
+          <div className="flex items-center gap-2">
             {renderStatusBadge(appointment.status)}
+            {isRescheduled && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs sm:text-sm font-medium">
+                <FaCalendarAlt className="mr-1" /> Lịch đã đổi
+              </span>
+            )}
           </div>
         </div>
 
@@ -400,8 +408,8 @@ const AppointmentDetail = () => {
                 </button>
               </>
             )}
-            {/* Video Call Button for confirmed appointments */}
-            {appointment.status === 'confirmed' && (
+            {/* Video Call Button for confirmed/rescheduled or paid appointments */}
+            {(appointment.status === 'confirmed' || appointment.status === 'rescheduled' || appointment.paymentStatus === 'completed') && (
               <VideoCallButton 
                 appointmentId={appointment._id}
                 userRole="doctor"
