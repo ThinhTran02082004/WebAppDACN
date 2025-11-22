@@ -3043,7 +3043,6 @@ const Appointment = () => {
                             <li><span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span> <span className="font-medium">Còn trống:</span> Khung giờ có thể đặt lịch</li>
                             <li><span className="inline-block w-3 h-3 bg-yellow-500 rounded-full mr-1"></span> <span className="font-medium">Đang có người chọn:</span> Khung giờ đang được người khác xử lý (tự động mở khóa sau 5 phút)</li>
                             <li><span className="inline-block w-3 h-3 bg-red-400 rounded-full mr-1"></span> <span className="font-medium">Đã đầy:</span> Khung giờ đã đạt giới hạn tối đa (3 lịch hẹn)</li>
-                            <li><span className="inline-block w-3 h-3 bg-blue-400 rounded-full mr-1"></span> <span className="font-medium">Còn X/3:</span> Khung giờ đã có người đặt nhưng vẫn còn chỗ trống</li>
                           </ul>
                         </div>
                       </div>
