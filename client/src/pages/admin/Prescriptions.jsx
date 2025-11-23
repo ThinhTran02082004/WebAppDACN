@@ -142,11 +142,19 @@ const AdminPrescriptions = () => {
     });
   };
 
-  const getStatusInfo = (status) => {
+  const getStatusInfo = (status, isDraft = false) => {
     const mapping = {
+      pending_approval: {
+        label: 'Đơn nháp - Chờ duyệt',
+        classes: 'bg-orange-100 text-orange-800 border border-orange-200'
+      },
       approved: {
-        label: 'Chờ phê duyệt',
-        classes: 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+        label: isDraft ? 'Đơn nháp - Đã duyệt' : 'Chờ phê duyệt',
+        classes: isDraft ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+      },
+      rejected: {
+        label: 'Đơn nháp - Đã từ chối',
+        classes: 'bg-red-100 text-red-800 border border-red-200'
       },
       verified: {
         label: 'Đã phê duyệt',
@@ -233,6 +241,7 @@ const AdminPrescriptions = () => {
               className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
             >
               <option value="approved">Chờ phê duyệt</option>
+              <option value="pending_approval">Đơn nháp chờ duyệt</option>
               <option value="verified">Đã phê duyệt</option>
               <option value="dispensed">Đã cấp thuốc</option>
               <option value="completed">Hoàn thành</option>
@@ -319,15 +328,21 @@ const AdminPrescriptions = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredPrescriptions.length > 0 ? (
                 filteredPrescriptions.map((prescription) => {
-                  const statusInfo = getStatusInfo(prescription.status);
+                  const isDraft = prescription.isDraft || prescription.type === 'draft';
+                  const statusInfo = getStatusInfo(prescription.status, isDraft);
                   return (
                     <tr key={prescription._id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="font-semibold text-gray-800">
-                          {prescription._id?.slice(0, 8).toUpperCase()}
+                          {prescription.prescriptionCode || prescription._id?.slice(0, 8).toUpperCase()}
+                          {isDraft && (
+                            <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-800 rounded-full">
+                              Nháp
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {prescription.appointmentId?.bookingCode || ''}
+                          {prescription.appointmentId?.bookingCode || (isDraft ? 'Từ AI' : '')}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -340,7 +355,7 @@ const AdminPrescriptions = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {prescription.doctorId?.user?.fullName || '—'}
+                          {prescription.doctorId?.user?.fullName || prescription.doctorName || '—'}
                         </div>
                         <div className="text-xs text-gray-500">
                           {prescription.doctorId?.title || ''}
@@ -373,7 +388,7 @@ const AdminPrescriptions = () => {
                         >
                           <FaEye className="inline" />
                         </button>
-                        {prescription.status === 'approved' && (
+                        {!isDraft && prescription.status === 'approved' && (
                           <>
                             <button
                               onClick={() => handleVerify(prescription._id)}
@@ -390,6 +405,11 @@ const AdminPrescriptions = () => {
                               <FaTimesCircle className="inline" />
                             </button>
                           </>
+                        )}
+                        {isDraft && (
+                          <span className="text-xs text-gray-500 italic">
+                            (Cần bác sĩ duyệt)
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -445,7 +465,12 @@ const AdminPrescriptions = () => {
               <FaClipboardCheck className="text-blue-600 text-2xl mr-3" />
               <div>
                 <h2 className="text-xl font-bold text-gray-800">
-                  Chi tiết đơn {detailPrescription._id?.slice(0, 10).toUpperCase()}
+                  Chi tiết đơn {detailPrescription.prescriptionCode || detailPrescription._id?.slice(0, 10).toUpperCase()}
+                  {detailPrescription.isDraft && (
+                    <span className="ml-2 px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">
+                      Đơn nháp
+                    </span>
+                  )}
                 </h2>
                 <p className="text-sm text-gray-500">{formatDate(detailPrescription.createdAt)}</p>
               </div>
@@ -461,9 +486,12 @@ const AdminPrescriptions = () => {
               <div className="bg-gray-50 rounded-xl p-4">
                 <p className="text-gray-500 font-medium mb-1">Bác sĩ</p>
                 <p className="text-gray-900 font-semibold">
-                  {detailPrescription.doctorId?.user?.fullName}
+                  {detailPrescription.doctorId?.user?.fullName || detailPrescription.doctorName || 'Chưa gán'}
                 </p>
-                <p className="text-gray-500">{detailPrescription.doctorId?.title}</p>
+                <p className="text-gray-500">{detailPrescription.doctorId?.title || ''}</p>
+                {detailPrescription.isDraft && detailPrescription.status === 'pending_approval' && (
+                  <p className="text-xs text-orange-600 mt-1">Cần bác sĩ duyệt</p>
+                )}
               </div>
               <div className="bg-gray-50 rounded-xl p-4">
                 <p className="text-gray-500 font-medium mb-1">Bệnh viện</p>
@@ -473,13 +501,18 @@ const AdminPrescriptions = () => {
                 <p className="text-gray-500">{detailPrescription.hospitalId?.address}</p>
               </div>
               <div className="bg-gray-50 rounded-xl p-4">
-                <p className="text-gray-500 font-medium mb-1">Chẩn đoán / Ghi chú</p>
+                <p className="text-gray-500 font-medium mb-1">Chẩn đoán / Triệu chứng</p>
                 <p className="text-gray-900">
-                  {detailPrescription.diagnosis || '—'}
+                  {detailPrescription.diagnosis || detailPrescription.symptom || '—'}
                 </p>
                 <p className="text-gray-500 mt-1">
-                  {detailPrescription.notes || ''}
+                  {detailPrescription.notes || detailPrescription.note || ''}
                 </p>
+                {detailPrescription.isDraft && detailPrescription.specialtyId && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Chuyên khoa: {detailPrescription.specialtyId?.name || detailPrescription.specialtyName}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -496,19 +529,33 @@ const AdminPrescriptions = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-sm">
-                    {detailPrescription.medications?.map((med) => (
-                      <tr key={`${med.medicationId}-${med.medicationName}`}>
-                        <td className="px-4 py-2">
-                          <div className="font-medium text-gray-800">{med.medicationName}</div>
-                          <div className="text-gray-500 text-xs">{med.usage}</div>
-                        </td>
-                        <td className="px-4 py-2 text-gray-700">{med.dosage}</td>
-                        <td className="px-4 py-2 text-gray-700">{med.quantity}</td>
-                        <td className="px-4 py-2 text-gray-900 font-medium">
-                          {formatCurrency(med.totalPrice)}
-                        </td>
-                      </tr>
-                    ))}
+                    {detailPrescription.medications?.map((med, index) => {
+                      // Xử lý cả Prescription và PrescriptionDraft format
+                      const medication = med.medicationId || med;
+                      const medicationName = med.medicationName || med.name || medication?.name || 'N/A';
+                      const quantity = med.quantity || 1;
+                      const price = med.price || med.unitPrice || medication?.unitPrice || 0;
+                      const totalPrice = med.totalPrice || (price * quantity);
+                      const usage = med.usage || '';
+                      const dosage = med.dosage || '';
+                      
+                      return (
+                        <tr key={`${med.medicationId || med.medicationId?._id || index}-${medicationName}`}>
+                          <td className="px-4 py-2">
+                            <div className="font-medium text-gray-800">{medicationName}</div>
+                            {usage && <div className="text-gray-500 text-xs">{usage}</div>}
+                            {medication?.unitTypeDisplay && (
+                              <div className="text-gray-500 text-xs">{medication.unitTypeDisplay}</div>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-gray-700">{dosage || 'Theo chỉ định'}</td>
+                          <td className="px-4 py-2 text-gray-700">{quantity}</td>
+                          <td className="px-4 py-2 text-gray-900 font-medium">
+                            {formatCurrency(totalPrice)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

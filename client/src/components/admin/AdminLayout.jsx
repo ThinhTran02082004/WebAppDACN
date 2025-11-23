@@ -7,7 +7,7 @@ import {
   FaStar, FaProcedures, FaDoorOpen, FaSignOutAlt,
   FaClock, FaSearch, FaBars, FaTimes,
   FaUserShield, FaLock, FaMedkit, FaVideo, FaHistory, FaRobot,
-  FaPills, FaBed, FaBoxes, FaClipboardCheck
+  FaPills, FaBed, FaBoxes, FaClipboardCheck, FaFilter
 } from 'react-icons/fa';
 
 const AdminLayout = ({ children }) => {
@@ -25,6 +25,7 @@ const AdminLayout = ({ children }) => {
     '/admin/doctor-schedules',
     '/admin/hospitals',
     '/admin/specialties',
+    '/admin/specialty-mappings',
     '/admin/services',
     '/admin/rooms',
     '/admin/appointments',
@@ -126,6 +127,7 @@ const AdminLayout = ({ children }) => {
     { path: '/admin/doctor-schedules', label: 'Lịch bác sĩ', icon: <FaClock /> },
     { path: '/admin/hospitals', label: 'Cơ sở y tế', icon: <FaHospital /> },
     { path: '/admin/specialties', label: 'Chuyên khoa', icon: <FaFileAlt /> },
+    { path: '/admin/specialty-mappings', label: 'Mapping Chuyên khoa', icon: <FaFilter /> },
     { path: '/admin/services', label: 'Dịch vụ', icon: <FaProcedures /> },
     { path: '/admin/rooms', label: 'Phòng khám', icon: <FaDoorOpen /> },
     { path: '/admin/medications', label: 'Danh sách thuốc', icon: <FaMedkit /> },
@@ -156,6 +158,7 @@ const AdminLayout = ({ children }) => {
     facilities: [
       '/admin/hospitals',
       '/admin/specialties',
+      '/admin/specialty-mappings',
       '/admin/services',
       '/admin/rooms',
       '/admin/medications',

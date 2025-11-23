@@ -74,6 +74,7 @@ import ReviewForm from './pages/user/ReviewForm.jsx';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminSpecialties from './pages/admin/Specialties';
 import AdminServices from './pages/admin/Services';
+import SpecialtyMappings from './pages/admin/SpecialtyMappings';
 import AdminRooms from './pages/admin/Rooms';
 import Users from './pages/admin/Users';
 import Hospitals from './pages/admin/Hospitals';
@@ -115,6 +116,10 @@ import UserChat from './pages/user/Chat';
 import DoctorChat from './pages/doctor/Chat';
 import ChatDock from './components/ChatDock';
 
+// Doctor Prescription Drafts
+import DoctorPrescriptionDrafts from './pages/doctor/PrescriptionDrafts';
+import DoctorPrescriptionDraftDetail from './pages/doctor/PrescriptionDraftDetail';
+
 function AppContent() {
   const { isAuthenticated, loading, user } = useAuth();
 
@@ -138,6 +143,7 @@ function AppContent() {
           <Route path="pharmacists" element={<Pharmacists />} />
           <Route path="hospitals" element={<Hospitals />} />
           <Route path="specialties" element={<AdminSpecialties />} />
+          <Route path="specialty-mappings" element={<SpecialtyMappings />} />
           <Route path="services" element={<AdminServices />} />
           <Route path="rooms" element={<AdminRooms />} />
           {/* Thêm routes cho các trang admin mới */}
@@ -175,6 +181,8 @@ function AppContent() {
           <Route path="payment-history" element={<DoctorPaymentHistory />} />
           <Route path="chat" element={<DoctorChat />} />
           <Route path="chat/:conversationId" element={<DoctorChat />} />
+          <Route path="prescription-drafts" element={<DoctorPrescriptionDrafts />} />
+          <Route path="prescription-drafts/:id" element={<DoctorPrescriptionDraftDetail />} />
         </Route>
 
         {/* Pharmacist Routes - No Navbar/Footer */}
