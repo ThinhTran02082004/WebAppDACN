@@ -126,6 +126,14 @@ const prescriptionSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  createdFromDraft: {
+    type: Boolean,
+    default: false
+  },
+  draftId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PrescriptionDraft'
+  },
   hospitalId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Hospital',

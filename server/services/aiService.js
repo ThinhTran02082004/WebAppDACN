@@ -144,6 +144,14 @@ const extractKeywords = (advice, symptom) => {
 };
 
 const availableTools = {
+    findHospitals: async ({ specialty, city, name }) => {
+        return await searchTools.findHospitals({ specialty, city, name });
+    },
+
+    findDoctors: async ({ specialty, name }) => {
+        return await searchTools.findDoctors({ specialty, name });
+    },
+
     findAvailableSlots: async ({ query, city, date, sessionId }) => {
         const response = await searchTools.findAvailableSlots({ query, city, date, sessionId });
         if (response?.availableSlots?.length && sessionId) {
@@ -249,8 +257,9 @@ const availableTools = {
                 };
     }
 
-            const preferredHospitalEntry = hospitalAvailability.find(entry => entry.inStock.length > 0) || hospitalAvailability[0];
-            const preferredMedications = (preferredHospitalEntry.inStock || []).slice(0, 3);
+            // Chọn bệnh viện có nhiều thuốc nhất (sẽ được cập nhật lại nếu tìm thấy bác sĩ ở bệnh viện khác)
+            let preferredHospitalEntry = hospitalAvailability.find(entry => entry.inStock.length > 0) || hospitalAvailability[0];
+            let preferredMedications = (preferredHospitalEntry.inStock || []).slice(0, 3);
 
             if (!preferredMedications.length) {
                 return {
@@ -259,6 +268,7 @@ const availableTools = {
                 };
             }
 
+            // Xác định chuyên khoa từ triệu chứng
             let specialtyInfo = null;
             try {
                 const mapping = await findSpecialtyMapping(symptom);
@@ -273,35 +283,120 @@ const availableTools = {
                 console.error('Lỗi khi xác định chuyên khoa cho đơn thuốc:', error);
             }
 
+            // Tìm bác sĩ phù hợp: thuộc chuyên khoa và bệnh viện có thuốc
             let doctorInfo = null;
-            if (specialtyInfo?.id && preferredHospitalEntry?.hospitalId) {
-                const doctor = await Doctor.findOne({
-                    hospitalId: preferredHospitalEntry.hospitalId,
-                    specialtyId: specialtyInfo.id
-                })
-                    .populate('user', 'fullName')
-                    .select('title hospitalId specialtyId user')
-                    .lean();
+            let assignedHospital = preferredHospitalEntry;
+            
+            if (specialtyInfo?.id) {
+                // Ưu tiên 1: Tìm bác sĩ ở bệnh viện có nhiều thuốc nhất và thuộc chuyên khoa phù hợp
+                if (preferredHospitalEntry?.hospitalId) {
+                    const doctor = await Doctor.findOne({
+                        hospitalId: preferredHospitalEntry.hospitalId,
+                        specialtyId: specialtyInfo.id,
+                        isAvailable: { $ne: false }
+                    })
+                        .populate('user', 'fullName')
+                        .select('title hospitalId specialtyId user')
+                        .lean();
 
-                if (doctor) {
-                    doctorInfo = {
-                        id: doctor._id,
-                        name: doctor.user?.fullName || doctor.title || 'Bác sĩ chuyên khoa',
-                        title: doctor.title
-                    };
-    }
+                    if (doctor) {
+                        doctorInfo = {
+                            id: doctor._id,
+                            name: doctor.user?.fullName || doctor.title || 'Bác sĩ chuyên khoa',
+                            title: doctor.title
+                        };
+                        console.log(`[Prescription] Đã tìm thấy bác sĩ ${doctorInfo.name} ở bệnh viện ${preferredHospitalEntry.hospitalName} thuộc chuyên khoa ${specialtyInfo.name}`);
+                    }
+                }
+                
+                // Ưu tiên 2: Nếu không tìm thấy ở bệnh viện có nhiều thuốc nhất, tìm ở các bệnh viện khác có thuốc
+                if (!doctorInfo && hospitalAvailability.length > 0) {
+                    for (const hospitalEntry of hospitalAvailability) {
+                        if (hospitalEntry.hospitalId.toString() === preferredHospitalEntry.hospitalId.toString()) {
+                            continue; // Đã tìm ở bệnh viện này rồi
+                        }
+                        
+                        if (hospitalEntry.inStock.length > 0) {
+                            const doctor = await Doctor.findOne({
+                                hospitalId: hospitalEntry.hospitalId,
+                                specialtyId: specialtyInfo.id,
+                                isAvailable: { $ne: false }
+                            })
+                                .populate('user', 'fullName')
+                                .select('title hospitalId specialtyId user')
+                                .lean();
+
+                            if (doctor) {
+                                doctorInfo = {
+                                    id: doctor._id,
+                                    name: doctor.user?.fullName || doctor.title || 'Bác sĩ chuyên khoa',
+                                    title: doctor.title
+                                };
+                                assignedHospital = hospitalEntry; // Gán lại bệnh viện cho bác sĩ này
+                                console.log(`[Prescription] Đã tìm thấy bác sĩ ${doctorInfo.name} ở bệnh viện ${hospitalEntry.hospitalName} thuộc chuyên khoa ${specialtyInfo.name}`);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Ưu tiên 3: Nếu vẫn không tìm thấy, tìm bất kỳ bác sĩ nào thuộc chuyên khoa (không quan trọng bệnh viện)
+                if (!doctorInfo) {
+                    const doctor = await Doctor.findOne({
+                        specialtyId: specialtyInfo.id,
+                        isAvailable: { $ne: false }
+                    })
+                        .populate('user', 'fullName')
+                        .populate('hospitalId', 'name')
+                        .select('title hospitalId specialtyId user')
+                        .lean();
+
+                    if (doctor) {
+                        doctorInfo = {
+                            id: doctor._id,
+                            name: doctor.user?.fullName || doctor.title || 'Bác sĩ chuyên khoa',
+                            title: doctor.title
+                        };
+                        // Cập nhật assignedHospital với bệnh viện của bác sĩ (nếu có thuốc ở đó)
+                        const doctorHospital = hospitalAvailability.find(h => 
+                            h.hospitalId.toString() === (doctor.hospitalId?._id || doctor.hospitalId)?.toString()
+                        );
+                        if (doctorHospital && doctorHospital.inStock.length > 0) {
+                            assignedHospital = doctorHospital;
+                        }
+                        console.log(`[Prescription] Đã tìm thấy bác sĩ ${doctorInfo.name} thuộc chuyên khoa ${specialtyInfo.name} (có thể ở bệnh viện khác)`);
+                    }
+                }
+            }
+            
+            // Nếu không tìm thấy bác sĩ, vẫn tạo đơn nhưng không gán bác sĩ (sẽ được gán sau khi duyệt)
+            if (!doctorInfo) {
+                console.warn(`[Prescription] Không tìm thấy bác sĩ thuộc chuyên khoa ${specialtyInfo?.name || 'không xác định'} để gán cho đơn thuốc. Đơn thuốc sẽ được gán sau khi duyệt.`);
             }
 
+            // Cập nhật lại preferredMedications nếu assignedHospital khác preferredHospitalEntry
+            if (assignedHospital && assignedHospital.hospitalId.toString() !== preferredHospitalEntry.hospitalId.toString()) {
+                preferredMedications = (assignedHospital.inStock || []).slice(0, 3);
+                preferredHospitalEntry = assignedHospital;
+                console.log(`[Prescription] Đã chuyển sang bệnh viện ${assignedHospital.hospitalName} vì có bác sĩ phù hợp`);
+            }
+            
+            // Đảm bảo có thuốc ở bệnh viện được gán
+            if (!preferredMedications.length && assignedHospital) {
+                preferredMedications = (assignedHospital.inStock || []).slice(0, 3);
+            }
+            
+            // Tạo đơn thuốc với thông tin đã được xác định
             const draft = await PrescriptionDraft.create({
                 patientId: userId,
                 diagnosis: symptom,
                 symptom,
                 keywords,
-                hospitalId: preferredHospitalEntry.hospitalId,
-                hospitalName: preferredHospitalEntry.hospitalName,
+                hospitalId: assignedHospital?.hospitalId || preferredHospitalEntry.hospitalId,
+                hospitalName: assignedHospital?.hospitalName || preferredHospitalEntry.hospitalName,
                 specialtyId: specialtyInfo?.id,
                 specialtyName: specialtyInfo?.name,
-                doctorId: doctorInfo?.id,
+                doctorId: doctorInfo?.id, // Gán bác sĩ thuộc đúng bệnh viện và chuyên khoa
                 doctorName: doctorInfo?.name,
                 medications: preferredMedications.map(m => ({
                     medicationId: m.medicationId,
@@ -319,19 +414,29 @@ const availableTools = {
                 })),
                 note: medicalAdvice ? `Dựa trên khuyến nghị: ${medicalAdvice.slice(0, 120)}...` : undefined
             });
+            
+            console.log(`[Prescription] Đã tạo đơn thuốc ${draft.prescriptionCode} cho bệnh viện ${draft.hospitalName}, chuyên khoa ${draft.specialtyName}, bác sĩ ${draft.doctorName || 'chưa gán'}`);
 
             const hospitalContext = {
-                assignedHospital: preferredHospitalEntry
+                assignedHospital: assignedHospital || preferredHospitalEntry
                     ? {
-                        id: preferredHospitalEntry.hospitalId,
-                        name: preferredHospitalEntry.hospitalName,
-                        address: preferredHospitalEntry.address,
-                        availableMedications: preferredHospitalEntry.inStock.length,
-                        outOfStockMedications: preferredHospitalEntry.outOfStock.length
+                        id: (assignedHospital || preferredHospitalEntry).hospitalId,
+                        name: (assignedHospital || preferredHospitalEntry).hospitalName,
+                        address: (assignedHospital || preferredHospitalEntry).address,
+                        availableMedications: (assignedHospital || preferredHospitalEntry).inStock.length,
+                        outOfStockMedications: (assignedHospital || preferredHospitalEntry).outOfStock.length
                     }
                     : null,
                 specialty: specialtyInfo,
-                doctor: doctorInfo,
+                doctor: doctorInfo ? {
+                    id: doctorInfo.id,
+                    name: doctorInfo.name,
+                    title: doctorInfo.title,
+                    hospitalId: assignedHospital?.hospitalId || preferredHospitalEntry?.hospitalId,
+                    hospitalName: assignedHospital?.hospitalName || preferredHospitalEntry?.hospitalName,
+                    specialtyId: specialtyInfo?.id,
+                    specialtyName: specialtyInfo?.name
+                } : null,
                 branches: hospitalAvailability.slice(0, 3)
             };
 
@@ -351,6 +456,10 @@ const availableTools = {
     },
 
     // Thêm các tool quản lý lịch hẹn
+    getAppointmentHistory: async ({ patientId }) => {
+        return appointmentTools.getAppointmentHistory({ patientId });
+    },
+
     getMyAppointments: async ({ sessionId }) => {
         return appointmentTools.getMyAppointments({ sessionId });
     },
@@ -445,6 +554,13 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
             'cancelPrescription'
         ].includes(call.name)) {
             args.sessionId = sessionId;
+        }
+        // getAppointmentHistory requires patientId from sessionId
+        if (call.name === 'getAppointmentHistory') {
+            const userId = cache.getUserId(sessionId);
+            if (userId) {
+                args.patientId = userId;
+            }
         }
         if (call.name === 'bookAppointment') {
             args.userPrompt = userPrompt;

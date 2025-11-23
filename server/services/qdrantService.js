@@ -236,7 +236,7 @@ const isIrrelevant = async (userPrompt) => {
 };
 
 /**
- * Kiểm tra xem câu trả lời có chứa thông tin cụ thể về lịch hẹn không
+ * Kiểm tra xem câu trả lời có chứa thông tin cụ thể về lịch hẹn, đơn thuốc, hoặc thông tin cá nhân không
  * @param {string} aiResponse - Câu trả lời của AI
  * @returns {boolean} - True nếu có thông tin cụ thể
  */
@@ -255,14 +255,114 @@ const hasSpecificAppointmentInfo = (aiResponse) => {
     return true;
   }
   
-  // Kiểm tra có giờ cụ thể (format: HH:MM)
-  if (/\d{1,2}:\d{2}/.test(aiResponse)) {
-    // Nhưng chỉ coi là cụ thể nếu có kèm theo "mã đặt lịch" hoặc "bác sĩ" hoặc "bệnh viện"
+  // Kiểm tra có mã slot (L01, L02, L1, L2, ...) - đây là thông tin cụ thể về lịch hẹn
+  // Pattern: L + số (có thể có số 0 đứng trước) + có thể kèm theo giờ
+  if (/l\s*0?\d{1,2}/i.test(aiResponse)) {
+    // Nếu có slot kèm theo giờ hoặc từ khóa liên quan đến lịch hẹn
+    const hasTime = /\d{1,2}\s*(h|giờ|:)/i.test(aiResponse);
+    const hasBookingKeywords = lowerResponse.includes('có') || 
+                               lowerResponse.includes('còn') || 
+                               lowerResponse.includes('slot') ||
+                               lowerResponse.includes('khung giờ') ||
+                               lowerResponse.includes('lịch hẹn');
+    
+    if (hasTime || hasBookingKeywords) {
+      return true;
+    }
+  }
+  
+  // Kiểm tra có giờ cụ thể (format: HH:MM hoặc Xh, X giờ)
+  if (/\d{1,2}:\d{2}/.test(aiResponse) || /\d{1,2}\s*(h|giờ)/i.test(aiResponse)) {
+    // Kiểm tra có kèm theo từ khóa liên quan đến lịch hẹn
     if (lowerResponse.includes('mã đặt lịch') || 
         lowerResponse.includes('bác sĩ') || 
         lowerResponse.includes('bệnh viện') ||
-        lowerResponse.includes('bookingcode')) {
+        lowerResponse.includes('bookingcode') ||
+        lowerResponse.includes('mai') ||
+        lowerResponse.includes('ngày mai') ||
+        lowerResponse.includes('hôm nay') ||
+        lowerResponse.includes('có l') ||
+        lowerResponse.includes('còn l') ||
+        lowerResponse.includes('slot')) {
       return true;
+    }
+  }
+  
+  // Kiểm tra các từ khóa về thời gian cụ thể kèm theo thông tin lịch hẹn
+  const timeKeywords = ['mai', 'ngày mai', 'hôm nay', 'ngày \d+', 'thứ \d+'];
+  const appointmentKeywords = ['có l', 'còn l', 'slot', 'khung giờ', 'lịch hẹn', 'đặt lịch'];
+  
+  for (const timeKeyword of timeKeywords) {
+    if (new RegExp(timeKeyword, 'i').test(aiResponse)) {
+      for (const apptKeyword of appointmentKeywords) {
+        if (lowerResponse.includes(apptKeyword)) {
+          return true;
+        }
+      }
+    }
+  }
+  
+  // Kiểm tra thông tin về đơn thuốc (prescription)
+  const prescriptionKeywords = [
+    'đơn thuốc', 'toa thuốc', 'thuốc', 'prescription',
+    'đã kê', 'kê đơn', 'mã đơn', 'đơn số'
+  ];
+  for (const keyword of prescriptionKeywords) {
+    if (lowerResponse.includes(keyword)) {
+      // Nếu có mã đơn thuốc hoặc tên thuốc cụ thể
+      if (/đơn\s*(số|#)?\s*\d+/i.test(aiResponse) || 
+          /mã\s*đơn\s*:?\s*[a-z0-9]+/i.test(aiResponse) ||
+          /\d+\s*(viên|vi|tablet|mg|ml)/i.test(aiResponse)) {
+        return true;
+      }
+    }
+  }
+  
+  // Kiểm tra thông tin về hủy lịch/đổi lịch
+  const cancelChangeKeywords = [
+    'đã hủy', 'hủy thành công', 'hủy lịch', 'cancel',
+    'đã đổi', 'đổi thành công', 'đổi lịch', 'reschedule',
+    'thay đổi lịch', 'chuyển lịch'
+  ];
+  for (const keyword of cancelChangeKeywords) {
+    if (lowerResponse.includes(keyword)) {
+      // Nếu có thông tin cụ thể về lịch đã hủy/đổi
+      if (/apt-[a-z0-9]{6,10}/i.test(aiResponse) ||
+          /\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/.test(aiResponse) ||
+          /l\s*0?\d{1,2}/i.test(aiResponse)) {
+        return true;
+      }
+    }
+  }
+  
+  // Kiểm tra thông tin về hồ sơ bệnh án, kết quả xét nghiệm
+  const medicalRecordKeywords = [
+    'hồ sơ bệnh án', 'bệnh án', 'kết quả xét nghiệm', 'xét nghiệm',
+    'kết quả khám', 'chẩn đoán', 'diagnosis', 'medical record'
+  ];
+  for (const keyword of medicalRecordKeywords) {
+    if (lowerResponse.includes(keyword)) {
+      // Nếu có mã bệnh án hoặc ngày cụ thể
+      if (/mã\s*(bệnh án|hồ sơ)\s*:?\s*[a-z0-9]+/i.test(aiResponse) ||
+          /\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/.test(aiResponse)) {
+        return true;
+      }
+    }
+  }
+  
+  // Kiểm tra thông tin về thanh toán, hóa đơn
+  const paymentKeywords = [
+    'hóa đơn', 'bill', 'thanh toán', 'payment', 'mã thanh toán',
+    'số tiền', 'tổng cộng', 'vnd', 'đồng'
+  ];
+  for (const keyword of paymentKeywords) {
+    if (lowerResponse.includes(keyword)) {
+      // Nếu có số tiền cụ thể hoặc mã hóa đơn
+      if (/\d+[.,]\d+\s*(vnd|đồng|vnđ)/i.test(aiResponse) ||
+          /mã\s*(hóa đơn|thanh toán)\s*:?\s*[a-z0-9]+/i.test(aiResponse) ||
+          /bill\s*#?\s*[a-z0-9]+/i.test(aiResponse)) {
+        return true;
+      }
     }
   }
   
@@ -311,6 +411,89 @@ const isShortConfirmation = (userPrompt) => {
 };
 
 /**
+ * Kiểm tra xem câu hỏi có liên quan đến đặt lịch/khám bệnh/hủy lịch/đổi lịch/đơn thuốc không
+ * @param {string} userPrompt - Câu hỏi của người dùng
+ * @returns {boolean} - True nếu liên quan đến thông tin cá nhân
+ */
+const isAppointmentRelated = (userPrompt) => {
+  if (!userPrompt) return false;
+  
+  const lowerPrompt = userPrompt.toLowerCase();
+  
+  // Từ khóa về đặt lịch/khám bệnh
+  const appointmentKeywords = [
+    'đặt lịch', 'đặt hẹn', 'khám', 'khám bệnh', 'lịch hẹn',
+    'ngày mai', 'mai', 'hôm nay', 'ngày \d+', 'thứ \d+',
+    'giờ', 'khung giờ', 'slot', 'l01', 'l02', 'l1', 'l2',
+    'lịch của tôi', 'lịch khám của tôi'
+  ];
+  
+  for (const keyword of appointmentKeywords) {
+    if (new RegExp(keyword, 'i').test(userPrompt)) {
+      return true;
+    }
+  }
+  
+  // Từ khóa về hủy lịch
+  const cancelKeywords = [
+    'hủy lịch', 'hủy hẹn', 'cancel', 'hủy đặt lịch',
+    'hủy lịch khám', 'hủy cuộc hẹn', 'xóa lịch'
+  ];
+  for (const keyword of cancelKeywords) {
+    if (lowerPrompt.includes(keyword)) {
+      return true;
+    }
+  }
+  
+  // Từ khóa về đổi lịch
+  const changeKeywords = [
+    'đổi lịch', 'đổi hẹn', 'reschedule', 'thay đổi lịch',
+    'chuyển lịch', 'dời lịch', 'đổi lịch khám', 'đổi cuộc hẹn'
+  ];
+  for (const keyword of changeKeywords) {
+    if (lowerPrompt.includes(keyword)) {
+      return true;
+    }
+  }
+  
+  // Từ khóa về đơn thuốc
+  const prescriptionKeywords = [
+    'đơn thuốc', 'toa thuốc', 'thuốc của tôi', 'prescription',
+    'đơn thuốc của tôi', 'toa thuốc của tôi', 'xem đơn thuốc',
+    'lịch sử đơn thuốc', 'đơn thuốc gần đây'
+  ];
+  for (const keyword of prescriptionKeywords) {
+    if (lowerPrompt.includes(keyword)) {
+      return true;
+    }
+  }
+  
+  // Từ khóa về hồ sơ bệnh án
+  const medicalRecordKeywords = [
+    'hồ sơ bệnh án', 'bệnh án của tôi', 'kết quả xét nghiệm',
+    'kết quả khám', 'chẩn đoán', 'medical record', 'hồ sơ y tế'
+  ];
+  for (const keyword of medicalRecordKeywords) {
+    if (lowerPrompt.includes(keyword)) {
+      return true;
+    }
+  }
+  
+  // Từ khóa về thanh toán/hóa đơn
+  const paymentKeywords = [
+    'hóa đơn của tôi', 'thanh toán của tôi', 'bill', 'payment',
+    'lịch sử thanh toán', 'hóa đơn gần đây'
+  ];
+  for (const keyword of paymentKeywords) {
+    if (lowerPrompt.includes(keyword)) {
+      return true;
+    }
+  }
+  
+  return false;
+};
+
+/**
  * 6. LỚP 2: Tìm câu trả lời trong cache
  * @returns {Promise<string|null>} - Trả về câu trả lời nếu tìm thấy, ngược lại null
  */
@@ -319,6 +502,12 @@ const findCachedAnswer = async (userPrompt) => {
     // KHÔNG cache cho các câu trả lời ngắn/xác nhận (có thể là trong flow đặt lịch)
     if (isShortConfirmation(userPrompt)) {
       console.log(`[Qdrant Cache] BỎ QUA CACHE cho câu trả lời ngắn/xác nhận: "${userPrompt}"`);
+      return null;
+    }
+    
+    // Nếu câu hỏi liên quan đến đặt lịch, không dùng cache (vì mỗi người có lịch khác nhau)
+    if (isAppointmentRelated(userPrompt)) {
+      console.log(`[Qdrant Cache] BỎ QUA CACHE vì câu hỏi liên quan đến đặt lịch: "${userPrompt}"`);
       return null;
     }
     
@@ -357,15 +546,31 @@ const findCachedAnswer = async (userPrompt) => {
 const cacheAnswer = async (userPrompt, aiResponse) => {
   try {
     // KHÔNG cache nếu:
-    // 1. Câu trả lời có thông tin cụ thể về lịch hẹn (bookingCode, ngày giờ cụ thể)
+    // 1. Câu trả lời có thông tin cụ thể về:
+    //    - Lịch hẹn (bookingCode, ngày giờ cụ thể, slot)
+    //    - Đơn thuốc (mã đơn, tên thuốc cụ thể)
+    //    - Hủy/đổi lịch (thông tin lịch đã hủy/đổi)
+    //    - Hồ sơ bệnh án (mã bệnh án, kết quả xét nghiệm)
+    //    - Thanh toán (số tiền, mã hóa đơn)
     // 2. Prompt là câu trả lời ngắn/xác nhận (có thể là trong flow đặt lịch)
+    // 3. Câu hỏi liên quan đến thông tin cá nhân:
+    //    - Đặt lịch, hủy lịch, đổi lịch
+    //    - Đơn thuốc, hồ sơ bệnh án
+    //    - Thanh toán, hóa đơn
+    //    (vì mỗi người có thông tin khác nhau)
     if (hasSpecificAppointmentInfo(aiResponse)) {
-      console.log(`[Qdrant Cache] KHÔNG LƯU CACHE vì có thông tin cụ thể về lịch hẹn: "${userPrompt}"`);
+      console.log(`[Qdrant Cache] KHÔNG LƯU CACHE vì có thông tin cụ thể (lịch hẹn/đơn thuốc/hủy đổi lịch/hồ sơ/thanh toán): "${userPrompt}"`);
       return;
     }
     
     if (isShortConfirmation(userPrompt)) {
       console.log(`[Qdrant Cache] KHÔNG LƯU CACHE cho câu trả lời ngắn/xác nhận: "${userPrompt}"`);
+      return;
+    }
+    
+    // Không cache nếu câu hỏi liên quan đến thông tin cá nhân (vì mỗi người có thông tin khác nhau)
+    if (isAppointmentRelated(userPrompt)) {
+      console.log(`[Qdrant Cache] KHÔNG LƯU CACHE vì câu hỏi liên quan đến thông tin cá nhân (lịch hẹn/hủy đổi lịch/đơn thuốc/hồ sơ/thanh toán): "${userPrompt}"`);
       return;
     }
     
@@ -437,6 +642,108 @@ const searchMedicalKnowledge = async (query) => {
   }
 };
 
+/**
+ * Tìm dịch vụ từ query sử dụng vector similarity
+ * @param {string} query - Từ khóa tìm kiếm dịch vụ (ví dụ: "khám tổng quát", "tiêm vaccine")
+ * @param {string} specialtyId - ID chuyên khoa (optional, để filter)
+ * @returns {Promise<Array>} - Danh sách services phù hợp
+ */
+const findServiceMapping = async (query, specialtyId = null) => {
+  try {
+    const SERVICE_COLLECTION = "service_mapper";
+    const userVector = await getEmbedding(query);
+    const SIMILARITY_THRESHOLD = 0.7; // Ngưỡng thấp hơn để tìm được nhiều kết quả
+
+    const searchResult = await qdrantClient.search(SERVICE_COLLECTION, {
+      vector: userVector,
+      limit: 5, // Lấy top 5 kết quả
+      with_payload: true,
+      score_threshold: SIMILARITY_THRESHOLD,
+    });
+
+    if (searchResult.length === 0) {
+      console.log(`[Qdrant Service Mapper] Không tìm thấy service cho: "${query}"`);
+      return [];
+    }
+
+    // Filter theo specialtyId nếu có
+    let filteredResults = searchResult;
+    if (specialtyId) {
+      filteredResults = searchResult.filter(item => 
+        item.payload.specialtyId === specialtyId.toString()
+      );
+    }
+
+    // Sắp xếp theo score giảm dần
+    filteredResults.sort((a, b) => b.score - a.score);
+
+    console.log(`[Qdrant Service Mapper] Tìm thấy ${filteredResults.length} services cho: "${query}"`);
+    return filteredResults.map(item => ({
+      serviceId: item.payload.serviceId,
+      serviceName: item.payload.serviceName,
+      specialtyId: item.payload.specialtyId,
+      specialtyName: item.payload.specialtyName,
+      score: item.score
+    }));
+  } catch (error) {
+    console.error("Lỗi khi Qdrant (tìm service mapper):", error);
+    return [];
+  }
+};
+
+/**
+ * Tìm bác sĩ từ query sử dụng vector similarity
+ * @param {string} query - Từ khóa tìm kiếm bác sĩ (ví dụ: "bác sĩ tim mạch", "Nguyễn Văn A")
+ * @param {string} specialtyId - ID chuyên khoa (optional, để filter)
+ * @param {string} serviceId - ID dịch vụ (optional, để filter)
+ * @returns {Promise<Array>} - Danh sách doctors phù hợp
+ */
+const findDoctorMapping = async (query, specialtyId = null, serviceId = null) => {
+  try {
+    const DOCTOR_COLLECTION = "doctor_mapper";
+    const userVector = await getEmbedding(query);
+    const SIMILARITY_THRESHOLD = 0.7;
+
+    const searchResult = await qdrantClient.search(DOCTOR_COLLECTION, {
+      vector: userVector,
+      limit: 10, // Lấy top 10 kết quả
+      with_payload: true,
+      score_threshold: SIMILARITY_THRESHOLD,
+    });
+
+    if (searchResult.length === 0) {
+      console.log(`[Qdrant Doctor Mapper] Không tìm thấy doctor cho: "${query}"`);
+      return [];
+    }
+
+    // Filter theo specialtyId và serviceId nếu có
+    let filteredResults = searchResult;
+    if (specialtyId) {
+      filteredResults = filteredResults.filter(item => 
+        item.payload.specialtyId === specialtyId.toString()
+      );
+    }
+
+    // Sắp xếp theo score giảm dần
+    filteredResults.sort((a, b) => b.score - a.score);
+
+    console.log(`[Qdrant Doctor Mapper] Tìm thấy ${filteredResults.length} doctors cho: "${query}"`);
+    return filteredResults.map(item => ({
+      doctorId: item.payload.doctorId,
+      fullName: item.payload.fullName,
+      title: item.payload.title,
+      specialtyId: item.payload.specialtyId,
+      specialtyName: item.payload.specialtyName,
+      hospitalId: item.payload.hospitalId,
+      hospitalName: item.payload.hospitalName,
+      score: item.score
+    }));
+  } catch (error) {
+    console.error("Lỗi khi Qdrant (tìm doctor mapper):", error);
+    return [];
+  }
+};
+
 module.exports = {
   isIrrelevant,
   findCachedAnswer,
@@ -444,5 +751,7 @@ module.exports = {
   initializeCollections, // Sửa tên hàm
   addQuestionsToQdrant,
   findSpecialtyMapping,
-  searchMedicalKnowledge
+  searchMedicalKnowledge,
+  findServiceMapping,
+  findDoctorMapping
 };

@@ -21,6 +21,7 @@ const statisticsController = require('../controllers/statisticsController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
 const { getChatHistory, addIrrelevantQuestion } = require('../controllers/adminController');
+const specialtyMappingController = require('../controllers/specialtyMappingController');
 
 const medicationController = require('../controllers/medicationController');
 const cronController = require('../controllers/cronController');
@@ -37,6 +38,14 @@ router.use(authorize('admin'));
 
 router.get('/chat-history', getChatHistory); 
 router.post('/filter/add', addIrrelevantQuestion);
+
+// Specialty Mapping routes
+router.get('/specialty-mappings', specialtyMappingController.getSpecialtyMappings);
+router.get('/specialty-mappings/:id', specialtyMappingController.getSpecialtyMapping);
+router.post('/specialty-mappings', specialtyMappingController.createSpecialtyMapping);
+router.put('/specialty-mappings/:id', specialtyMappingController.updateSpecialtyMapping);
+router.delete('/specialty-mappings/:id', specialtyMappingController.deleteSpecialtyMapping);
+router.post('/specialty-mappings/seed-to-qdrant', specialtyMappingController.seedMappingsToQdrant);
 // Doctor routes
 router.post('/doctors', doctorController.createDoctor);
 // Account management routes

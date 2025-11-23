@@ -16,7 +16,11 @@ const {
   getPrescriptionsForAdmin,
   verifyPrescription,
   rejectPrescription,
-  dispensePrescription
+  dispensePrescription,
+  getPrescriptionDraftsForDoctor,
+  getPrescriptionDraftById,
+  approvePrescriptionDraft,
+  rejectPrescriptionDraft
 } = require('../controllers/prescriptionController');
 
 // All routes require authentication
@@ -40,6 +44,12 @@ router.get('/pharmacy/pending', authorize('pharmacist', 'admin'), getPrescriptio
 router.post('/:id/verify', authorize('pharmacist', 'admin'), verifyPrescription);
 router.post('/:id/reject', authorize('pharmacist', 'admin'), rejectPrescription);
 router.post('/:id/dispense', authorize('pharmacist', 'admin'), dispensePrescription);
+
+// Doctor routes for PrescriptionDraft approval
+router.get('/doctor/drafts', authorize('doctor', 'admin'), getPrescriptionDraftsForDoctor);
+router.get('/doctor/drafts/:id', authorize('doctor', 'admin'), getPrescriptionDraftById);
+router.post('/doctor/drafts/:id/approve', authorize('doctor', 'admin'), approvePrescriptionDraft);
+router.post('/doctor/drafts/:id/reject', authorize('doctor', 'admin'), rejectPrescriptionDraft);
 
 module.exports = router;
 

@@ -48,7 +48,7 @@ const tools = {
         },
         {
             name: "findAvailableSlots",
-            description: "Tìm các lịch hẹn còn trống dựa trên yêu cầu của người dùng. CHỈ gọi tool này khi người dùng YÊU CẦU TÌM LỊCH MỚI hoặc thay đổi yêu cầu. KHÔNG gọi tool này khi người dùng đã chọn một mã tham chiếu (L01, L02, v.v.) - trong trường hợp đó, gọi bookAppointment thay vì.",
+            description: "Tìm các lịch hẹn còn trống dựa trên yêu cầu của người dùng. GỌI tool này khi: (1) Người dùng YÊU CẦU TÌM LỊCH MỚI (ví dụ: 'đặt lịch', 'tôi muốn khám', 'tìm bác sĩ'), (2) Người dùng trả lời 'có', 'muốn', 'được' khi được hỏi có muốn đặt lịch không, (3) Người dùng thay đổi yêu cầu (ngày khác, chuyên khoa khác). KHÔNG gọi tool này khi người dùng đã chọn một mã tham chiếu (L01, L02, v.v.) - trong trường hợp đó, gọi bookAppointment thay vì. QUAN TRỌNG: Nếu người dùng VỪA nói về triệu chứng trong câu trước (ví dụ: 'đau bụng', 'sốt cao'), bạn PHẢI sử dụng triệu chứng đó làm query, KHÔNG hỏi lại.",
             parameters: {
                 type: "OBJECT",
                 properties: {
