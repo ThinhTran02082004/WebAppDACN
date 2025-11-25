@@ -1,9 +1,14 @@
 const cron = require('node-cron');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const path = require('path');
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 const Doctor = require('../models/Doctor');
 const Hospital = require('../models/Hospital');
 const { sendAppointmentReminderEmail } = require('../services/emailService');
+
+const execAsync = promisify(exec);
 
 /**
  * Khởi tạo các tác vụ cron job
@@ -90,6 +95,69 @@ const initCronJobs = () => {
       console.log('Hoàn thành gửi email nhắc nhở lịch hẹn.');
     } catch (error) {
       console.error('Lỗi khi thực hiện tác vụ gửi email nhắc nhở:', error);
+    }
+  });
+
+  // Tự động seed service và doctor mappings mỗi 6 giờ
+  // Đảm bảo dữ liệu trong Qdrant luôn đồng bộ với database
+  cron.schedule('0 */6 * * *', async () => {
+    try {
+      console.log('🔄 Bắt đầu tự động seed service và doctor mappings...');
+      
+      const scriptPath = path.join(__dirname, '../scripts/seedSpecialtyMapper.js');
+      
+      // Seed services
+      try {
+        console.log('📦 Đang seed services...');
+        const { stdout: serviceStdout, stderr: serviceStderr } = await execAsync(
+          `node "${scriptPath}" service`,
+          { cwd: path.join(__dirname, '../..'), timeout: 600000 } // 10 phút timeout
+        );
+        if (serviceStdout) console.log(serviceStdout);
+        if (serviceStderr) console.error('Service seed stderr:', serviceStderr);
+        console.log('✅ Hoàn thành seed services');
+      } catch (serviceError) {
+        console.error('❌ Lỗi khi seed services:', serviceError.message);
+      }
+      
+      // Seed doctors
+      try {
+        console.log('👨‍⚕️ Đang seed doctors...');
+        const { stdout: doctorStdout, stderr: doctorStderr } = await execAsync(
+          `node "${scriptPath}" doctor`,
+          { cwd: path.join(__dirname, '../..'), timeout: 600000 } // 10 phút timeout
+        );
+        if (doctorStdout) console.log(doctorStdout);
+        if (doctorStderr) console.error('Doctor seed stderr:', doctorStderr);
+        console.log('✅ Hoàn thành seed doctors');
+      } catch (doctorError) {
+        console.error('❌ Lỗi khi seed doctors:', doctorError.message);
+      }
+      
+      console.log('🎉 Hoàn thành tự động seed mappings');
+    } catch (error) {
+      console.error('❌ Lỗi khi thực hiện tự động seed mappings:', error);
+    }
+  });
+
+  // Tự động seed specialty mappings mỗi ngày vào 2h sáng
+  // (Ít thay đổi hơn nên không cần seed thường xuyên)
+  cron.schedule('0 2 * * *', async () => {
+    try {
+      console.log('🔄 Bắt đầu tự động seed specialty mappings...');
+      
+      const scriptPath = path.join(__dirname, '../scripts/seedSpecialtyMapper.js');
+      
+      const { stdout, stderr } = await execAsync(
+        `node "${scriptPath}" specialty`,
+        { cwd: path.join(__dirname, '../..'), timeout: 300000 } // 5 phút timeout
+      );
+      
+      if (stdout) console.log(stdout);
+      if (stderr) console.error('Specialty seed stderr:', stderr);
+      console.log('✅ Hoàn thành seed specialty mappings');
+    } catch (error) {
+      console.error('❌ Lỗi khi seed specialty mappings:', error.message);
     }
   });
 

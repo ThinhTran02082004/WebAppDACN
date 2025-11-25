@@ -6,7 +6,7 @@ import {
   FaCalendarCheck, FaUserInjured, FaStar, 
   FaCalendarAlt, FaClipboardList, FaCommentMedical, 
   FaReply, FaChartLine, FaClock, FaCheck, FaTimes,
-  FaAngleRight, FaUserMd, FaCog
+  FaAngleRight, FaUserMd, FaCog, FaPills, FaStethoscope, FaUserCheck
 } from 'react-icons/fa';
 
 const Dashboard = () => {
@@ -22,6 +22,13 @@ const Dashboard = () => {
   });
   const [todayAppointments, setTodayAppointments] = useState([]);
   const [recentReviews, setRecentReviews] = useState([]);
+  const [approvalSummary, setApprovalSummary] = useState({
+    totalPending: 0,
+    bySpecialty: [],
+    byDoctor: [],
+    recent: []
+  });
+  const [approvalSummaryLoading, setApprovalSummaryLoading] = useState(false);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -77,7 +84,27 @@ const Dashboard = () => {
     };
 
     fetchDashboardData();
+    fetchApprovalSummary();
   }, []);
+
+  const fetchApprovalSummary = async () => {
+    setApprovalSummaryLoading(true);
+    try {
+      const summaryRes = await api.get('/prescriptions/doctor/approval-summary');
+      if (summaryRes.data.success) {
+        setApprovalSummary(summaryRes.data.data || {
+          totalPending: 0,
+          bySpecialty: [],
+          byDoctor: [],
+          recent: []
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching approval summary:', error);
+    } finally {
+      setApprovalSummaryLoading(false);
+    }
+  };
 
   // Format time from ISO string or time string (HH:MM)
   const formatTime = (timeData) => {
@@ -98,6 +125,32 @@ const Dashboard = () => {
     if (!isoString) return '';
     const date = new Date(isoString);
     return date.toLocaleDateString('vi-VN', { year: 'numeric', month: 'numeric', day: 'numeric' });
+  };
+
+  const renderSummaryList = (items, emptyLabel) => {
+    if (!items || items.length === 0) {
+      return <p className="text-sm text-gray-500">{emptyLabel}</p>;
+    }
+
+    return (
+      <ul className="space-y-3">
+        {items.slice(0, 5).map((item) => (
+          <li key={item.specialtyId || item.doctorId} className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">
+                {item.specialtyName || item.doctorName}
+              </p>
+              {item.doctorName && (
+                <p className="text-xs text-gray-500">{item.specialtyName}</p>
+              )}
+            </div>
+            <span className="text-sm font-bold text-primary">
+              {item.total} đơn
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
   };
 
   // Status badge component
@@ -216,6 +269,103 @@ const Dashboard = () => {
             <p className="text-xs sm:text-sm text-amber-600 truncate">Cập nhật thông tin cá nhân</p>
           </div>
         </Link>
+
+        <a href="#approval-summary" className="flex items-center p-3 sm:p-4 bg-red-50 rounded-xl border border-red-100 hover:bg-red-100 transition-colors duration-200">
+          <div className="p-2 sm:p-3 rounded-lg bg-red-100 mr-3 flex-shrink-0">
+            <FaPills className="text-red-600 text-lg sm:text-xl" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-red-800 text-sm sm:text-base truncate">Xét duyệt đơn thuốc</h3>
+            <p className="text-xs sm:text-sm text-red-600 truncate">
+              {approvalSummaryLoading ? 'Đang tải...' : `${approvalSummary.totalPending || 0} đơn chờ`}
+            </p>
+          </div>
+        </a>
+      </div>
+
+      {/* Prescription Approval Summary */}
+      <div id="approval-summary" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-500">Tổng đơn chờ phê duyệt</p>
+            <div className="flex items-center mt-2">
+              <span className="text-3xl font-bold text-gray-800">
+                {approvalSummaryLoading ? '—' : approvalSummary.totalPending || 0}
+              </span>
+              <span className="ml-2 text-sm text-gray-500">đơn thuốc</span>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3 mt-4 md:mt-0">
+            <span className="inline-flex items-center text-xs font-medium bg-red-50 text-red-600 px-3 py-1 rounded-full">
+              <FaPills className="mr-1" /> Theo dõi bởi khoa & bác sĩ
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="flex items-center mb-4">
+              <div className="p-2 rounded-lg bg-white text-primary mr-3">
+                <FaStethoscope />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-800">Theo chuyên khoa</h3>
+                <p className="text-xs text-gray-500">Danh sách tối đa 5 khoa có nhiều đơn nhất</p>
+              </div>
+            </div>
+            {renderSummaryList(approvalSummary.bySpecialty, 'Không có đơn chờ theo chuyên khoa')}
+          </div>
+
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="flex items-center mb-4">
+              <div className="p-2 rounded-lg bg-white text-emerald-600 mr-3">
+                <FaUserCheck />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-800">Theo bác sĩ phụ trách</h3>
+                <p className="text-xs text-gray-500">Danh sách tối đa 5 bác sĩ có đơn chờ</p>
+              </div>
+            </div>
+            {renderSummaryList(approvalSummary.byDoctor, 'Không có bác sĩ nào có đơn chờ')}
+          </div>
+        </div>
+
+        <div className="border-t border-gray-100 pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-semibold text-gray-800">Đơn thuốc gần đây</h3>
+            <span className="text-xs text-gray-500">Hiển thị 5 đơn mới nhất</span>
+          </div>
+          {approvalSummary.recent && approvalSummary.recent.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-gray-500 border-b border-gray-200">
+                    <th className="py-2">Bệnh nhân</th>
+                    <th className="py-2">Bác sĩ</th>
+                    <th className="py-2">Chuyên khoa</th>
+                    <th className="py-2">Trạng thái</th>
+                    <th className="py-2">Ngày tạo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {approvalSummary.recent.map((item) => (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="py-3 font-medium text-gray-800">{item.patientName}</td>
+                      <td className="py-3 text-gray-600">{item.doctorName}</td>
+                      <td className="py-3 text-gray-600">{item.specialtyName}</td>
+                      <td className="py-3">
+                        <StatusBadge status={item.status} />
+                      </td>
+                      <td className="py-3 text-gray-500">{formatDate(item.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">Không có đơn thuốc chờ phê duyệt gần đây.</p>
+          )}
+        </div>
       </div>
       
       {/* Stats Grid */}

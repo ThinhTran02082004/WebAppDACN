@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 
 const MedicalHistory = () => {
   const [medicalRecords, setMedicalRecords] = useState([]);
+  const [draftRecords, setDraftRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('all');
@@ -14,6 +15,7 @@ const MedicalHistory = () => {
   const [pageSize, setPageSize] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [stats, setStats] = useState({ officialTotal: 0, draftTotal: 0 });
   const { user } = useAuth();
 
   useEffect(() => {
@@ -28,17 +30,22 @@ const MedicalHistory = () => {
       const response = await api.get(`/prescriptions/user/history?page=${currentPage}&limit=${pageSize}${activeTab !== 'all' ? `&status=${activeTab}` : ''}`);
       
       if (response.data && response.data.records) {
-        setMedicalRecords(response.data.records);
-        const pagination = response.data.pagination || {};
-        setTotalItems(pagination.total || 0);
-        setTotalPages(pagination.pages || pagination.totalPages || 1);
-        if (pagination.page) {
-          setCurrentPage(pagination.page);
-        }
+        const records = response.data.records;
+        const drafts = records.filter(record => record.isDraft);
+        const official = records.filter(record => !record.isDraft);
+
+        setMedicalRecords(official);
+        setDraftRecords(drafts);
+        setTotalItems(response.data.pagination?.total || records.length);
+        setTotalPages(response.data.pagination?.totalPages || 1);
+        setStats(response.data.stats || { officialTotal: official.length, draftTotal: drafts.length });
+        setError(null);
       } else {
         setMedicalRecords([]);
+        setDraftRecords([]);
         setTotalItems(0);
         setTotalPages(1);
+        setStats({ officialTotal: 0, draftTotal: 0 });
       }
       setLoading(false);
     } catch (err) {
@@ -63,12 +70,16 @@ const MedicalHistory = () => {
 
   // Filter is now handled by backend, but we can add client-side filtering if needed
   const filteredRecords = medicalRecords;
+  const showDraftSection = activeTab === 'all' || activeTab === 'pending_approval';
+  const visibleDraftCount = showDraftSection ? draftRecords.length : 0;
 
   const getStatusBadge = (status) => {
     if (!status) return 'bg-gray-100 text-gray-800';
     
     switch (status.toLowerCase()) {
       case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'pending_approval':
         return 'bg-yellow-100 text-yellow-800';
       case 'approved':
         return 'bg-blue-100 text-blue-800';
@@ -89,6 +100,8 @@ const MedicalHistory = () => {
     switch (status.toLowerCase()) {
       case 'pending':
         return 'Chờ xử lý';
+      case 'pending_approval':
+        return 'Chờ duyệt';
       case 'approved':
         return 'Đã kê đơn';
       case 'verified':
@@ -151,6 +164,8 @@ const MedicalHistory = () => {
     return pages;
   };
 
+  const displayedCount = visibleDraftCount + filteredRecords.length;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
@@ -192,7 +207,9 @@ const MedicalHistory = () => {
         <div className="bg-white rounded-lg shadow-md overflow-hidden max-w-6xl mx-auto">
           <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
             <h1 className="text-2xl font-bold text-gray-800">Lịch sử đơn thuốc</h1>
-            <p className="text-sm text-gray-500 mt-1">Xem tất cả lịch sử đơn thuốc của bạn</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Bạn có {stats.draftTotal || 0} đơn chờ duyệt và {stats.officialTotal || 0} đơn đã ghi nhận
+            </p>
           </div>
 
           {/* Filter tabs */}
@@ -210,6 +227,19 @@ const MedicalHistory = () => {
                 }}
               >
                 Tất cả
+              </button>
+              <button
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                  activeTab === 'pending_approval'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+                onClick={() => {
+                  setActiveTab('pending_approval');
+                  setCurrentPage(1);
+                }}
+              >
+                Đơn chờ duyệt
               </button>
               <button
                 className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
@@ -240,18 +270,131 @@ const MedicalHistory = () => {
             </div>
           </div>
 
+          {showDraftSection && draftRecords.length > 0 && (
+            <div className="px-6 py-5 border-b border-gray-200 bg-white">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800">Đơn thuốc chờ duyệt</h2>
+                  <p className="text-sm text-gray-500 mt-1">Các đơn thuốc do AI đề xuất đang chờ dược sĩ/bác sĩ thẩm định</p>
+                </div>
+                <span className="text-sm text-gray-500">
+                  Tổng cộng: <strong>{stats.draftTotal || draftRecords.length}</strong> đơn
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                {draftRecords.map((draft) => (
+                  <div key={draft.prescriptionCode || draft.createdAt} className="border border-gray-200 rounded-lg bg-gray-50 p-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Mã đơn thuốc</p>
+                        <p className="text-lg font-semibold text-gray-900">{draft.prescriptionCode || 'Đang cấp mã'}</p>
+                      </div>
+                      <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusBadge(draft.status)}`}>
+                        {formatStatus(draft.status)}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+                      <div>
+                        <p className="text-gray-500">Ngày tạo</p>
+                        <p className="font-medium">{draft.createdAt ? format(new Date(draft.createdAt), 'dd/MM/yyyy HH:mm') : '—'}</p>
+                      </div>
+                      <div>
+                  <p className="text-gray-500">Triệu chứng</p>
+                  <p className="font-medium">{draft.symptom || 'Chưa xác định'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500">Số thuốc đề xuất</p>
+                        <p className="font-medium">{draft.medicationsCount || 0} loại</p>
+                      </div>
+                    </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+                <div>
+                  <p className="text-gray-500">Chi nhánh phụ trách</p>
+                  <p className="font-medium">{draft.hospital?.name || 'Đang xác định'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Chuyên khoa gợi ý</p>
+                  <p className="font-medium">{draft.specialty?.name || 'Chưa xác định'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Bác sĩ phụ trách</p>
+                  <p className="font-medium">{draft.doctor?.name || 'Chưa có bác sĩ'}</p>
+                </div>
+              </div>
+
+                    {draft.medications && draft.medications.length > 0 && (
+                      <div className="mt-3 text-sm text-gray-600">
+                        <p className="text-gray-500">Danh sách thuốc gợi ý</p>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {draft.medications.slice(0, 3).map((med, idx) => (
+                            <span key={`${draft.prescriptionCode || idx}-${idx}`} className="px-3 py-1 rounded-full bg-white border text-xs">
+                              {med.name} × {med.quantity}
+                            </span>
+                          ))}
+                          {draft.medicationsCount > 3 && (
+                            <span className="text-xs text-gray-500">+{draft.medicationsCount - 3} thuốc khác</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+              {draft.hospitalAvailability && draft.hospitalAvailability.length > 0 && (
+                <div className="mt-4 text-sm text-gray-600">
+                  <p className="text-gray-500">Tình trạng thuốc tại các chi nhánh</p>
+                  <div className="mt-2 space-y-2">
+                    {draft.hospitalAvailability.map((branch, idx) => (
+                      <div key={`${draft.prescriptionCode || idx}-branch-${idx}`} className="bg-white border border-gray-200 rounded-lg p-3">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                          <p className="font-medium text-gray-900">{branch.hospitalName || 'Chi nhánh không xác định'}</p>
+                          <span className="text-xs text-gray-500 mt-1 md:mt-0">
+                            Còn {branch.totalInStock || 0} loại / Hết {branch.outOfStock?.length || 0} loại
+                          </span>
+                        </div>
+                        {branch.inStock && branch.inStock.length > 0 && (
+                          <p className="mt-2 text-xs text-gray-500">
+                            Thuốc còn: {branch.inStock.slice(0, 3).map(item => item.name).join(', ')}
+                            {branch.inStock.length > 3 ? '…' : ''}
+                          </p>
+                        )}
+                        {branch.outOfStock && branch.outOfStock.length > 0 && (
+                          <p className="mt-1 text-xs text-gray-400">
+                            Hết thuốc: {branch.outOfStock.slice(0, 3).map(item => item.name).join(', ')}
+                            {branch.outOfStock.length > 3 ? '…' : ''}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+                    <p className="mt-3 text-xs text-gray-500">
+                      Đơn thuốc sẽ xuất hiện trong lịch sử chính thức sau khi được dược sĩ/bác sĩ phê duyệt.
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {filteredRecords.length === 0 ? (
             <div className="p-8 text-center">
               <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <h3 className="mt-4 text-lg font-medium text-gray-900">Không có lịch sử đơn thuốc</h3>
+              <h3 className="mt-4 text-lg font-medium text-gray-900">Không có lịch sử đơn thuốc chính thức</h3>
               <p className="mt-1 text-gray-500">
                 {activeTab === 'all' 
-                  ? 'Bạn chưa có lịch sử đơn thuốc nào.' 
+                  ? (draftRecords.length > 0 
+                      ? 'Hiện bạn chỉ có các đơn chờ duyệt. Vui lòng chờ dược sĩ/bác sĩ phê duyệt.' 
+                      : 'Bạn chưa có lịch sử đơn thuốc nào.') 
                   : `Không có đơn thuốc nào ở trạng thái "${
                       activeTab === 'approved' ? 'Đã kê đơn' : 
-                      activeTab === 'dispensed' ? 'Đã cấp thuốc' : 'Chờ xử lý'
+                      activeTab === 'dispensed' ? 'Đã cấp thuốc' : 
+                      activeTab === 'pending_approval' ? 'Chờ duyệt' : 'Chờ xử lý'
                     }".`}
               </p>
               <Link 
@@ -354,7 +497,7 @@ const MedicalHistory = () => {
               <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center mb-4 sm:mb-0">
                   <span className="text-sm text-gray-700">
-                    Hiển thị <span className="font-medium">{filteredRecords.length}</span> / <span className="font-medium">{totalItems}</span> kết quả
+                    Hiển thị <span className="font-medium">{displayedCount}</span> / <span className="font-medium">{totalItems}</span> bản ghi (bao gồm cả đơn chờ duyệt)
                   </span>
                   <div className="ml-4">
                     <label htmlFor="pageSize" className="mr-2 text-sm text-gray-600">Số dòng:</label>

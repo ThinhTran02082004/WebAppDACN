@@ -107,7 +107,7 @@ const HistoryAI = () => {
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
         <h1 className="text-2xl font-bold text-gray-800 flex items-center">
           <FaComments className="mr-3 text-blue-600" />
-          Lịch sử & Phân tích Trợ lý AI
+          Lịch sử & Phân tích Trợ lý đặt lịch
         </h1>
         <p className="text-gray-600 mt-1">
           Xem lại các cuộc hội thoại và phân tích hành vi của người dùng.

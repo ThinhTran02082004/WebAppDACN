@@ -6,6 +6,7 @@ import {
   FaUserMd, FaClock, FaSignOutAlt,
   FaTachometerAlt, FaCommentMedical,
   FaBars, FaTimes, FaHistory, FaComments, FaVideo,
+  FaMoneyBillWave, FaFileMedical
 } from 'react-icons/fa';
 
 const DoctorLayout = ({ children }) => {
@@ -41,6 +42,7 @@ const DoctorLayout = ({ children }) => {
     { path: '/doctor/dashboard', label: 'Tổng quan', icon: <FaTachometerAlt /> },
     { path: '/doctor/appointments', label: 'Lịch hẹn', icon: <FaCalendarAlt /> },
     { path: '/doctor/patients', label: 'Bệnh nhân', icon: <FaUserInjured /> },
+    { path: '/doctor/prescription-drafts', label: 'Đơn thuốc nháp', icon: <FaFileMedical /> },
     { path: '/doctor/chat', label: 'Tin nhắn', icon: <FaComments /> },
     { path: '/doctor/meetings', label: 'Cuộc họp nội bộ', icon: <FaVideo /> },
     { path: '/doctor/schedule', label: 'Quản lý lịch trực', icon: <FaClock /> },
