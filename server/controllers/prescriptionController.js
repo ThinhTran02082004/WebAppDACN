@@ -7,6 +7,7 @@ const Doctor = require('../models/Doctor');
 const MedicalRecord = require('../models/MedicalRecord');
 const User = require('../models/User');
 const Bill = require('../models/Bill');
+const BillPayment = require('../models/BillPayment');
 const asyncHandler = require('../middlewares/async');
 const mongoose = require('mongoose');
 
@@ -791,6 +792,23 @@ exports.getUserPrescriptionHistory = asyncHandler(async (req, res) => {
           paymentStatusMap[paymentPrescriptionId] = payment.status || 'pending';
         }
       });
+    });
+
+    // Fallback: check BillPayment records (useful for MoMo payments)
+    const completedPayments = await BillPayment.find({
+      patientId: userId,
+      billType: 'medication',
+      paymentStatus: 'completed',
+      'paymentDetails.prescriptionId': { $in: prescriptionIds }
+    })
+      .select('paymentDetails.prescriptionId paymentStatus')
+      .lean();
+
+    completedPayments.forEach(payment => {
+      const prescriptionId = payment.paymentDetails?.prescriptionId?.toString();
+      if (prescriptionId) {
+        paymentStatusMap[prescriptionId] = 'paid';
+      }
     });
   }
 
