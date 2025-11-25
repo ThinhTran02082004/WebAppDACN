@@ -431,6 +431,9 @@ const MedicalHistory = () => {
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Chi tiết
                       </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Thanh toán
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -445,8 +448,26 @@ const MedicalHistory = () => {
                         ? 'approved'
                         : 'pending';
                       
+                      // Tính tổng tiền và kiểm tra trạng thái thanh toán
+                       const totalAmount = record.prescriptions?.reduce((sum, p) => sum + (p.totalAmount || 0), 0) || 0;
+                       const hasPayablePrescription = record.prescriptions?.some((p) => {
+                         const status = p.status;
+                         const paymentStatus = p.paymentStatus || 'pending';
+                         const amount = p.totalAmount || 0;
+                         return (
+                           amount > 0 &&
+                           paymentStatus !== 'paid' &&
+                           (status === 'approved' || status === 'verified')
+                         );
+                       });
+                       const allPaid = record.prescriptions?.length > 0 && record.prescriptions.every((p) => {
+                         const paymentStatus = p.paymentStatus || 'pending';
+                         const amount = p.totalAmount || 0;
+                         return amount === 0 || paymentStatus === 'paid';
+                       });
+                      
                       return (
-                        <tr key={record.appointmentId?._id || record.appointmentId} className="hover:bg-gray-50">
+                        <tr key={record.appointmentId?._id || record.appointmentId || record.createdAt} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {format(new Date(record.appointmentDate || record.createdAt), 'dd/MM/yyyy')}
                           </td>
@@ -482,8 +503,39 @@ const MedicalHistory = () => {
                               >
                                 Xem chi tiết
                               </Link>
+                            ) : firstPrescription?._id ? (
+                              <Link 
+                                to={`/prescriptions/${firstPrescription._id}`} 
+                                className="text-primary hover:text-primary-dark"
+                              >
+                                Xem chi tiết
+                              </Link>
                             ) : (
                               <span className="text-gray-400">Không có dữ liệu</span>
+                            )}
+                          </td>
+                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                             {hasPayablePrescription ? (
+                              <Link
+                                to={firstPrescription?._id ? `/prescriptions/${firstPrescription._id}` : '#'}
+                                className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 transition-colors"
+                              >
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Thanh toán
+                              </Link>
+                             ) : allPaid ? (
+                               <span className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-green-700 text-xs font-medium rounded-md">
+                                 <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                 </svg>
+                                 Đã thanh toán
+                               </span>
+                             ) : totalAmount === 0 ? (
+                              <span className="text-xs text-gray-400">Miễn phí</span>
+                            ) : (
+                              <span className="text-xs text-gray-400">Chưa thể thanh toán</span>
                             )}
                           </td>
                         </tr>

@@ -627,17 +627,25 @@ const PrescriptionDetail = () => {
                 </p>
               )}
             </div>
-            {/* Button to confirm payment if not paid yet */}
-            {prescription.appointmentId && (
+            {/* Button to confirm payment if not paid yet - chỉ hiển thị nếu có appointment hoặc đơn từ AI */}
+            {(prescription.appointmentId || prescription.createdFromDraft) && (
               <div className="mt-4">
                 <button
                   onClick={async () => {
                     if (!window.confirm('Xác nhận bệnh nhân đã thanh toán đơn thuốc này bằng tiền mặt?')) return;
                     try {
                       setProcessing(true);
-                      const response = await api.post('/billing/pharmacist/confirm-payment', {
-                        appointmentId: prescription.appointmentId._id || prescription.appointmentId,
-                        billType: 'medication'
+                      // Đối với đơn thuốc từ AI, không cần appointmentId
+                      const appointmentId = prescription.appointmentId?._id || prescription.appointmentId;
+                      const response = await api.post('/billing/pay-prescription', {
+                        prescriptionId: prescription._id,
+                        paymentMethod: 'cash',
+                        transactionId: `PRES-CASH-${Date.now()}`,
+                        paymentDetails: { 
+                          method: 'cash', 
+                          timestamp: new Date().toISOString(),
+                          confirmedBy: user?.fullName || 'Pharmacist'
+                        }
                       });
                       if (response.data.success) {
                         toast.success('Xác nhận thanh toán thành công');

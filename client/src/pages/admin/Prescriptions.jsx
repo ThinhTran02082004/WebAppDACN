@@ -342,7 +342,7 @@ const AdminPrescriptions = () => {
                           )}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {prescription.appointmentId?.bookingCode || (isDraft ? 'Từ AI' : '')}
+                          {prescription.appointmentId?.bookingCode || (prescription.createdFromDraft ? 'Từ AI' : '')}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

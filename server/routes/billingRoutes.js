@@ -4,6 +4,7 @@ const { protect } = require('../middlewares/authMiddleware');
 const {
   generateBill,
   getBillByAppointment,
+  getBillByPrescription,
   payConsultation,
   payMedication,
   payHospitalization,
@@ -22,6 +23,7 @@ router.use(protect);
 // Bill management
 router.post('/generate', generateBill);
 router.get('/appointment/:appointmentId', getBillByAppointment);
+router.get('/prescription/:prescriptionId', getBillByPrescription);
 
 // Payment routes (phải đặt trước route /:id)
 router.post('/pay-consultation', payConsultation);

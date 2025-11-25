@@ -6,6 +6,7 @@ const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
 const MedicalRecord = require('../models/MedicalRecord');
 const User = require('../models/User');
+const Bill = require('../models/Bill');
 const asyncHandler = require('../middlewares/async');
 const mongoose = require('mongoose');
 
@@ -771,21 +772,47 @@ exports.getUserPrescriptionHistory = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  // Group official prescriptions by appointment
+  // Map prescription payment statuses from Bill records
+  const prescriptionIds = prescriptions.map((p) => p._id.toString());
+  const paymentStatusMap = {};
+
+  if (prescriptionIds.length > 0) {
+    const billsWithPayments = await Bill.find({
+      patientId: userId,
+      'medicationBill.prescriptionPayments.prescriptionId': { $in: prescriptionIds }
+    })
+      .select('medicationBill.prescriptionPayments')
+      .lean();
+
+    billsWithPayments.forEach((bill) => {
+      bill.medicationBill?.prescriptionPayments?.forEach((payment) => {
+        const paymentPrescriptionId = payment.prescriptionId?.toString();
+        if (paymentPrescriptionId && prescriptionIds.includes(paymentPrescriptionId)) {
+          paymentStatusMap[paymentPrescriptionId] = payment.status || 'pending';
+        }
+      });
+    });
+  }
+
+  // Group official prescriptions by appointment (hoặc theo prescription nếu không có appointment - đơn từ AI)
   const groupedByAppointment = {};
   prescriptions.forEach(prescription => {
-    const appointmentId = prescription.appointmentId?._id?.toString() || 'unknown';
+    // Đơn thuốc từ AI không có appointmentId, group theo prescriptionId
+    const appointmentId = prescription.appointmentId?._id?.toString() || 
+                          (prescription.createdFromDraft ? `prescription_${prescription._id.toString()}` : 'unknown');
+    
     if (!groupedByAppointment[appointmentId]) {
       groupedByAppointment[appointmentId] = {
         isDraft: false,
         type: 'official',
-        appointmentId: prescription.appointmentId?._id,
-        appointmentDate: prescription.appointmentId?.appointmentDate,
-        bookingCode: prescription.appointmentId?.bookingCode,
+        appointmentId: prescription.appointmentId?._id || null,
+        appointmentDate: prescription.appointmentId?.appointmentDate || prescription.createdAt,
+        bookingCode: prescription.appointmentId?.bookingCode || null,
         specialty: prescription.appointmentId?.specialtyId?.name || prescription.doctorId?.specialtyId?.name,
         doctor: prescription.doctorId?.user?.fullName || 'Không xác định',
         prescriptions: [],
-        createdAt: prescription.appointmentId?.appointmentDate || prescription.createdAt || new Date()
+        createdAt: prescription.appointmentId?.appointmentDate || prescription.createdAt || new Date(),
+        createdFromDraft: prescription.createdFromDraft || false
       };
     }
 
@@ -797,7 +824,9 @@ exports.getUserPrescriptionHistory = asyncHandler(async (req, res) => {
       status: prescription.status,
       totalAmount: prescription.totalAmount,
       createdAt: prescription.createdAt,
-      medicationsCount: prescription.medications.length
+      medicationsCount: prescription.medications.length,
+      createdFromDraft: prescription.createdFromDraft || false,
+      paymentStatus: paymentStatusMap[prescription._id.toString()] || 'pending'
     });
 
     const currentCreatedAt = prescription.createdAt || prescription.appointmentId?.appointmentDate;
@@ -1745,71 +1774,9 @@ exports.approvePrescriptionDraft = asyncHandler(async (req, res) => {
       totalAmount += totalPrice;
     }
 
-    // Tạo appointment ảo cho đơn thuốc từ AI
-    const Appointment = require('../models/Appointment');
-    const Schedule = require('../models/Schedule');
-    
-    // Tìm một schedule có sẵn của bác sĩ cho ngày hôm nay, hoặc tạo schedule ảo
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    let scheduleId = null;
-    const existingSchedule = await Schedule.findOne({
-      doctorId: doctor._id,
-      hospitalId: draft.hospitalId,
-      date: today
-    }).session(session);
-    
-    if (existingSchedule) {
-      scheduleId = existingSchedule._id;
-    } else {
-      // Tạo schedule ảo tạm thời cho ngày hôm nay
-      const virtualSchedule = new Schedule({
-        doctorId: doctor._id,
-        hospitalId: draft.hospitalId,
-        date: today,
-        timeSlots: [{
-          startTime: '08:00',
-          endTime: '17:00',
-          isBooked: false
-        }],
-        isActive: true
-      });
-      await virtualSchedule.save({ session });
-      scheduleId = virtualSchedule._id;
-    }
-    
-    // Tạo thời gian cho appointment (thời gian hiện tại)
-    const currentTime = now.toTimeString().slice(0, 5); // Format: HH:mm
-    const appointmentEndTime = new Date(now.getTime() + 30 * 60000).toTimeString().slice(0, 5); // +30 phút
-    
-    const virtualAppointment = new Appointment({
-      patientId: draft.patientId,
-      doctorId: doctor._id,
-      hospitalId: draft.hospitalId,
-      specialtyId: draft.specialtyId,
-      scheduleId: scheduleId,
-      appointmentDate: now,
-      timeSlot: {
-        startTime: currentTime,
-        endTime: appointmentEndTime
-      },
-      appointmentType: 'consultation',
-      status: 'completed',
-      fee: {
-        consultationFee: 0,
-        additionalFees: 0,
-        discount: 0,
-        totalAmount: 0
-      },
-      paymentStatus: 'completed',
-      notes: 'Đơn thuốc được tạo từ AI và được bác sĩ duyệt'
-    });
-    await virtualAppointment.save({ session });
-
-    // Tạo Prescription từ Draft
+    // Tạo Prescription từ Draft (KHÔNG tạo appointment ảo - đơn thuốc từ AI tách riêng khỏi hệ thống đặt lịch)
     const prescription = new Prescription({
-      appointmentId: virtualAppointment._id,
+      // appointmentId: null - đơn thuốc từ AI không cần appointment
       patientId: draft.patientId,
       doctorId: doctor._id,
       hospitalId: draft.hospitalId, // Thêm hospitalId từ draft

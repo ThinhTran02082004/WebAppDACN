@@ -36,7 +36,7 @@ const PrescriptionDetail = () => {
         const prescriptionData = response.data.data;
         setPrescription(prescriptionData);
         
-        // Fetch appointment and bill
+        // Fetch appointment and bill (chỉ khi có appointmentId - đơn thuốc từ AI không có appointment)
         if (prescriptionData.appointmentId) {
           const appointmentId = prescriptionData.appointmentId._id || prescriptionData.appointmentId;
           try {
@@ -55,6 +55,16 @@ const PrescriptionDetail = () => {
             }
           } catch (err) {
             console.error('Error fetching bill:', err);
+          }
+        } else if (prescriptionData.createdFromDraft) {
+          // Đơn thuốc từ AI - tìm bill theo prescriptionId
+          try {
+            const billRes = await api.get(`/billing/prescription/${prescriptionData._id}`);
+            if (billRes.data.success) {
+              setBill(billRes.data.data);
+            }
+          } catch (err) {
+            console.error('Error fetching bill for AI prescription:', err);
           }
         }
       } else {
@@ -113,6 +123,10 @@ const PrescriptionDetail = () => {
   };
 
   const canPay = () => {
+    // Đơn thuốc từ AI không có appointment, vẫn có thể thanh toán
+    if (!prescription.appointmentId && prescription.createdFromDraft) {
+      return !isPaid() && user?.roleType === 'user';
+    }
     return !isPaid() && appointment?.status !== 'hospitalized' && user?.roleType === 'user';
   };
 
@@ -121,7 +135,8 @@ const PrescriptionDetail = () => {
   };
 
   const handlePayPrescription = async (method) => {
-    if (!prescription || appointment?.status === 'hospitalized') {
+    // Kiểm tra nếu có appointment và đang nằm viện
+    if (prescription.appointmentId && appointment?.status === 'hospitalized') {
       toast.warning('Không thể thanh toán khi đang nằm viện. Vui lòng đợi xuất viện.');
       return;
     }
@@ -131,7 +146,7 @@ const PrescriptionDetail = () => {
 
       if (method === 'momo') {
         const res = await api.post('/payments/momo/create', {
-          appointmentId: prescription.appointmentId._id || prescription.appointmentId,
+          appointmentId: prescription.appointmentId?._id || prescription.appointmentId || null,
           amount: prescription.totalAmount,
           billType: 'medication',
           prescriptionId: prescription._id
@@ -257,7 +272,7 @@ const PrescriptionDetail = () => {
           {/* Header */}
           <div className="mb-6 print:hidden">
             <Link 
-              to={appointmentId ? `/appointments/${appointmentId}` : '/appointments'} 
+              to={appointmentId ? `/appointments/${appointmentId}` : (prescription.createdFromDraft ? '/prescriptions' : '/appointments')} 
               className="inline-flex items-center text-primary hover:text-primary-dark"
             >
               <FaArrowLeft className="mr-2" />
@@ -274,11 +289,18 @@ const PrescriptionDetail = () => {
                   <h1 className="text-2xl font-bold text-gray-800">
                     Đơn thuốc {prescription.prescriptionOrder ? `đợt ${prescription.prescriptionOrder}` : ''}
                   </h1>
-                  {prescription.isHospitalization && (
-                    <span className="inline-block mt-2 bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
-                      Nội trú
-                    </span>
-                  )}
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {prescription.isHospitalization && (
+                      <span className="inline-block bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
+                        Nội trú
+                      </span>
+                    )}
+                    {prescription.createdFromDraft && (
+                      <span className="inline-block bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-semibold">
+                        Từ AI tư vấn
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="mt-2 md:mt-0 flex gap-2">
                   <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full font-semibold text-sm">
@@ -439,7 +461,7 @@ const PrescriptionDetail = () => {
               <FaPrint className="mr-2" /> In đơn thuốc
             </button>
             
-            {appointmentId && (
+            {appointmentId && !prescription.createdFromDraft && (
               <Link 
                 to={`/appointments/${appointmentId}`}
                 className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -460,7 +482,7 @@ const PrescriptionDetail = () => {
                       </p>
                     </div>
                   )}
-                  {appointment?.status !== 'hospitalized' && (
+                  {(!appointment || appointment?.status !== 'hospitalized') && (
                     <div className="space-y-3">
                       <div className="flex flex-wrap gap-2">
                         <button
@@ -548,7 +570,7 @@ const PrescriptionDetail = () => {
             <div className="border-t pt-4">
               <PayPalButton
                 amount={prescription.totalAmount}
-                appointmentId={appointmentId}
+                appointmentId={appointmentId || null}
                 billType="medication"
                 prescriptionId={prescription._id}
                 onSuccess={async () => {
