@@ -45,6 +45,9 @@ router.get('/chat/shared', appointmentController.getSharedAppointmentsForChat);
 // POST /api/appointments – Đặt lịch khám
 router.post('/', appointmentController.createAppointment);
 
+// GET /api/appointments/user/patient/daily-count - Kiểm tra số lịch hẹn trong ngày của bệnh nhân
+router.get('/user/patient/daily-count', appointmentController.getPatientDailyAppointmentCount);
+
 
 // GET /api/appointments/:id – Chi tiết lịch khám
 router.get('/:id', appointmentController.getAppointmentById);

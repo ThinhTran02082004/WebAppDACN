@@ -23,6 +23,10 @@ const ReviewForm = () => {
 
   const [doctorInfo, setDoctorInfo] = useState(null);
   const [hospitalInfo, setHospitalInfo] = useState(null);
+  const [reviewStatus, setReviewStatus] = useState({
+    doctorReviewed: false,
+    hospitalReviewed: false
+  });
 
   useEffect(() => {
     if (type !== 'doctor' && type !== 'hospital') {
@@ -33,6 +37,16 @@ const ReviewForm = () => {
     fetchAppointmentDetails();
   }, [id, type]);
 
+  useEffect(() => {
+    if (!appointment) return;
+    const alreadyReviewed = type === 'doctor' ? reviewStatus.doctorReviewed : reviewStatus.hospitalReviewed;
+    
+    if (alreadyReviewed) {
+      toast.info(`Bạn đã đánh giá ${type === 'doctor' ? 'bác sĩ' : 'bệnh viện'} cho lịch hẹn này.`);
+      navigate(`/appointments/${id}/review`, { replace: true });
+    }
+  }, [appointment?._id, reviewStatus, type, navigate, id]);
+
   const fetchAppointmentDetails = async () => {
     try {
       setLoading(true);
@@ -40,6 +54,7 @@ const ReviewForm = () => {
       
       if (response.data.success) {
         setAppointment(response.data.data);
+        setReviewStatus(response.data.data?.reviewStatus || { doctorReviewed: false, hospitalReviewed: false });
       } else {
         setError('Không thể tải thông tin lịch hẹn. Vui lòng thử lại sau.');
       }
@@ -65,6 +80,13 @@ const ReviewForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const isDoctorReview = type === 'doctor';
+    const alreadyReviewed = isDoctorReview ? reviewStatus.doctorReviewed : reviewStatus.hospitalReviewed;
+
+    if (alreadyReviewed) {
+      toast.info(`Bạn đã đánh giá ${isDoctorReview ? 'bác sĩ' : 'bệnh viện'} cho lịch hẹn này.`);
+      return;
+    }
     
     if (rating < 1) {
       toast.error('Vui lòng chọn số sao đánh giá');
@@ -98,7 +120,7 @@ const ReviewForm = () => {
         if (response.data.success) {
           toast.success('Đánh giá bác sĩ thành công!');
           setTimeout(() => {
-            navigate('/appointments');
+            navigate(`/appointments/${id}`);
           }, 2000);
         } else {
           toast.error(response.data.message || 'Không thể đánh giá. Vui lòng thử lại sau.');
@@ -116,7 +138,7 @@ const ReviewForm = () => {
         if (response.data.success) {
           toast.success('Đánh giá bệnh viện thành công!');
           setTimeout(() => {
-            navigate('/appointments');
+            navigate(`/appointments/${id}`);
           }, 2000);
         } else {
           toast.error(response.data.message || 'Không thể đánh giá. Vui lòng thử lại sau.');

@@ -18,7 +18,6 @@ import Appointments from './pages/user/Appointments.jsx';
 import Appointment from './pages/user/Appointment.jsx';
 import AppointmentDetail from './pages/user/AppointmentDetail.jsx';
 import PaymentHistory from './pages/PaymentHistory.jsx';
-import DoctorPaymentHistory from './pages/doctor/PaymentHistory.jsx';
 import PharmacistPaymentHistory from './pages/pharmacist/PaymentHistory.jsx';
 import MedicalHistory from './pages/MedicalHistory.jsx';
 import MedicalRecordDetail from './pages/MedicalRecordDetail.jsx';
@@ -178,7 +177,6 @@ function AppContent() {
           <Route path="reviews" element={<DoctorReviews />} />
           <Route path="meetings" element={<DoctorMeetingHub />} />
           <Route path="video-call-history" element={<DoctorVideoCallHistory />} />
-          <Route path="payment-history" element={<DoctorPaymentHistory />} />
           <Route path="chat" element={<DoctorChat />} />
           <Route path="chat/:conversationId" element={<DoctorChat />} />
           <Route path="prescription-drafts" element={<DoctorPrescriptionDrafts />} />

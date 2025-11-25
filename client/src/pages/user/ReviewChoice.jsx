@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
-import { toast, ToastContainer } from 'react-toastify';
-import { FaCalendarAlt, FaHospital, FaUserMd, FaStar, FaArrowLeft, FaMapMarkerAlt, FaCertificate } from 'react-icons/fa';
+import { toast } from 'react-toastify';
+import { FaCalendarAlt, FaHospital, FaUserMd, FaStar, FaArrowLeft, FaMapMarkerAlt, FaCertificate, FaCheckCircle } from 'react-icons/fa';
 
 const ReviewChoice = () => {
   const { id } = useParams();
@@ -14,10 +14,26 @@ const ReviewChoice = () => {
   const [error, setError] = useState(null);
   const [doctorAvatarError, setDoctorAvatarError] = useState(false);
   const [hospitalLogoError, setHospitalLogoError] = useState(false);
+  const [reviewStatus, setReviewStatus] = useState({
+    doctorReviewed: false,
+    hospitalReviewed: false
+  });
+  const hasNotifiedAllReviewed = useRef(false);
 
   useEffect(() => {
     fetchAppointmentDetails();
   }, [id]);
+
+  useEffect(() => {
+    hasNotifiedAllReviewed.current = false;
+  }, [id]);
+
+  useEffect(() => {
+    if (reviewStatus.doctorReviewed && reviewStatus.hospitalReviewed && !hasNotifiedAllReviewed.current) {
+      toast.info('Bạn đã hoàn tất đánh giá cho lịch hẹn này.');
+      hasNotifiedAllReviewed.current = true;
+    }
+  }, [reviewStatus]);
 
   const fetchAppointmentDetails = async () => {
     try {
@@ -26,6 +42,7 @@ const ReviewChoice = () => {
       
       if (response.data.success) {
         setAppointment(response.data.data);
+        setReviewStatus(response.data.data?.reviewStatus || { doctorReviewed: false, hospitalReviewed: false });
         console.log("Appointment data:", response.data.data);
       } else {
         setError('Không thể tải thông tin lịch hẹn. Vui lòng thử lại sau.');
@@ -89,10 +106,18 @@ const ReviewChoice = () => {
   };
 
   const handleReviewDoctor = () => {
+    if (reviewStatus.doctorReviewed) {
+      toast.info('Bạn đã đánh giá bác sĩ cho lịch hẹn này.');
+      return;
+    }
     navigate(`/appointments/${id}/review/doctor`);
   };
 
   const handleReviewHospital = () => {
+    if (reviewStatus.hospitalReviewed) {
+      toast.info('Bạn đã đánh giá bệnh viện cho lịch hẹn này.');
+      return;
+    }
     navigate(`/appointments/${id}/review/hospital`);
   };
 
@@ -155,6 +180,9 @@ const ReviewChoice = () => {
 
   const doctorInfo = getDoctorInfo(appointment);
   const hospitalInfo = getHospitalInfo(appointment);
+  const doctorReviewed = reviewStatus.doctorReviewed;
+  const hospitalReviewed = reviewStatus.hospitalReviewed;
+  const allReviewed = doctorReviewed && hospitalReviewed;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-12 px-4">
@@ -164,102 +192,131 @@ const ReviewChoice = () => {
           <p className="text-lg text-gray-600">Vui lòng chọn đối tượng bạn muốn đánh giá</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto mb-12">
-          {/* Doctor Review Card */}
-          <div 
-            onClick={handleReviewDoctor}
-            className="bg-white rounded-xl shadow-xl hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 overflow-hidden cursor-pointer border border-blue-100 hover:border-blue-300"
-          >
-            <div className="bg-gradient-to-r from-blue-500 to-blue-600 py-6 px-4 flex justify-center relative">
-              <div className="w-28 h-28 rounded-full overflow-hidden flex items-center justify-center bg-white border-4 border-white shadow-lg">
-                {!doctorAvatarError && doctorInfo.avatar ? (
-                  <img 
-                    src={doctorInfo.avatar} 
-                    alt={doctorInfo.name}
-                    className="w-full h-full object-cover"
-                    onError={() => setDoctorAvatarError(true)}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-blue-100 flex items-center justify-center">
-                    {getDoctorInitials(doctorInfo.name) ? (
-                      <span className="text-2xl font-bold text-blue-600">{getDoctorInitials(doctorInfo.name)}</span>
-                    ) : (
-                      <FaUserMd className="text-blue-600 text-4xl" />
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="p-6 text-center">
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Đánh giá bác sĩ</h3>
-              <p className="text-blue-600 font-medium text-lg mb-1">{doctorInfo.name}</p>
-              
-              {doctorInfo.specialty && (
-                <div className="flex items-center justify-center text-gray-600 mb-4">
-                  <FaCertificate className="text-blue-500 mr-1" />
-                  <p className="text-sm">{doctorInfo.specialty}</p>
-                </div>
-              )}
-              
-              <div className="flex justify-center text-yellow-400 space-x-1 mb-5">
-                <FaStar className="w-6 h-6" />
-                <FaStar className="w-6 h-6" />
-                <FaStar className="w-6 h-6" />
-                <FaStar className="w-6 h-6" />
-                <FaStar className="w-6 h-6" />
-              </div>
-              
-              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg transition-colors font-medium">
-                Chọn để đánh giá
-              </button>
-            </div>
+        {(doctorReviewed || hospitalReviewed) && (
+          <div className="max-w-3xl mx-auto mb-6 flex flex-wrap justify-center gap-2">
+            {doctorReviewed && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                <FaCheckCircle className="mr-1.5" /> Đã đánh giá bác sĩ
+              </span>
+            )}
+            {hospitalReviewed && (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 border border-green-200">
+                <FaCheckCircle className="mr-1.5" /> Đã đánh giá bệnh viện
+              </span>
+            )}
           </div>
+        )}
 
-          {/* Hospital Review Card */}
-          <div 
-            onClick={handleReviewHospital}
-            className="bg-white rounded-xl shadow-xl hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 overflow-hidden cursor-pointer border border-green-100 hover:border-green-300"
-          >
-            <div className="bg-gradient-to-r from-green-500 to-green-600 py-6 px-4 flex justify-center">
-              <div className="w-28 h-28 rounded-full overflow-hidden flex items-center justify-center bg-white border-4 border-white shadow-lg">
-                {!hospitalLogoError && hospitalInfo.logo ? (
-                  <img 
-                    src={hospitalInfo.logo} 
-                    alt={hospitalInfo.name}
-                    className="w-full h-full object-cover"
-                    onError={() => setHospitalLogoError(true)}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-green-100 flex items-center justify-center">
-                    {getHospitalInitials(hospitalInfo.name) ? (
-                      <span className="text-2xl font-bold text-green-600">{getHospitalInitials(hospitalInfo.name)}</span>
-                    ) : (
-                      <FaHospital className="text-green-600 text-4xl" />
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="p-6 text-center">
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Đánh giá bệnh viện</h3>
-              <p className="text-green-600 font-medium text-lg mb-1">{hospitalInfo.name}</p>
-              
-              <div className="flex justify-center text-yellow-400 space-x-1 mb-5">
-                <FaStar className="w-6 h-6" />
-                <FaStar className="w-6 h-6" />
-                <FaStar className="w-6 h-6" />
-                <FaStar className="w-6 h-6" />
-                <FaStar className="w-6 h-6" />
-              </div>
-              
-              <button className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg transition-colors font-medium">
-                Chọn để đánh giá
-              </button>
+        {allReviewed && (
+          <div className="max-w-3xl mx-auto mb-10 bg-green-50 border border-green-200 text-green-800 rounded-lg p-5 flex items-start">
+            <FaCheckCircle className="mt-1 mr-3 text-green-500" />
+            <div>
+              <h3 className="text-lg font-semibold mb-1">Bạn đã hoàn tất đánh giá</h3>
+              <p>Đánh giá cho bác sĩ và bệnh viện của lịch hẹn này đã được gửi. Cảm ơn bạn đã chia sẻ trải nghiệm.</p>
             </div>
           </div>
-        </div>
+        )}
+
+        {!allReviewed && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto mb-12">
+            {!doctorReviewed && (
+              <div 
+                onClick={handleReviewDoctor}
+                className="bg-white rounded-xl shadow-xl hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 overflow-hidden cursor-pointer border border-blue-100 hover:border-blue-300"
+              >
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 py-6 px-4 flex justify-center relative">
+                  <div className="w-28 h-28 rounded-full overflow-hidden flex items-center justify-center bg-white border-4 border-white shadow-lg">
+                    {!doctorAvatarError && doctorInfo.avatar ? (
+                      <img 
+                        src={doctorInfo.avatar} 
+                        alt={doctorInfo.name}
+                        className="w-full h-full object-cover"
+                        onError={() => setDoctorAvatarError(true)}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-blue-100 flex items-center justify-center">
+                        {getDoctorInitials(doctorInfo.name) ? (
+                          <span className="text-2xl font-bold text-blue-600">{getDoctorInitials(doctorInfo.name)}</span>
+                        ) : (
+                          <FaUserMd className="text-blue-600 text-4xl" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="p-6 text-center">
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">Đánh giá bác sĩ</h3>
+                  <p className="text-blue-600 font-medium text-lg mb-1">{doctorInfo.name}</p>
+                  
+                  {doctorInfo.specialty && (
+                    <div className="flex items-center justify-center text-gray-600 mb-4">
+                      <FaCertificate className="text-blue-500 mr-1" />
+                      <p className="text-sm">{doctorInfo.specialty}</p>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-center text-yellow-400 space-x-1 mb-5">
+                    <FaStar className="w-6 h-6" />
+                    <FaStar className="w-6 h-6" />
+                    <FaStar className="w-6 h-6" />
+                    <FaStar className="w-6 h-6" />
+                    <FaStar className="w-6 h-6" />
+                  </div>
+                  
+                  <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg transition-colors font-medium">
+                    Chọn để đánh giá
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!hospitalReviewed && (
+              <div 
+                onClick={handleReviewHospital}
+                className="bg-white rounded-xl shadow-xl hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300 overflow-hidden cursor-pointer border border-green-100 hover:border-green-300"
+              >
+                <div className="bg-gradient-to-r from-green-500 to-green-600 py-6 px-4 flex justify-center">
+                  <div className="w-28 h-28 rounded-full overflow-hidden flex items-center justify-center bg-white border-4 border-white shadow-lg">
+                    {!hospitalLogoError && hospitalInfo.logo ? (
+                      <img 
+                        src={hospitalInfo.logo} 
+                        alt={hospitalInfo.name}
+                        className="w-full h-full object-cover"
+                        onError={() => setHospitalLogoError(true)}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-green-100 flex items-center justify-center">
+                        {getHospitalInitials(hospitalInfo.name) ? (
+                          <span className="text-2xl font-bold text-green-600">{getHospitalInitials(hospitalInfo.name)}</span>
+                        ) : (
+                          <FaHospital className="text-green-600 text-4xl" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="p-6 text-center">
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">Đánh giá bệnh viện</h3>
+                  <p className="text-green-600 font-medium text-lg mb-1">{hospitalInfo.name}</p>
+                  
+                  <div className="flex justify-center text-yellow-400 space-x-1 mb-5">
+                    <FaStar className="w-6 h-6" />
+                    <FaStar className="w-6 h-6" />
+                    <FaStar className="w-6 h-6" />
+                    <FaStar className="w-6 h-6" />
+                    <FaStar className="w-6 h-6" />
+                  </div>
+                  
+                  <button className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg transition-colors font-medium">
+                    Chọn để đánh giá
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="text-center">
           <Link 

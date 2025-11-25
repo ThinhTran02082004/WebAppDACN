@@ -80,6 +80,14 @@ const Appointment = () => {
   const [currentDoctorPage, setCurrentDoctorPage] = useState(0);
   const [previousServiceId, setPreviousServiceId] = useState('');
 
+  // Theo dõi giới hạn 3 lịch hẹn/ngày cho bệnh nhân
+  const [dailyLimitInfo, setDailyLimitInfo] = useState({
+    status: 'idle',
+    count: 0,
+    limit: 3,
+    date: ''
+  });
+
   // Reset trang về 0 khi chọn chuyên khoa/bệnh viện mới
   useEffect(() => {
     setCurrentDoctorPage(0);
@@ -1090,6 +1098,59 @@ const Appointment = () => {
     }
   };
 
+  // Check how many appointments the patient already has on a selected date
+  const checkDailyAppointmentLimit = async (dateString) => {
+    if (!dateString || !isAuthenticated) {
+      setDailyLimitInfo({
+        status: 'idle',
+        count: 0,
+        limit: 3,
+        date: ''
+      });
+      return;
+    }
+
+    const wasAlreadyLimited = dailyLimitInfo.date === dateString &&
+      dailyLimitInfo.count >= (dailyLimitInfo.limit || 3);
+
+    setDailyLimitInfo(prev => ({
+      ...prev,
+      status: 'loading',
+      date: dateString
+    }));
+
+    try {
+      const response = await api.get('/appointments/user/patient/daily-count', {
+        params: { date: dateString }
+      });
+
+      // Avoid updating state if user changed the date while request was in-flight
+      if (formData.appointmentDate !== dateString) return;
+
+      const count = response.data?.data?.count ?? 0;
+      const limit = response.data?.data?.limit ?? 3;
+
+      setDailyLimitInfo({
+        status: 'loaded',
+        count,
+        limit,
+        date: dateString
+      });
+
+      if (count >= limit && !wasAlreadyLimited) {
+        toast.warning(`Bạn đã có ${count}/${limit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`);
+      }
+    } catch (err) {
+      console.error('Error checking daily appointment limit:', err);
+      if (formData.appointmentDate === dateString) {
+        setDailyLimitInfo(prev => ({
+          ...prev,
+          status: 'error'
+        }));
+      }
+    }
+  };
+
   // Add function to validate coupon
   const validateCoupon = async (code) => {
     if (!code || code.trim() === '') {
@@ -1344,8 +1405,25 @@ const Appointment = () => {
   useEffect(() => {
     if (formData.appointmentDate) {
       findTimeSlots(formData.appointmentDate);
+      if (isAuthenticated) {
+        checkDailyAppointmentLimit(formData.appointmentDate);
+      } else {
+        setDailyLimitInfo({
+          status: 'idle',
+          count: 0,
+          limit: 3,
+          date: ''
+        });
+      }
+    } else {
+      setDailyLimitInfo({
+        status: 'idle',
+        count: 0,
+        limit: 3,
+        date: ''
+      });
     }
-  }, [formData.appointmentDate]);
+  }, [formData.appointmentDate, isAuthenticated]);
 
   // Add function to calculate prices
   const calculatePrices = async () => {
@@ -1449,6 +1527,12 @@ const Appointment = () => {
     if (missingFields.length > 0) {
       const missingFieldsText = missingFields.join(', ');
       toast.error(`Vui lòng điền đầy đủ thông tin: ${missingFieldsText}`);
+      return;
+    }
+
+    if (shouldBlockBecauseOfDailyLimit()) {
+      const limit = dailyLimitInfo.limit || 3;
+      toast.error(`Bạn đã có ${dailyLimitInfo.count}/${limit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`);
       return;
     }
 
@@ -1571,6 +1655,40 @@ const Appointment = () => {
     }
   };
 
+  const normalizeDateOnly = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const utcDate = new Date(Date.UTC(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      12, 0, 0
+    ));
+    return utcDate.toISOString().split('T')[0];
+  };
+
+  const isLimitReachedOnSelectedDate = () => {
+    return dailyLimitInfo.status === 'loaded' &&
+      dailyLimitInfo.date === formData.appointmentDate &&
+      dailyLimitInfo.count >= (dailyLimitInfo.limit || 3);
+  };
+
+  const shouldBlockBecauseOfDailyLimit = () => {
+    if (!isLimitReachedOnSelectedDate()) return false;
+
+    // Cho phép đổi giờ nếu đang đổi lịch trong cùng ngày
+    const originalDate = normalizeDateOnly(originalAppointment?.appointmentDate);
+    if ((isRescheduling || isEditing) &&
+      originalDate &&
+      formData.appointmentDate &&
+      normalizeDateOnly(formData.appointmentDate) === originalDate) {
+      return false;
+    }
+
+    return true;
+  };
+
   // Handle step navigation
   const goToNextStep = () => {
     // Only validate if not on step 3 or if on step 3 and has appointmentDate
@@ -1579,7 +1697,10 @@ const Appointment = () => {
         setCurrentStep(prev => prev + 1);
       } else {
         // Only show error message if user has already selected a date
-        if (currentStep === 3 && formData.appointmentDate && (!formData.timeSlot?.startTime || !formData.scheduleId)) {
+        if (currentStep === 3 && shouldBlockBecauseOfDailyLimit()) {
+          const limit = dailyLimitInfo.limit || 3;
+          toast.error(`Bạn đã có ${dailyLimitInfo.count}/${limit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`);
+        } else if (currentStep === 3 && formData.appointmentDate && (!formData.timeSlot?.startTime || !formData.scheduleId)) {
           toast.error('Vui lòng chọn khung giờ khám');
         } else if (currentStep !== 3) {
           // Show usual validation errors for other steps
@@ -1633,6 +1754,12 @@ const Appointment = () => {
   const handleTimeSlotSelect = (scheduleId, slot) => {
     // Don't allow selecting booked slots
     if (slot.isBooked) return;
+
+    if (shouldBlockBecauseOfDailyLimit()) {
+      const limit = dailyLimitInfo.limit || 3;
+      toast.warning(`Bạn đã có ${dailyLimitInfo.count}/${limit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`);
+      return;
+    }
 
     // Check if slot is locked by another user
     const slotKey = `${scheduleId}_${slot.startTime}`;
@@ -1717,7 +1844,9 @@ const Appointment = () => {
           formData.timeSlot &&
           formData.timeSlot.startTime &&
           formData.timeSlot.endTime &&
-          formData.scheduleId;
+          formData.scheduleId &&
+          dailyLimitInfo.status !== 'loading' &&
+          !shouldBlockBecauseOfDailyLimit();
       case 4:
         // Payment validation already done separately
         return true;
@@ -2709,6 +2838,39 @@ const Appointment = () => {
                   Ngày khám
                 </label>
 
+                {dailyLimitInfo.status === 'loading' && (
+                  <div className="mb-3 px-3 py-2 rounded-lg border border-blue-100 bg-blue-50 text-blue-700 text-sm flex items-center">
+                    <FaInfoCircle className="mr-2 flex-shrink-0" />
+                    <span>Đang kiểm tra số lịch hẹn của bạn trong ngày đã chọn...</span>
+                  </div>
+                )}
+
+                {isLimitReachedOnSelectedDate() && (
+                  <div className={`mb-3 px-3 py-2 rounded-lg border text-sm flex items-start ${shouldBlockBecauseOfDailyLimit()
+                    ? 'border-red-200 bg-red-50 text-red-700'
+                    : 'border-yellow-200 bg-yellow-50 text-yellow-700'
+                    }`}>
+                    <FaExclamationTriangle className="mr-2 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold">
+                        Bạn đã có {dailyLimitInfo.count}/{dailyLimitInfo.limit || 3} lịch hẹn trong ngày này.
+                      </p>
+                      {shouldBlockBecauseOfDailyLimit() ? (
+                        <p className="text-xs text-red-600/80 mt-1">Giới hạn 3 lịch/ngày đã đủ. Vui lòng chọn ngày khác trước khi đặt giờ.</p>
+                      ) : (
+                        <p className="text-xs text-yellow-600/80 mt-1">Bạn đang đổi giờ cho lịch hẹn cùng ngày nên vẫn có thể tiếp tục.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {dailyLimitInfo.status === 'error' && (
+                  <div className="mb-3 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 text-sm flex items-center">
+                    <FaInfoCircle className="mr-2 flex-shrink-0" />
+                    <span>Không kiểm tra được giới hạn lịch hẹn. Bạn vẫn có thể tiếp tục chọn ngày và giờ.</span>
+                  </div>
+                )}
+
                 {loading ? (
                   <div className="flex flex-col items-center justify-center h-48 bg-gray-50 rounded-lg border border-gray-200">
                     <div className="w-10 h-10 border-4 border-t-blue-500 border-blue-200 rounded-full animate-spin mb-3"></div>
@@ -2764,14 +2926,18 @@ const Appointment = () => {
 
                           // Check if this day is selected
                           const isSelected = formData.appointmentDate === day.dateString;
+                          const isLimitSelected = isSelected && isLimitReachedOnSelectedDate();
+                          const isBlockedToday = isLimitSelected && shouldBlockBecauseOfDailyLimit();
 
                           return (
                             <div
                               key={day.dateString}
                               className={`w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full text-xs font-medium
-                                ${!day.isCurrentMonth ? 'text-gray-300' : 'text-gray-800'}
+                                ${!day.isCurrentMonth ? 'text-gray-300' : (isLimitSelected ? (isBlockedToday ? 'text-red-700' : 'text-yellow-700') : 'text-gray-800')}
                                 ${isToday ? 'ring-1 ring-gray-300' : ''}
-                                ${isSelected ? 'bg-blue-600 text-white' : ''}
+                                ${isLimitSelected
+                                  ? (isBlockedToday ? 'bg-red-100 border border-red-300' : 'bg-yellow-100 border border-yellow-300')
+                                  : isSelected ? 'bg-blue-600 text-white' : ''}
                                 ${day.isAvailable && !isSelected ? 'bg-blue-50 text-blue-800 cursor-pointer hover:bg-blue-100' : ''}
                                 ${!day.isAvailable || !day.isCurrentMonth ? 'cursor-default' : 'cursor-pointer'}
                               `}
@@ -2801,7 +2967,19 @@ const Appointment = () => {
                     Giờ khám
                   </label>
 
-                  {loading ? (
+                  {shouldBlockBecauseOfDailyLimit() ? (
+                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
+                      <div className="flex">
+                        <div className="flex-shrink-0">
+                          <FaExclamationTriangle className="text-red-500" />
+                        </div>
+                        <div className="ml-3 text-sm text-red-700">
+                          <p className="font-semibold">Bạn đã đạt giới hạn 3 lịch hẹn trong ngày này.</p>
+                          <p className="mt-1">Vui lòng chọn ngày khác để tiếp tục đặt lịch.</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : loading ? (
                     <div className="flex flex-col items-center justify-center h-24 bg-gray-50 rounded-lg border border-gray-200">
                       <div className="w-6 h-6 border-3 border-t-blue-500 border-blue-200 rounded-full animate-spin mb-2"></div>
                       <p className="text-gray-600 text-xs">Đang tải khung giờ khám...</p>
@@ -2865,7 +3043,6 @@ const Appointment = () => {
                             <li><span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span> <span className="font-medium">Còn trống:</span> Khung giờ có thể đặt lịch</li>
                             <li><span className="inline-block w-3 h-3 bg-yellow-500 rounded-full mr-1"></span> <span className="font-medium">Đang có người chọn:</span> Khung giờ đang được người khác xử lý (tự động mở khóa sau 5 phút)</li>
                             <li><span className="inline-block w-3 h-3 bg-red-400 rounded-full mr-1"></span> <span className="font-medium">Đã đầy:</span> Khung giờ đã đạt giới hạn tối đa (3 lịch hẹn)</li>
-                            <li><span className="inline-block w-3 h-3 bg-blue-400 rounded-full mr-1"></span> <span className="font-medium">Còn X/3:</span> Khung giờ đã có người đặt nhưng vẫn còn chỗ trống</li>
                           </ul>
                         </div>
                       </div>
