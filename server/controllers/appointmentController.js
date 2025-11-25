@@ -10,6 +10,7 @@ const AppError = require('../utils/appError');
 const Room = require('../models/Room');
 const Service = require('../models/Service');
 const Specialty = require('../models/Specialty');
+const Review = require('../models/Review');
 const Coupon = require('../models/Coupon');
 const MedicalRecord = require('../models/MedicalRecord');
 const { checkCompletionEligibility, finalizeAppointmentCompletion } = require('../utils/appointmentCompletionHelper');
@@ -1125,7 +1126,7 @@ exports.getAppointmentById = async (req, res) => {
         .populate({ path: 'hospitalizationBill.hospitalizationId', select: 'status totalHours totalAmount' })
     ]);
 
-        const result = appointment.toObject();
+    const result = appointment.toObject();
     if (medicalRecord) result.medicalRecord = medicalRecord;
     if (prescriptions && prescriptions.length) result.prescriptions = prescriptions;
     if (hospitalizationRaw) {
@@ -1166,6 +1167,22 @@ exports.getAppointmentById = async (req, res) => {
       } catch (err) {
         console.error('Error auto-generating bill:', err);
       }
+    }
+
+    // Attach review status for the patient so the UI can hide completed reviews
+    try {
+      const patientId = appointment.patientId?._id || appointment.patientId;
+      const reviews = await Review.find({ appointmentId: id, userId: patientId }).select('type appointmentId');
+      const reviewStatus = {
+        doctorReviewed: reviews.some(r => r.type === 'doctor'),
+        hospitalReviewed: reviews.some(r => r.type === 'hospital')
+      };
+
+      result.reviewStatus = reviewStatus;
+      result.isReviewed = reviewStatus.doctorReviewed && reviewStatus.hospitalReviewed;
+    } catch (reviewStatusError) {
+      console.error('Error fetching review status for appointment', reviewStatusError);
+      // Do not block the response if review status cannot be determined
     }
 
     return res.status(200).json({ success: true, data: result });
@@ -3846,11 +3863,28 @@ exports.getPatientAppointments = async (req, res) => {
     bills.forEach(bill => {
       billMap[bill.appointmentId.toString()] = bill;
     });
+
+    // Fetch review status for the current patient across these appointments
+    const reviews = await Review.find({ appointmentId: { $in: appointmentIds }, userId })
+      .select('appointmentId type');
+    const reviewStatusMap = {};
+    reviews.forEach(review => {
+      const key = review.appointmentId.toString();
+      if (!reviewStatusMap[key]) {
+        reviewStatusMap[key] = { doctorReviewed: false, hospitalReviewed: false };
+      }
+      if (review.type === 'doctor') {
+        reviewStatusMap[key].doctorReviewed = true;
+      } else if (review.type === 'hospital') {
+        reviewStatusMap[key].hospitalReviewed = true;
+      }
+    });
     
     // Attach bill status to each appointment
     const appointmentsWithBill = appointments.map(appointment => {
       const appointmentObj = appointment.toObject();
       const bill = billMap[appointment._id.toString()];
+      const reviewStatus = reviewStatusMap[appointment._id.toString()] || { doctorReviewed: false, hospitalReviewed: false };
       
       if (bill) {
         appointmentObj.bill = {
@@ -3876,6 +3910,9 @@ exports.getPatientAppointments = async (req, res) => {
       } else {
         appointmentObj.bill = null;
       }
+
+      appointmentObj.reviewStatus = reviewStatus;
+      appointmentObj.isReviewed = reviewStatus.doctorReviewed && reviewStatus.hospitalReviewed;
       
       return appointmentObj;
     });

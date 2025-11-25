@@ -783,7 +783,7 @@ exports.deleteReplyFromReview = async (req, res) => {
  */
 exports.getReviews = async (req, res) => {
   try {
-    const { doctorId, hospitalId, userId, rating, type = 'doctor', page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    const { doctorId, hospitalId, userId, appointmentId, rating, type = 'doctor', page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
     
     const query = {};
     if (type) query.type = type;
@@ -796,6 +796,9 @@ exports.getReviews = async (req, res) => {
     }
     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
       query.userId = userId;
+    }
+    if (appointmentId && mongoose.Types.ObjectId.isValid(appointmentId)) {
+      query.appointmentId = appointmentId;
     }
     if (rating) query.rating = parseInt(rating);
 

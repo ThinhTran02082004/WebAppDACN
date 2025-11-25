@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import { useNavigate, Link } from 'react-router-dom';
 import { toastSuccess, toastError, toastInfo } from '../../utils/toast';
+import { ToastContainer } from 'react-toastify';
 import { Button } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { Spin, Modal } from 'antd';
@@ -137,6 +138,8 @@ const Profile = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    toastInfo('Đang lưu thông tin hồ sơ...');
+    toastInfo('Đang lưu thông tin hồ sơ...');
 
     try {
       // Gọi API cập nhật thông tin
@@ -321,6 +324,7 @@ const Profile = () => {
     try {
       setLoading(true);
       setAvatarLoading(true);
+      toastInfo('Đang cập nhật ảnh đại diện...');
       
       // Hiển thị preview trước khi upload
       const reader = new FileReader();
@@ -430,6 +434,7 @@ const Profile = () => {
     } catch (error) {
       console.error('Error fetching favorite doctors:', error);
       setFavoritesError('Không thể tải danh sách bác sĩ yêu thích. Vui lòng thử lại sau.');
+      toastError('Không thể tải danh sách bác sĩ yêu thích. Vui lòng thử lại sau.');
     } finally {
       setLoadingFavorites(false);
     }
@@ -525,6 +530,7 @@ const Profile = () => {
 
   return (
     <div className="bg-gray-50 py-8">
+      <ToastContainer position="top-right" autoClose={4000} />
       <div className="container mx-auto px-4">
         <div className="flex flex-col md:flex-row gap-6 bg-white rounded-lg shadow-md overflow-hidden">
           {/* Sidebar */}
