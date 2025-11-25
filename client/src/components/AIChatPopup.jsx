@@ -8,19 +8,17 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
     const isControlled = typeof controlledOpen === 'boolean';
     const [internalOpen, setInternalOpen] = useState(false);
     const isOpen = isControlled ? controlledOpen : internalOpen;
-    const [messages, setMessages] = useState([]);
+    const createWelcomeMessage = () => ({
+        role: 'assistant',
+        content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp bạn:\n\n• Tìm bác sĩ và chuyên khoa\n• Đặt lịch khám\n• Tư vấn về dịch vụ y tế\n• Trả lời câu hỏi về sức khỏe\n\nBạn cần hỗ trợ gì?',
+        createdAt: new Date().toISOString()
+    });
+    const [messages, setMessages] = useState(() => [createWelcomeMessage()]);
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [sessionId, setSessionId] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
-
-    // Load chat history when popup opens
-    useEffect(() => {
-        if (isOpen && messages.length === 0) {
-            loadChatHistory();
-        }
-    }, [isOpen]);
 
     // Auto scroll to bottom when new messages arrive
     useEffect(() => {
@@ -46,33 +44,13 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    const loadChatHistory = async () => {
-        try {
-            const response = await api.get('/ai/chat-history');
-            if (response.data.success && response.data.data.length > 0) {
-                setMessages(response.data.data);
-            } else {
-                // Welcome message if no history
-                setMessages([
-                    {
-                        role: 'assistant',
-                        content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp bạn:\n\n• Tìm bác sĩ và chuyên khoa\n• Đặt lịch khám\n• Tư vấn về dịch vụ y tế\n• Trả lời câu hỏi về sức khỏe\n\nBạn cần hỗ trợ gì?',
-                        createdAt: new Date().toISOString()
-                    }
-                ]);
-            }
-        } catch (error) {
-            console.error('Error loading chat history:', error);
-            // Show welcome message on error
-            setMessages([
-                {
-                    role: 'assistant',
-                    content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp gì cho bạn?',
-                    createdAt: new Date().toISOString()
-                }
-            ]);
+    // Reset conversation each time popup is opened
+    useEffect(() => {
+        if (isOpen) {
+            setMessages([createWelcomeMessage()]);
+            setSessionId(null);
         }
-    };
+    }, [isOpen]);
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
@@ -130,17 +108,9 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
     };
 
     const handleClearChat = () => {
-        if (window.confirm('Bạn có chắc muốn xóa toàn bộ lịch sử chat?')) {
-            setMessages([
-                {
-                    role: 'assistant',
-                    content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp gì cho bạn?',
-                    createdAt: new Date().toISOString()
-                }
-            ]);
-            setSessionId(null);
-            toast.success('Đã xóa lịch sử chat');
-        }
+        setMessages([createWelcomeMessage()]);
+        setSessionId(null);
+        toast.success('Đã bắt đầu cuộc trò chuyện mới');
     };
 
     const formatTime = (timestamp) => {
