@@ -402,6 +402,8 @@ const appointmentTools = {
                 );
             }
 
+            cache.clearAvailableSlots(sessionId);
+
             return {
                 success: true,
                 bookingCode: savedAppointment.bookingCode,

@@ -594,8 +594,40 @@ const cacheAnswer = async (userPrompt, aiResponse) => {
  * @param {string} symptomQuery - Triệu chứng hoặc từ khóa người dùng nhập (ví dụ: "tiêm vaccine", "đau tim")
  * @returns {Promise<{specialtyId: string, specialtyName: string} | null>}
  */
+const Specialty = require('../models/Specialty');
+
+const MANUAL_SPECIALTY_MAP = [
+  {
+    keywords: ['tiêm phòng', 'tiêm vaccine', 'vaccine', 'tiêm ngừa', 'chích ngừa', 'tiêm chủng'],
+    specialtyName: 'Nhi khoa'
+  },
+  {
+    keywords: ['khám thai', 'thai sản', 'sản khoa', 'mang thai'],
+    specialtyName: 'Sản khoa'
+  }
+];
+
 const findSpecialtyMapping = async (symptomQuery) => {
   try {
+    const normalized = (symptomQuery || '').toLowerCase();
+    for (const manual of MANUAL_SPECIALTY_MAP) {
+      if (manual.keywords.some(keyword => normalized.includes(keyword))) {
+        if (!manual._cachedId) {
+          const specialtyDoc = await Specialty.findOne({ name: manual.specialtyName }).select('_id name');
+          if (!specialtyDoc) {
+            console.warn(`[Manual Mapper] Không tìm thấy chuyên khoa "${manual.specialtyName}" trong database`);
+            continue;
+          }
+          manual._cachedId = specialtyDoc._id.toString();
+        }
+        console.log(`[Manual Mapper] "${symptomQuery}" được map thủ công -> "${manual.specialtyName}"`);
+        return {
+          specialtyId: manual._cachedId,
+          specialtyName: manual.specialtyName
+        };
+      }
+    }
+
     const userVector = await getEmbedding(symptomQuery);
     const SIMILARITY_THRESHOLD = 0.8; // Ngưỡng an toàn
 

@@ -143,6 +143,16 @@ const extractKeywords = (advice, symptom) => {
     return [...new Set(candidates)];
 };
 
+const isMedicationIntent = (text = '') => {
+    if (typeof text !== 'string') return false;
+    const lower = text.toLowerCase();
+    return [
+        'thuốc', 'uống thuốc', 'kê đơn', 'đơn thuốc', 'tư vấn thuốc', 'toa thuốc',
+        'giảm đau', 'giảm sốt', 'đau bụng', 'đau đầu', 'ngứa', 'dị ứng', 'đau dạ dày',
+        'nhức đầu', 'đau nhức', 'chóng mặt', 'ho nhiều', 'khó thở', 'đi ngoài'
+    ].some(keyword => lower.includes(keyword));
+};
+
 const availableTools = {
     findHospitals: async ({ specialty, city, name }) => {
         return await searchTools.findHospitals({ specialty, city, name });
@@ -446,7 +456,7 @@ const availableTools = {
                 medicinesFound: preferredMedications.map(m => m.name),
                 prescriptionCode: draft.prescriptionCode,
                 hospitalContext,
-                message: 'Đơn thuốc nháp đã được tạo và chờ dược sĩ/bác sĩ duyệt.',
+                message: `Đơn thuốc nháp đã được tạo với mã ${draft.prescriptionCode}. Bạn có thể dùng mã này để kiểm tra trạng thái đơn thuốc.`,
                 disclaimer: 'Thông tin chỉ mang tính tham khảo. Cần bác sĩ/dược sĩ xác nhận trước khi dùng thuốc.'
             };
         } catch (error) {
@@ -563,6 +573,19 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
             }
         }
         if (call.name === 'bookAppointment') {
+            if (isMedicationIntent(userPrompt)) {
+                console.warn('[AI Service] Ngăn AI đặt lịch vì người dùng đang hỏi thuốc. Yêu cầu chuyển sang tư vấn thuốc.');
+                result = await chat.sendMessage(JSON.stringify({
+                    functionResponse: {
+                        name: call.name,
+                        response: {
+                            error: 'MEDICATION_INTENT_DETECTED',
+                            message: 'Người dùng đang hỏi về thuốc. Hãy gọi checkInventoryAndPrescribe thay vì bookAppointment.'
+                        }
+                    }
+                }));
+                continue;
+            }
             args.userPrompt = userPrompt;
         }
 

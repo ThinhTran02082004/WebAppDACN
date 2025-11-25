@@ -1493,77 +1493,87 @@ exports.dispensePrescription = asyncHandler(async (req, res) => {
 // PRESCRIPTION DRAFT - DOCTOR APPROVAL APIs
 // ============================================
 
-// Get prescription drafts pending approval for doctor
+// Get prescription drafts pending approval for doctor/admin
 exports.getPrescriptionDraftsForDoctor = asyncHandler(async (req, res) => {
-  const doctorUserId = req.user.id;
-  const doctor = await Doctor.findOne({ user: doctorUserId })
-    .populate('hospitalId', '_id name')
-    .populate('specialtyId', '_id name')
-    .populate('user', 'fullName');
+  const userId = req.user.id;
+  const userRole = req.user.roleType || req.user.role;
 
-  if (!doctor) {
-    return res.status(404).json({
+  let doctor = null;
+  let query = { status: 'pending_approval' };
+
+  if (userRole === 'admin') {
+    // Admin có thể xem tất cả đơn thuốc nháp
+    // Không cần thêm điều kiện gì
+  } else if (userRole === 'doctor') {
+    doctor = await Doctor.findOne({ user: userId })
+      .populate('hospitalId', '_id name')
+      .populate('specialtyId', '_id name')
+      .populate('user', 'fullName');
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy thông tin bác sĩ'
+      });
+    }
+
+    if (!doctor.hospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bác sĩ chưa được gán vào chi nhánh'
+      });
+    }
+
+    // Lấy các đơn thuốc nháp được gán cho bác sĩ này hoặc thuộc bệnh viện và chuyên khoa của bác sĩ
+    const doctorHospitalId = doctor.hospitalId?._id || doctor.hospitalId;
+    const doctorSpecialtyId = doctor.specialtyId?._id || doctor.specialtyId;
+    
+    // Debug: Đếm tổng số PrescriptionDraft pending_approval
+    const totalPending = await PrescriptionDraft.countDocuments({ status: 'pending_approval' });
+    console.log('[getPrescriptionDraftsForDoctor] Total pending drafts in DB:', totalPending);
+    
+    const queryConditions = [];
+    
+    // Điều kiện 1: Được gán trực tiếp cho bác sĩ này
+    if (doctor._id) {
+      queryConditions.push({ doctorId: doctor._id });
+    }
+    
+    // Điều kiện 2: Thuộc cùng bệnh viện và chuyên khoa (kể cả khi chưa gán doctorId)
+    if (doctorHospitalId && doctorSpecialtyId) {
+      // Match đơn thuốc có cùng hospitalId và specialtyId, và doctorId là null/undefined hoặc chính bác sĩ này
+      queryConditions.push({
+        hospitalId: doctorHospitalId,
+        specialtyId: doctorSpecialtyId,
+        $or: [
+          { doctorId: null },
+          { doctorId: { $exists: false } },
+          { doctorId: doctor._id }
+        ]
+      });
+    } else if (doctorHospitalId) {
+      // Nếu chỉ có hospitalId, lấy tất cả đơn thuốc của bệnh viện này
+      queryConditions.push({
+        hospitalId: doctorHospitalId,
+        $or: [
+          { doctorId: null },
+          { doctorId: { $exists: false } },
+          { doctorId: doctor._id }
+        ]
+      });
+    }
+
+    if (queryConditions.length > 0) {
+      query.$or = queryConditions;
+    } else if (doctor._id) {
+      // Nếu không có điều kiện nào, chỉ lấy đơn được gán trực tiếp cho bác sĩ này
+      query.doctorId = doctor._id;
+    }
+  } else {
+    return res.status(403).json({
       success: false,
-      message: 'Không tìm thấy thông tin bác sĩ'
+      message: 'Bạn không có quyền xem đơn thuốc nháp'
     });
-  }
-
-  if (!doctor.hospitalId) {
-    return res.status(400).json({
-      success: false,
-      message: 'Bác sĩ chưa được gán vào chi nhánh'
-    });
-  }
-
-  // Lấy các đơn thuốc nháp được gán cho bác sĩ này hoặc thuộc bệnh viện và chuyên khoa của bác sĩ
-  // Xử lý hospitalId và specialtyId có thể là ObjectId hoặc populated object
-  const doctorHospitalId = doctor.hospitalId?._id || doctor.hospitalId;
-  const doctorSpecialtyId = doctor.specialtyId?._id || doctor.specialtyId;
-  
-  // Debug: Đếm tổng số PrescriptionDraft pending_approval
-  const totalPending = await PrescriptionDraft.countDocuments({ status: 'pending_approval' });
-  console.log('[getPrescriptionDraftsForDoctor] Total pending drafts in DB:', totalPending);
-  
-  const queryConditions = [];
-  
-  // Điều kiện 1: Được gán trực tiếp cho bác sĩ này
-  if (doctor._id) {
-    queryConditions.push({ doctorId: doctor._id });
-  }
-  
-  // Điều kiện 2: Thuộc cùng bệnh viện và chuyên khoa (kể cả khi chưa gán doctorId)
-  if (doctorHospitalId && doctorSpecialtyId) {
-    // Match đơn thuốc có cùng hospitalId và specialtyId, và doctorId là null/undefined hoặc chính bác sĩ này
-    queryConditions.push({
-      hospitalId: doctorHospitalId,
-      specialtyId: doctorSpecialtyId,
-      $or: [
-        { doctorId: null },
-        { doctorId: { $exists: false } },
-        { doctorId: doctor._id }
-      ]
-    });
-  } else if (doctorHospitalId) {
-    // Nếu chỉ có hospitalId, lấy tất cả đơn thuốc của bệnh viện này
-    queryConditions.push({
-      hospitalId: doctorHospitalId,
-      $or: [
-        { doctorId: null },
-        { doctorId: { $exists: false } },
-        { doctorId: doctor._id }
-      ]
-    });
-  }
-
-  const query = {
-    status: 'pending_approval'
-  };
-
-  if (queryConditions.length > 0) {
-    query.$or = queryConditions;
-  } else if (doctor._id) {
-    // Nếu không có điều kiện nào, chỉ lấy đơn được gán trực tiếp cho bác sĩ này
-    query.doctorId = doctor._id;
   }
 
   const { page = 1, limit = 10, status } = req.query;
@@ -1648,13 +1658,28 @@ exports.getPrescriptionDraftsForDoctor = asyncHandler(async (req, res) => {
 // Get single prescription draft by ID
 exports.getPrescriptionDraftById = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const doctorUserId = req.user.id;
-  const doctor = await Doctor.findOne({ user: doctorUserId });
+  const userId = req.user.id;
+  const userRole = req.user.roleType || req.user.role;
 
-  if (!doctor) {
-    return res.status(404).json({
+  let canView = false;
+  let doctor = null;
+
+  // Kiểm tra quyền dựa trên role
+  if (userRole === 'admin') {
+    // Admin có thể xem tất cả đơn thuốc
+    canView = true;
+  } else if (userRole === 'doctor') {
+    doctor = await Doctor.findOne({ user: userId });
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy thông tin bác sĩ'
+      });
+    }
+  } else {
+    return res.status(403).json({
       success: false,
-      message: 'Không tìm thấy thông tin bác sĩ'
+      message: 'Bạn không có quyền xem đơn thuốc nháp'
     });
   }
 
@@ -1686,11 +1711,13 @@ exports.getPrescriptionDraftById = asyncHandler(async (req, res) => {
     });
   }
 
-  // Kiểm tra quyền: bác sĩ chỉ có thể xem đơn thuốc được gán cho mình hoặc thuộc bệnh viện và chuyên khoa của mình
-  const canView = 
-    (draft.doctorId && draft.doctorId._id?.toString() === doctor._id.toString()) ||
-    (draft.hospitalId && draft.hospitalId._id?.toString() === doctor.hospitalId.toString() &&
-     draft.specialtyId && draft.specialtyId._id?.toString() === doctor.specialtyId.toString());
+  // Kiểm tra quyền cho bác sĩ
+  if (userRole === 'doctor' && doctor) {
+    canView = 
+      (draft.doctorId && draft.doctorId._id?.toString() === doctor._id.toString()) ||
+      (draft.hospitalId && draft.hospitalId._id?.toString() === doctor.hospitalId.toString() &&
+       draft.specialtyId && draft.specialtyId._id?.toString() === doctor.specialtyId.toString());
+  }
 
   if (!canView) {
     return res.status(403).json({
@@ -1709,30 +1736,72 @@ exports.getPrescriptionDraftById = asyncHandler(async (req, res) => {
 exports.approvePrescriptionDraft = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { notes, medications } = req.body; // medications có thể được chỉnh sửa
-  const doctorUserId = req.user.id;
+  const userId = req.user.id;
+  const userRole = req.user.roleType || req.user.role;
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const doctor = await Doctor.findOne({ user: doctorUserId }).session(session);
-    if (!doctor) {
-      throw new Error('Không tìm thấy thông tin bác sĩ');
-    }
+    let doctor = null;
+    let canApprove = false;
 
-    // Load draft với session
-    const draft = await PrescriptionDraft.findById(id).session(session);
-    if (!draft) {
-      throw new Error('Không tìm thấy đơn thuốc nháp');
-    }
+    // Kiểm tra quyền dựa trên role
+    if (userRole === 'admin') {
+      // Admin có thể duyệt tất cả đơn thuốc
+      canApprove = true;
+      
+      // Load draft để lấy thông tin doctor
+      const draft = await PrescriptionDraft.findById(id).session(session);
+      if (!draft) {
+        throw new Error('Không tìm thấy đơn thuốc nháp');
+      }
+      
+      // Nếu draft có doctorId, sử dụng doctor đó, nếu không tìm doctor phù hợp
+      if (draft.doctorId) {
+        doctor = await Doctor.findById(draft.doctorId).session(session);
+      } else {
+        // Tìm doctor phù hợp với specialty và hospital của draft
+        doctor = await Doctor.findOne({
+          hospitalId: draft.hospitalId,
+          specialtyId: draft.specialtyId
+        }).session(session);
+      }
+      
+      if (!doctor) {
+        throw new Error('Không tìm thấy bác sĩ phù hợp để gán đơn thuốc');
+      }
+    } else if (userRole === 'doctor') {
+      // Bác sĩ chỉ có thể duyệt đơn thuốc được gán cho mình hoặc thuộc chuyên khoa/bệnh viện
+      doctor = await Doctor.findOne({ user: userId }).session(session);
+      if (!doctor) {
+        throw new Error('Không tìm thấy thông tin bác sĩ');
+      }
 
-    // Kiểm tra quyền
-    const canApprove = 
-      (draft.doctorId && draft.doctorId.toString() === doctor._id.toString()) ||
-      (draft.hospitalId && draft.hospitalId.toString() === doctor.hospitalId.toString() &&
-       draft.specialtyId && draft.specialtyId.toString() === doctor.specialtyId.toString());
+      // Load draft với session
+      const draft = await PrescriptionDraft.findById(id).session(session);
+      if (!draft) {
+        throw new Error('Không tìm thấy đơn thuốc nháp');
+      }
+
+      // Kiểm tra quyền
+      canApprove = 
+        (draft.doctorId && draft.doctorId.toString() === doctor._id.toString()) ||
+        (draft.hospitalId && draft.hospitalId.toString() === doctor.hospitalId.toString() &&
+         draft.specialtyId && draft.specialtyId.toString() === doctor.specialtyId.toString());
+    } else {
+      throw new Error('Bạn không có quyền duyệt đơn thuốc');
+    }
 
     if (!canApprove) {
       throw new Error('Bạn không có quyền duyệt đơn thuốc nháp này');
+    }
+
+    // Load lại draft nếu chưa load (trường hợp admin)
+    let draft;
+    if (userRole === 'admin') {
+      draft = await PrescriptionDraft.findById(id).session(session);
+    } else {
+      draft = await PrescriptionDraft.findById(id).session(session);
     }
 
     // Kiểm tra status
@@ -1820,8 +1889,8 @@ exports.approvePrescriptionDraft = asyncHandler(async (req, res) => {
 
     // Cập nhật draft status
     draft.status = 'approved';
-    draft.approvedBy = doctorUserId;
-    draft.approvedByRole = 'doctor';
+    draft.approvedBy = userId;
+    draft.approvedByRole = userRole;
     draft.approvedAt = new Date();
     await draft.save({ session });
 

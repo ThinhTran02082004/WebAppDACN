@@ -39,6 +39,13 @@ const setAvailableSlots = (sessionId, availableSlots) => {
   console.log(`[Cache] Đã lưu ${availableSlots.length} slots cho session ${sessionId}`);
 };
 
+const clearAvailableSlots = (sessionId) => {
+  if (!sessionId) return;
+  const key = `slots_${sessionId}`;
+  sessionCache.del(key);
+  console.log(`[Cache] Đã xóa danh sách slots cache cho session ${sessionId}`);
+};
+
 /**
  * Lấy availableSlots từ cache
  * @param {string} sessionId - ID tạm thời (UUID)
@@ -57,5 +64,6 @@ module.exports = {
   setUserId,
   getUserId,
   setAvailableSlots,
-  getAvailableSlots
+  getAvailableSlots,
+  clearAvailableSlots
 };
