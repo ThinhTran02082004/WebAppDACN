@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList, Image, Modal, Alert, useWindowDimensions, TextInput, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { AppIcons, IconColors } from '../config/icons';
 import { apiService, Hospital, ServiceItem, Doctor } from '../services/api';
@@ -29,8 +29,96 @@ export default function BookingAllInOne() {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const navigation = useNavigation();
+  const route = useRoute();
+  
+  // Get params from current route or parent route (since Booking is inside BookingNavigator)
+  // Use useMemo to recalculate when route.params changes
+  const routeParams = useMemo(() => {
+    // Try current route params first
+    const currentParams = route.params as any;
+    if (currentParams && Object.keys(currentParams).length > 0) {
+      console.log('Using current route params:', currentParams);
+      return currentParams;
+    }
+    
+    // Try to get params from parent navigator (RootNavigator)
+    try {
+      const parent = navigation.getParent();
+      if (parent) {
+        const parentState = parent.getState();
+        const parentRoute = parentState?.routes?.find((r: any) => r.name === 'Booking');
+        if (parentRoute?.params) {
+          console.log('Using parent route params:', parentRoute.params);
+          return parentRoute.params as any;
+        }
+      }
+    } catch (e) {
+      console.log('Error getting parent params:', e);
+    }
+    
+    // Try navigation state
+    try {
+      const navState = navigation.getState();
+      if (navState) {
+        // Check all routes in the navigation state
+        for (const r of navState.routes) {
+          if (r.name === 'Booking' && r.params) {
+            console.log('Using navigation state params:', r.params);
+            return r.params as any;
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Error getting navigation state params:', e);
+    }
+    
+    console.log('No params found, returning empty object');
+    return {};
+  }, [route.params, navigation]);
 
   const [step, setStep] = useState<Step>(1);
+  const [isPreFilling, setIsPreFilling] = useState(false);
+  const [routeParamsState, setRouteParamsState] = useState<any>({});
+  
+  // Update route params when screen is focused (to catch params from parent navigator)
+  useFocusEffect(
+    React.useCallback(() => {
+      const getParams = () => {
+        // Try current route params first
+        const currentParams = route.params as any;
+        if (currentParams && Object.keys(currentParams).length > 0) {
+          console.log('useFocusEffect: Using current route params:', currentParams);
+          return currentParams;
+        }
+        
+        // Try to get params from parent navigator (RootNavigator)
+        try {
+          const parent = navigation.getParent();
+          if (parent) {
+            const parentState = parent.getState();
+            const parentRoute = parentState?.routes?.find((r: any) => r.name === 'Booking');
+            if (parentRoute?.params) {
+              console.log('useFocusEffect: Using parent route params:', parentRoute.params);
+              return parentRoute.params as any;
+            }
+          }
+        } catch (e) {
+          console.log('useFocusEffect: Error getting parent params:', e);
+        }
+        
+        return {};
+      };
+      
+      const params = getParams();
+      if (Object.keys(params).length > 0) {
+        console.log('useFocusEffect: Setting route params state:', params);
+        setRouteParamsState(params);
+      }
+    }, [route.params, navigation])
+  );
+  
+  // Use routeParamsState if available, otherwise use computed routeParams
+  const finalRouteParams = Object.keys(routeParamsState).length > 0 ? routeParamsState : routeParams;
 
   // Step 1
   const [branches, setBranches] = useState<Hospital[]>([]);
@@ -84,12 +172,292 @@ export default function BookingAllInOne() {
         ]);
         setBranches((h as any)?.data?.hospitals || []);
         setSpecialties((s as any)?.data?.specialties || []);
+        console.log('Initial data loaded:', { 
+          branches: (h as any)?.data?.hospitals?.length || 0, 
+          specialties: (s as any)?.data?.specialties?.length || 0 
+        });
       } catch (e) {
         console.error('Load step1 failed', e);
       }
     };
     load();
   }, []);
+
+  // Pre-fill functions (similar to client Appointment.jsx)
+  const preFillFromDoctor = async (doctorIdParam: string) => {
+    try {
+      setIsPreFilling(true);
+      const res = await apiService.getDoctorById(doctorIdParam);
+      if (!res.success || !res.data) {
+        ToastService.show('error', 'Không tìm thấy bác sĩ');
+        return;
+      }
+      const doctor = res.data;
+      
+      // Extract IDs
+      const specialtyId = typeof doctor.specialtyId === 'object' 
+        ? doctor.specialtyId._id 
+        : doctor.specialtyId;
+      const hospitalId = typeof doctor.hospitalId === 'object' 
+        ? doctor.hospitalId._id 
+        : doctor.hospitalId;
+      
+      // Set form data
+      console.log('Setting form data:', { doctorIdParam, specialtyId, hospitalId });
+      setDoctorId(doctorIdParam);
+      if (specialtyId) {
+        setSelectedSpecialty(specialtyId);
+        console.log('Set specialty:', specialtyId);
+      }
+      if (hospitalId) {
+        setSelectedBranch(hospitalId);
+        console.log('Set hospital:', hospitalId);
+      }
+      
+      // Fetch related data
+      if (hospitalId) {
+        try {
+          const specialtiesRes = await apiService.getSpecialties({ isActive: true, limit: 50 });
+          const specialtiesData = (specialtiesRes as any)?.data?.specialties || [];
+          setSpecialties(specialtiesData);
+        } catch (err) {
+          console.error('Error fetching specialties:', err);
+        }
+      }
+      
+      if (specialtyId) {
+        try {
+          // Fetch doctors for this specialty
+          const doctorsRes = await apiService.getDoctors({ specialtyId });
+          const doctorsData = (doctorsRes as any)?.data?.doctors || 
+                             (Array.isArray((doctorsRes as any)?.data) ? (doctorsRes as any).data : []);
+          setDoctors(doctorsData);
+          
+          // Fetch services for this specialty
+          const servicesRes = await apiService.getServices({ specialtyId });
+          const servicesData = (servicesRes as any)?.data?.services || 
+                              (Array.isArray((servicesRes as any)?.data) ? (servicesRes as any).data : []);
+          setServices(servicesData);
+        } catch (err) {
+          console.error('Error fetching services:', err);
+        }
+      }
+      
+      // Auto-advance to Step 2
+      setStep(2);
+    } catch (error) {
+      console.error('Error pre-filling from doctor:', error);
+      ToastService.show('error', 'Lỗi khi tải thông tin bác sĩ');
+    } finally {
+      setIsPreFilling(false);
+    }
+  };
+
+  const preFillFromService = async (serviceIdParam: string) => {
+    try {
+      setIsPreFilling(true);
+      // Get all services to find the one we need
+      const servicesRes = await apiService.getServices({ limit: 1000, isActive: true });
+      let servicesData: ServiceItem[] = [];
+      if ('services' in (servicesRes as any)?.data) {
+        servicesData = ((servicesRes as any).data as any).services || [];
+      } else if ('data' in (servicesRes as any)?.data) {
+        servicesData = ((servicesRes as any).data as any).data || [];
+      } else if (Array.isArray((servicesRes as any)?.data)) {
+        servicesData = (servicesRes as any).data as ServiceItem[];
+      }
+      
+      const service = servicesData.find((s: ServiceItem) => s._id === serviceIdParam);
+      if (!service) {
+        ToastService.show('error', 'Không tìm thấy dịch vụ');
+        return;
+      }
+      
+      // Extract specialty ID
+      const specialtyId = typeof service.specialtyId === 'object' 
+        ? service.specialtyId._id 
+        : service.specialtyId;
+      
+      // Set service
+      setServiceId(serviceIdParam);
+      setServices(servicesData.filter((s: ServiceItem) => s._id === serviceIdParam));
+      
+      if (specialtyId) {
+        setSelectedSpecialty(specialtyId);
+        
+        // Fetch doctors for this specialty
+        try {
+          const doctorsRes = await apiService.getDoctors({ specialtyId });
+          const doctorsData = (doctorsRes as any)?.data?.doctors || 
+                             (Array.isArray((doctorsRes as any)?.data) ? (doctorsRes as any).data : []);
+          setDoctors(doctorsData);
+          
+          // Auto-select first doctor and their hospital
+          if (doctorsData.length > 0) {
+            const firstDoctor = doctorsData[0];
+            setDoctorId(firstDoctor._id);
+            const selectedHospitalId = typeof firstDoctor.hospitalId === 'object'
+              ? firstDoctor.hospitalId._id
+              : firstDoctor.hospitalId;
+            if (selectedHospitalId) {
+              setSelectedBranch(selectedHospitalId);
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching doctors:', err);
+        }
+      }
+      
+      // Auto-advance to Step 3
+      setStep(3);
+    } catch (error) {
+      console.error('Error pre-filling from service:', error);
+      ToastService.show('error', 'Lỗi khi tải thông tin dịch vụ');
+    } finally {
+      setIsPreFilling(false);
+    }
+  };
+
+  const preFillFromSpecialty = async (specialtyIdParam: string) => {
+    try {
+      setIsPreFilling(true);
+      setSelectedSpecialty(specialtyIdParam);
+      
+      // Fetch doctors for this specialty to find a hospital
+      try {
+        const doctorsRes = await apiService.getDoctors({ specialtyId: specialtyIdParam });
+        const doctorsData = (doctorsRes as any)?.data?.doctors || 
+                           (Array.isArray((doctorsRes as any)?.data) ? (doctorsRes as any).data : []);
+        setDoctors(doctorsData);
+        
+        // Auto-select first hospital that has this specialty (from first doctor)
+        if (doctorsData.length > 0) {
+          const firstDoctor = doctorsData[0];
+          const selectedHospitalId = typeof firstDoctor.hospitalId === 'object'
+            ? firstDoctor.hospitalId._id
+            : firstDoctor.hospitalId;
+          if (selectedHospitalId) {
+            setSelectedBranch(selectedHospitalId);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching doctors:', err);
+      }
+      
+      // Fetch services for this specialty
+      try {
+        const servicesRes = await apiService.getServices({ specialtyId: specialtyIdParam });
+        const servicesData = (servicesRes as any)?.data?.services || 
+                            (Array.isArray((servicesRes as any)?.data) ? (servicesRes as any).data : []);
+        setServices(servicesData);
+      } catch (err) {
+        console.error('Error fetching services:', err);
+      }
+      
+      // Auto-advance to Step 2
+      setStep(2);
+    } catch (error) {
+      console.error('Error pre-filling from specialty:', error);
+      ToastService.show('error', 'Lỗi khi tải thông tin chuyên khoa');
+    } finally {
+      setIsPreFilling(false);
+    }
+  };
+
+  const preFillFromHospital = async (hospitalIdParam: string) => {
+    try {
+      setIsPreFilling(true);
+      setSelectedBranch(hospitalIdParam);
+      
+      // Fetch specialties for this hospital
+      try {
+        const specialtiesRes = await apiService.getSpecialties({ isActive: true, limit: 50 });
+        const specialtiesData = (specialtiesRes as any)?.data?.specialties || [];
+        setSpecialties(specialtiesData);
+      } catch (err) {
+        console.error('Error fetching specialties:', err);
+      }
+      
+      // Stay on Step 1
+    } catch (error) {
+      console.error('Error pre-filling from hospital:', error);
+      ToastService.show('error', 'Lỗi khi tải thông tin bệnh viện');
+    } finally {
+      setIsPreFilling(false);
+    }
+  };
+
+  // Handle pre-fill from route params
+  const [hasPreFilled, setHasPreFilled] = useState(false);
+  const [preFillKey, setPreFillKey] = useState<string>('');
+  
+  // Reset hasPreFilled when route params change
+  useEffect(() => {
+    const { doctorId, specialtyId, hospitalId, serviceId } = finalRouteParams;
+    const newKey = `${doctorId || ''}_${specialtyId || ''}_${hospitalId || ''}_${serviceId || ''}`;
+    console.log('Route params changed:', { newKey, preFillKey, routeParams });
+    if (newKey !== preFillKey && newKey !== '___') {
+      console.log('Resetting hasPreFilled for new params');
+      setHasPreFilled(false);
+      setPreFillKey(newKey);
+    }
+  }, [routeParams, preFillKey]);
+  
+  useEffect(() => {
+    const handlePreFill = async () => {
+      if (isPreFilling || hasPreFilled) {
+        console.log('Pre-fill skipped:', { isPreFilling, hasPreFilled });
+        return;
+      }
+      
+      const { doctorId: doctorIdParam, specialtyId: specialtyIdParam, 
+              hospitalId: hospitalIdParam, serviceId: serviceIdParam } = finalRouteParams;
+      
+      
+      if (!doctorIdParam && !serviceIdParam && !specialtyIdParam && !hospitalIdParam) {
+        console.log('No pre-fill params found');
+        return; // No pre-fill params
+      }
+      
+      // Wait for initial data to load before pre-filling (at least one should be loaded)
+      if (branches.length === 0 && specialties.length === 0) {
+        console.log('Waiting for initial data to load...');
+        return;
+      }
+      
+      console.log('Starting pre-fill...');
+      setHasPreFilled(true);
+      
+      // Priority order: doctor > service > specialty > hospital
+      try {
+        if (doctorIdParam) {
+          console.log('Pre-filling from doctor:', doctorIdParam);
+          await preFillFromDoctor(doctorIdParam);
+        } else if (serviceIdParam) {
+          console.log('Pre-filling from service:', serviceIdParam);
+          await preFillFromService(serviceIdParam);
+        } else if (specialtyIdParam) {
+          console.log('Pre-filling from specialty:', specialtyIdParam);
+          await preFillFromSpecialty(specialtyIdParam);
+        } else if (hospitalIdParam) {
+          console.log('Pre-filling from hospital:', hospitalIdParam);
+          await preFillFromHospital(hospitalIdParam);
+        }
+        console.log('Pre-fill completed successfully');
+      } catch (error) {
+        console.error('Error in pre-fill:', error);
+        setHasPreFilled(false); // Reset on error so it can retry
+        ToastService.show('error', 'Lỗi khi tự động điền thông tin');
+      }
+    };
+    
+    // Add a small delay to ensure component is fully mounted
+    const timer = setTimeout(() => {
+      handlePreFill();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [finalRouteParams, branches.length, specialties.length, isPreFilling, hasPreFilled]);
 
   // Load Step 2 data when specialty selected
   useEffect(() => {
@@ -459,8 +827,31 @@ export default function BookingAllInOne() {
     ? ((step - 1) / (STEPS.length - 0.5))  
     : (step - 1) / (STEPS.length - 1);
 
+  const handleBackPress = () => {
+    // Navigate to Home instead of just going back
+    // This ensures user always returns to Home from booking screen
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Home');
+    }
+  };
+
   return (
     <View style={[styles.container, { paddingBottom: Math.max(24, insets.bottom + 100) }]}> 
+      {/* Header with back button */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={handleBackPress}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Đặt lịch khám</Text>
+        <View style={styles.headerRight} />
+      </View>
+
       <View style={styles.progressWrap}>
         <View style={styles.progressTrack} />
         <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(1, progress)) * 100}%` }]} />
@@ -1072,6 +1463,40 @@ export default function BookingAllInOne() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f7f7f7', padding: 16 },
+  // Header styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    backgroundColor: '#f7f7f7',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginHorizontal: 8,
+  },
+  headerRight: {
+    width: 40,
+  },
   stepHeader: { color: '#6b7280', fontWeight: '700', marginBottom: 8 },
   title: { fontWeight: '700', fontSize: 16, marginBottom: 8 },
 

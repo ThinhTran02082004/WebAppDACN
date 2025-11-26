@@ -16,10 +16,10 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Specialty, Doctor, ServiceItem, apiService } from '../services/api';
-import { RootStackParamList } from '../navigation/AppNavigator';
-import { AppIcons } from '../config/icons';
-import { useAuth } from '../contexts/AuthContext';
+import { Specialty, Doctor, ServiceItem, apiService } from '../../services/api';
+import { RootStackParamList } from '../../navigation/AppNavigator';
+import { AppIcons } from '../../config/icons';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -444,7 +444,10 @@ export default function SpecialtyDetailScreen() {
               if (!user) {
                 navigation.navigate('Login');
               } else {
-                navigation.navigate('Booking');
+                // Navigate to booking screen with pre-filled specialty
+                navigation.navigate('Booking', {
+                  specialtyId: specialtyId,
+                });
               }
             }}
           >

@@ -4,8 +4,8 @@ import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { StackScreenProps } from '@react-navigation/stack';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { AppIcons, IconColors } from '../config/icons';
-import { apiService } from '../services/api';
+import { AppIcons, IconColors } from '../../config/icons';
+import { apiService } from '../../services/api';
 
 type Props = StackScreenProps<any, 'PaymentWebView'>;
 

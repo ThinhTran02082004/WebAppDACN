@@ -1,9 +1,14 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// Import environment variables from react-native-dotenv
+// Note: Myapp only needs public IDs (not secrets) for SDK initialization
+// Secrets (CLIENT_SECRET, APP_SECRET) are only needed on the server
+// Using VITE_ prefix to match client naming convention
+import { 
+  VITE_GOOGLE_CLIENT_ID as ENV_GOOGLE_CLIENT_ID,
+  VITE_FACEBOOK_APP_ID as ENV_FACEBOOK_APP_ID,
+} from '@env';
 
-// Default host for development. For Android emulator use 10.0.2.2 to reach host machine.
-// For physical devices via USB with adb reverse, use localhost
-// For physical devices via WiFi, use the actual IP address of the development machine
 const DEFAULT_HOST = Platform.OS === 'android' ? 'localhost' : 'localhost';
 const DEFAULT_PORT = 5000;
 
@@ -58,13 +63,15 @@ export const resetApiHost = () => {
 
 export const API_BASE = () => `http://${API_HOST}:${API_PORT}/api`;
 
-// Social auth keys (optional). Replace with your keys if available.
-// Thay thế bằng Web Client ID từ Google Console
-// Must match the Web client (client_type 3) in google-services.json
-export const GOOGLE_CLIENT_ID = '268729645043-fu4cqk261ise0fgjbsiusnmoj9r0l92g.apps.googleusercontent.com';
-export const GOOGLE_CLIENT_SECRET = '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'; 
-export const FACEBOOK_APP_ID = '3561947047432184';
-export const FACEBOOK_APP_SECRET = 'ee346cd044a9ffa5c510c4c22a74ed5c';
+// Social auth keys from environment variables
+// Myapp only needs public IDs for SDK initialization (not secrets)
+// Secrets are only used on the server for token verification
+export const GOOGLE_CLIENT_ID = ENV_GOOGLE_CLIENT_ID || '';
+export const FACEBOOK_APP_ID = ENV_FACEBOOK_APP_ID || '';
+
+// These are not needed in Myapp (only server needs them)
+// export const GOOGLE_CLIENT_SECRET = ''; // Only server needs this
+// export const FACEBOOK_APP_SECRET = ''; // Only server needs this
 
 export default {
   API_BASE,
@@ -72,7 +79,5 @@ export default {
   clearApiHost,
   resetApiHost,
   GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
   FACEBOOK_APP_ID,
-  FACEBOOK_APP_SECRET,
 };

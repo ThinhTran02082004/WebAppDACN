@@ -105,7 +105,12 @@ const computeOriginFromUrl = (url?: string) => {
 const ensureOriginHeader = (url: string, options?: Record<string, any>) => {
   const headers = options?.headers || {};
 
+  // For LiveKit Cloud, don't add Origin header as it may cause issues
+  // LiveKit Cloud handles WebSocket connections differently
+  const isLiveKitCloud = url.includes('.livekit.cloud');
+  
   if (
+    !isLiveKitCloud &&
     typeof headers.Origin === 'undefined' &&
     typeof headers.origin === 'undefined'
   ) {

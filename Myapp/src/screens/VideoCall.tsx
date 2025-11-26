@@ -265,6 +265,55 @@ const VideoCallScreen = () => {
     }
   }, [removeRoomListeners]);
 
+  const convertToWebSocketUrl = useCallback((url: string): string => {
+    if (!url) return url;
+    
+    let webSocketUrl = url.trim();
+    
+    // Convert HTTP to WebSocket
+    if (webSocketUrl.startsWith('https://')) {
+      webSocketUrl = webSocketUrl.replace('https://', 'wss://');
+    } else if (webSocketUrl.startsWith('http://')) {
+      webSocketUrl = webSocketUrl.replace('http://', 'ws://');
+    } else if (!webSocketUrl.includes('://')) {
+      // If no protocol, assume ws:// for localhost or wss:// for others
+      if (webSocketUrl.includes('localhost') || webSocketUrl.includes('127.0.0.1') || webSocketUrl.includes('10.0.2.2')) {
+        webSocketUrl = `ws://${webSocketUrl}`;
+      } else {
+        webSocketUrl = `wss://${webSocketUrl}`;
+      }
+    }
+    
+    // Remove trailing slash
+    webSocketUrl = webSocketUrl.replace(/\/+$/, '');
+    
+    // Extract base URL (protocol + host)
+    const urlMatch = webSocketUrl.match(/^(wss?:\/\/[^\/]+)/);
+    if (urlMatch) {
+      const baseUrl = urlMatch[1];
+      const remainingPath = webSocketUrl.substring(baseUrl.length);
+      
+      // Check if this is LiveKit Cloud (doesn't need /rtc path)
+      const isLiveKitCloud = baseUrl.includes('.livekit.cloud');
+      
+      if (isLiveKitCloud) {
+        // LiveKit Cloud handles WebSocket routing automatically, no /rtc needed
+        // Just ensure no trailing slash
+        webSocketUrl = baseUrl + (remainingPath || '');
+      } else {
+        // For self-hosted LiveKit servers, add /rtc path if not present
+        if (!remainingPath || remainingPath === '/') {
+          webSocketUrl = baseUrl + '/rtc';
+        } else if (remainingPath !== '/rtc' && !remainingPath.startsWith('/rtc/')) {
+          // If there's a different path, we still need /rtc for LiveKit
+          webSocketUrl = baseUrl + '/rtc';
+        }
+      }
+    }
+    
+    return webSocketUrl;
+  }, []);
+
   const connectToRoom = useCallback(async () => {
     setError(null);
     setConnectionState('connecting');
@@ -289,19 +338,33 @@ const VideoCallScreen = () => {
     attachRoomListeners(room);
 
     try {
-      await room.connect(wsUrl, token, { autoSubscribe: true });
+      // Convert HTTP URL to WebSocket URL if needed
+      const webSocketUrl = convertToWebSocketUrl(wsUrl);
+      console.log('[VideoCall] Original wsUrl:', wsUrl);
+      console.log('[VideoCall] Converted WebSocket URL:', webSocketUrl);
+      console.log('[VideoCall] Token present:', !!token);
+      
+      await room.connect(webSocketUrl, token, { autoSubscribe: true });
       await room.localParticipant.setMicrophoneEnabled(true);
       await room.localParticipant.setCameraEnabled(true);
       setMicEnabled(true);
       setCameraEnabled(true);
       setConnectionState('connected');
       updateVideoTiles();
+      console.log('[VideoCall] Successfully connected to room');
     } catch (err: any) {
       console.error('[VideoCall] Failed to connect', err);
+      console.error('[VideoCall] Error details:', {
+        message: err?.message,
+        code: err?.code,
+        reason: err?.reason,
+        wsUrl: wsUrl,
+        convertedUrl: convertToWebSocketUrl(wsUrl)
+      });
       setError(err?.message || 'Không thể kết nối tới phòng video. Vui lòng thử lại.');
       setConnectionState('disconnected');
     }
-  }, [attachRoomListeners, requestMediaPermissions, token, updateVideoTiles, wsUrl]);
+  }, [attachRoomListeners, convertToWebSocketUrl, requestMediaPermissions, token, updateVideoTiles, wsUrl]);
 
   useEffect(() => {
     connectToRoom();

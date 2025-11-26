@@ -16,9 +16,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { AppIcons, IconColors } from '../config/icons';
-import { apiService } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
+import { AppIcons, IconColors } from '../../config/icons';
+import { apiService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Appointment {
   _id: string;

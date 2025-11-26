@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView, Refres
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { apiService } from '../services/api';
-import { IconColors } from '../config/icons';
-import { useAuth } from '../contexts/AuthContext';
+import { apiService } from '../../services/api';
+import { IconColors } from '../../config/icons';
+import { useAuth } from '../../contexts/AuthContext';
 
 type PaymentEntry = {
   id: string;

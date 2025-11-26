@@ -296,7 +296,8 @@ const styles = StyleSheet.create({
   },
   /* Vertical styles */
   containerVertical: {
-    width: 160,
+    width: 170,
+    marginRight: 16,
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#ffffff',

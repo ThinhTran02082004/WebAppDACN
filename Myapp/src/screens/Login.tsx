@@ -16,16 +16,19 @@ import { ToastService } from '../services/ToastService';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { GOOGLE_CLIENT_ID } from '../config';
+import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
 
-// Configure once at module load using the shared config value
-GoogleSignin.configure({
-  webClientId: '268729645043-lk8nqhbiah46aqmqca9154j6gilc0nkb.apps.googleusercontent.com', // 👈 Web Client ID (client_type 3)
-  offlineAccess: true,
-  hostedDomain: '',
-  forceCodeForRefreshToken: true,
-  // Add scopes if needed
-  scopes: ['https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
-});
+// Configure once at module load using the shared config value from environment
+if (GOOGLE_CLIENT_ID) {
+  GoogleSignin.configure({
+    webClientId: GOOGLE_CLIENT_ID, // Web Client ID from environment variable
+    offlineAccess: true,
+    hostedDomain: '',
+    forceCodeForRefreshToken: true,
+    // Add scopes if needed
+    scopes: ['https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
+  });
+}
 
 type Props = {
   navigation: any;
@@ -37,8 +40,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  const { signIn } = useAuth();
-  const { signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, signInWithFacebook } = useAuth();
 
   // Google Sign-In already configured above
 
@@ -147,10 +149,53 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleFacebookLogin = async () => {
     try {
-      // TODO: Implement Facebook Sign-In
-      Alert.alert('Thông báo', 'Tính năng đăng nhập Facebook sẽ được cập nhật sớm');
-    } catch {
-      Alert.alert('Lỗi', 'Đăng nhập Facebook thất bại');
+      setLoading(true);
+      
+      // Ensure clean state to avoid reusing stale sessions
+      try {
+        await LoginManager.logOut();
+      } catch {
+        // ignore if no session
+      }
+
+      // Request login with permissions
+      const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
+
+      if (result.isCancelled) {
+        console.log('User cancelled Facebook login');
+        return;
+      }
+
+      // Get access token
+      const tokenData = await AccessToken.getCurrentAccessToken();
+      
+      if (!tokenData || !tokenData.accessToken) {
+        throw new Error('Không thể lấy token từ Facebook');
+      }
+
+      // Get user ID from token data
+      const userID = tokenData.userID;
+      if (!userID) {
+        throw new Error('Không thể lấy User ID từ Facebook');
+      }
+
+      console.log('[FacebookLogin] Access token obtained, userID:', userID);
+      
+      // Sign in with Facebook using access token and user ID
+      await signInWithFacebook(tokenData.accessToken, userID, rememberMe);
+      ToastService.show('success', 'Thành công', 'Đăng nhập bằng Facebook thành công');
+      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+    } catch (error: any) {
+      console.error('Facebook Sign-In Error:', error);
+      
+      if (error.message?.includes('cancelled')) {
+        // User cancelled, don't show error
+        console.log('User cancelled Facebook Sign-In');
+      } else {
+        ToastService.show('error', 'Lỗi', error.message || 'Đăng nhập Facebook thất bại');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

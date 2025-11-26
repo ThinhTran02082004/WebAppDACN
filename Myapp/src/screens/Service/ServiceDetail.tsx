@@ -17,9 +17,9 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { ServiceItem, Doctor, apiService } from '../services/api';
-import { RootStackParamList } from '../navigation/AppNavigator';
-import { useAuth } from '../contexts/AuthContext';
+import { ServiceItem, Doctor, apiService } from '../../services/api';
+import { RootStackParamList } from '../../navigation/AppNavigator';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -102,7 +102,19 @@ export default function ServiceDetailScreen() {
     if (!user) {
       (navigation as any).navigate('Login');
     } else {
-      (navigation as any).navigate('Booking');
+      // Navigate to booking screen with pre-filled data
+      if (service) {
+        const specialtyId = typeof service.specialtyId === 'object' 
+          ? service.specialtyId._id 
+          : service.specialtyId;
+        
+        (navigation as any).navigate('Booking', {
+          serviceId: service._id,
+          specialtyId: specialtyId || undefined,
+        });
+      } else {
+        (navigation as any).navigate('Booking');
+      }
     }
   };
 

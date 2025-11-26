@@ -13,8 +13,8 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { NewsItem, apiService } from '../services/api';
-import { RootStackParamList } from '../navigation/AppNavigator';
+import { NewsItem, apiService } from '../../services/api';
+import { RootStackParamList } from '../../navigation/AppNavigator';
 
 // type NewsDetailRouteProp = RouteProp<RootStackParamList, 'NewsDetail'>;
 

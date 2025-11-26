@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Modal, ScrollView, FlatList } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import type { StackScreenProps } from '@react-navigation/stack';
-import { apiService } from '../services/api';
-import { IconColors, AppIcons } from '../config/icons';
+import { apiService } from '../../services/api';
+import { IconColors, AppIcons } from '../../config/icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = StackScreenProps<any, 'RescheduleAppointment'> & {

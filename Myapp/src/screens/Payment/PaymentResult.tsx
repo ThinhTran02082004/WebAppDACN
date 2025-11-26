@@ -9,8 +9,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { AppIcons, IconColors } from '../config/icons';
-import { apiService } from '../services/api';
+import { AppIcons, IconColors } from '../../config/icons';
+import { apiService } from '../../services/api';
 import Toast from 'react-native-toast-message';
 
 interface PaymentResultScreenProps {

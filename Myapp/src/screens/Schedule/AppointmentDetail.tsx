@@ -13,9 +13,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { AppIcons, IconColors } from '../config/icons';
-import { apiService } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
+import { AppIcons, IconColors } from '../../config/icons';
+import { apiService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface PrescriptionMedication {
   medicationId?: {
@@ -174,6 +174,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   const { user } = useAuth();
   const { appointment: initialAppointment, appointmentId, fromPayment } = route.params;
   const [appointment, setAppointment] = useState<Appointment | null>(initialAppointment || null);
+  const [appointmentBill, setAppointmentBill] = useState<any | null>(initialAppointment?.bill || null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -183,6 +184,9 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   const [cancellationError, setCancellationError] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
   const [isJoiningVideoCall, setIsJoiningVideoCall] = useState(false);
+  const [reviewSelectionVisible, setReviewSelectionVisible] = useState(false);
+  const [selectedConsultationMethod, setSelectedConsultationMethod] = useState<'momo' | 'paypal'>('momo');
+  const [selectedMedicationMethod, setSelectedMedicationMethod] = useState<'momo' | 'paypal'>('momo');
   const hasRefreshedRef = useRef(false);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshAppointmentRef = useRef<((delay?: number, retryCount?: number, forceRetry?: boolean) => Promise<void>) | null>(null);
@@ -303,8 +307,17 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
       
       const response = await apiService.getAppointmentById(targetId);
       if (response?.success && response?.data) {
-        const updatedAppointment = response.data;
-        setAppointment(updatedAppointment);
+        const updatedAppointment = response.data as Appointment;
+
+        setAppointment(prev => {
+          const base = prev || null;
+          const merged: Appointment = {
+            ...(base || ({} as Appointment)),
+            ...updatedAppointment,
+          };
+
+          return merged;
+        });
         
         // Log payment status for debugging
         if (updatedAppointment.bill) {
@@ -317,6 +330,11 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
           });
         }
         
+        // Update local bill if available from appointment response
+        if ((updatedAppointment as any).bill) {
+          setAppointmentBill((updatedAppointment as any).bill);
+        }
+
         // Check if payment is fully paid using the same logic as client
         const isFullyPaid = isPaymentFullyPaid(updatedAppointment);
         
@@ -375,6 +393,31 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   useEffect(() => {
     refreshAppointmentRef.current = refreshAppointment;
   }, [refreshAppointment]);
+
+  // Fetch bill separately like web client (UserBilling) so billing section always has data
+  useEffect(() => {
+    const targetId = appointment?._id || appointmentId;
+    if (!targetId) return;
+
+    let cancelled = false;
+
+    const fetchBill = async () => {
+      try {
+        const res = await apiService.getAppointmentBill(targetId);
+        if (res?.success && res.data && !cancelled) {
+          setAppointmentBill(res.data);
+        }
+      } catch (e) {
+        console.error('[AppointmentDetail] Failed to fetch appointment bill:', e);
+      }
+    };
+
+    fetchBill();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appointment?._id, appointmentId]);
 
   // Handle coming from payment - force refresh with retry (only once)
   useEffect(() => {
@@ -750,65 +793,55 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     }
   };
 
-  const startMomoPayment = async () => {
+  const startMomoPayment = async (billTypeOverride?: 'consultation' | 'medication') => {
     try {
       if (!appointment?._id) return;
       
-      // Lấy amount từ bill nếu có, nếu không thì dùng totalAmount cũ
       let amount = 0;
-      let billType = 'consultation';
+      let billType: 'consultation' | 'medication' | 'hospitalization' = 'consultation';
       let orderInfo = `Thanh toán lịch hẹn #${appointment._id.substring(0, 8)}`;
-      
-      if (appointment.bill) {
-        // Nếu có bill, ưu tiên thanh toán phần còn lại (remainingAmount)
-        const remainingAmount = appointment.bill.remainingAmount || 0;
-        if (remainingAmount > 0) {
-          // Luôn dùng remainingAmount để đảm bảo thanh toán đúng số tiền còn lại
-          amount = remainingAmount;
-          
-          // Xác định billType dựa trên phần nào chưa thanh toán để server xử lý đúng
-          // IMPORTANT: Priority order matters - check medication first if it's unpaid, then consultation
-          const consultationAmount = appointment.bill.consultationAmount || 0;
-          const medicationAmount = appointment.bill.medicationAmount || 0;
-          const hospitalizationAmount = appointment.bill.hospitalizationAmount || 0;
-          
-          // Check medication first (if unpaid and has amount)
-          // IMPORTANT: When paying medication, use medicationAmount (not remainingAmount) to ensure correct payment
-          if (appointment.bill.medicationStatus !== 'paid' && medicationAmount > 0) {
-            billType = 'medication';
-            // Use medicationAmount instead of remainingAmount to ensure we pay exactly the medication amount
-            amount = medicationAmount;
-            orderInfo = `Thanh toán tiền thuốc - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
-            console.log('[Payment] Paying medication bill, amount:', amount, 'billType:', billType, 'medicationAmount:', medicationAmount);
-          } else if (appointment.bill.consultationStatus !== 'paid' && consultationAmount > 0) {
-            billType = 'consultation';
-            // Use consultationAmount instead of remainingAmount to ensure we pay exactly the consultation amount
-            amount = consultationAmount;
-            orderInfo = `Thanh toán phí khám - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
-            console.log('[Payment] Paying consultation bill, amount:', amount, 'billType:', billType, 'consultationAmount:', consultationAmount);
-          } else if (appointment.bill.hospitalizationStatus !== 'paid' && hospitalizationAmount > 0) {
-            billType = 'hospitalization';
-            // Use hospitalizationAmount instead of remainingAmount to ensure we pay exactly the hospitalization amount
-            amount = hospitalizationAmount;
-            orderInfo = `Thanh toán phí nằm viện - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
-            console.log('[Payment] Paying hospitalization bill, amount:', amount, 'billType:', billType, 'hospitalizationAmount:', hospitalizationAmount);
-          } else {
-            // Fallback: if all are paid but remainingAmount > 0, use remainingAmount with consultation as default
-            billType = 'consultation';
-            amount = remainingAmount; // Use remainingAmount as fallback
-            orderInfo = `Thanh toán lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
-            console.log('[Payment] All bills paid but remainingAmount > 0, using consultation as default, amount:', amount);
-          }
+
+      // Ưu tiên dùng bill từ API /billing/appointment (appointmentBill), fallback về appointment.bill
+      const rawBill: any = appointmentBill || (appointment as any).bill || null;
+
+      if (rawBill) {
+        // Hỗ trợ cả dạng flatten (consultationAmount) và dạng nested (consultationBill.amount) giống web
+        const consultationAmount: number =
+          (rawBill.consultationAmount as number | undefined) ??
+          (rawBill.consultationBill?.amount as number | undefined) ??
+          0;
+        const medicationAmount: number =
+          (rawBill.medicationAmount as number | undefined) ??
+          (rawBill.medicationBill?.amount as number | undefined) ??
+          0;
+        const hospitalizationAmount: number =
+          (rawBill.hospitalizationAmount as number | undefined) ??
+          (rawBill.hospitalizationBill?.amount as number | undefined) ??
+          0;
+        const remainingAmount: number =
+          (rawBill.remainingAmount as number | undefined) ??
+          Math.max(
+            ((rawBill.totalAmount as number | undefined) ?? consultationAmount + medicationAmount + hospitalizationAmount) -
+              ((rawBill.paidAmount as number | undefined) ?? 0),
+            0
+          );
+
+        if (billTypeOverride === 'consultation') {
+          amount = consultationAmount;
+          billType = 'consultation';
+          orderInfo = `Thanh toán phí khám - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
+        } else if (billTypeOverride === 'medication') {
+          amount = medicationAmount;
+          billType = 'medication';
+          orderInfo = `Thanh toán tiền thuốc - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
         } else {
-          const totalAmount = appointment.bill.totalAmount || 0;
-          if (totalAmount > 0) {
-            // Nếu đã thanh toán hết nhưng vẫn có tổng tiền, thanh toán lại toàn bộ (trường hợp đặc biệt)
-            amount = totalAmount;
-            billType = 'consultation';
+          if (remainingAmount > 0) {
+            amount = remainingAmount;
+          } else {
+            amount = (rawBill.totalAmount as number | undefined) ?? 0;
           }
         }
       } else {
-        // Fallback to old calculation if bill is not available
         amount = appointment.totalAmount || (appointment.consultationFee || 0) + (appointment.serviceFee || 0);
         billType = 'consultation';
       }
@@ -902,6 +935,40 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     } finally {
       setIsCancelling(false);
     }
+  };
+
+  const openReviewSelectionModal = () => {
+    if (!appointment) return;
+    if (!appointment.doctorId && !appointment.hospitalId) {
+      Alert.alert('Thông báo', 'Không tìm thấy thông tin bác sĩ hoặc chi nhánh để đánh giá.');
+      return;
+    }
+    setReviewSelectionVisible(true);
+  };
+
+  const closeReviewSelectionModal = () => {
+    setReviewSelectionVisible(false);
+  };
+
+  const handleSelectReviewTarget = (target: 'doctor' | 'hospital') => {
+    closeReviewSelectionModal();
+    if (!appointment) return;
+
+    if (target === 'doctor' && !appointment.doctorId) {
+      Alert.alert('Thông báo', 'Không tìm thấy thông tin bác sĩ để đánh giá.');
+      return;
+    }
+
+    if (target === 'hospital' && !appointment.hospitalId) {
+      Alert.alert('Thông báo', 'Không tìm thấy thông tin chi nhánh để đánh giá.');
+      return;
+    }
+
+    navigation.navigate('ReviewForm', {
+      appointmentId: appointment._id,
+      targetType: target,
+      appointment,
+    });
   };
 
   const canRescheduleAppointment = (appt: Appointment | null) => {
@@ -1111,6 +1178,58 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   const consultationFee = appointment.consultationFee || appointment.doctorId?.consultationFee || 0;
   const serviceFee = appointment.serviceFee || appointment.serviceId?.price || 0;
   const totalAmount = appointment.totalAmount || (consultationFee + serviceFee);
+  const bill = appointmentBill || (appointment as any).bill || null;
+  const consultationBillAmount =
+    (bill?.consultationAmount as number | undefined) ??
+    (bill?.consultationBill?.amount as number | undefined) ??
+    0;
+  const medicationBillAmount =
+    (bill?.medicationAmount as number | undefined) ??
+    (bill?.medicationBill?.amount as number | undefined) ??
+    0;
+  const hospitalizationBillAmount =
+    (bill?.hospitalizationAmount as number | undefined) ??
+    (bill?.hospitalizationBill?.amount as number | undefined) ??
+    0;
+  const consultationBillStatus =
+    (bill?.consultationStatus as string | undefined) ??
+    (bill?.consultationBill?.status as string | undefined) ??
+    'pending';
+  const medicationBillStatus =
+    (bill?.medicationStatus as string | undefined) ??
+    (bill?.medicationBill?.status as string | undefined) ??
+    'pending';
+  const hospitalizationBillStatus =
+    (bill?.hospitalizationStatus as string | undefined) ??
+    (bill?.hospitalizationBill?.status as string | undefined) ??
+    'pending';
+  const overallBillStatus =
+    (bill?.overallStatus as string | undefined) ??
+    (bill?.status as string | undefined) ??
+    'unpaid';
+  const billTotalAmount =
+    (bill?.totalAmount as number | undefined) ??
+    (consultationBillAmount + medicationBillAmount + hospitalizationBillAmount);
+  const billPaidAmount = (bill?.paidAmount as number | undefined) ?? 0;
+  const billRemainingAmount =
+    (bill?.remainingAmount as number | undefined) ??
+    Math.max(billTotalAmount - billPaidAmount, 0);
+  const consultationPaymentDate: string | null =
+    (bill?.consultationBill?.paymentDate as string | undefined) ??
+    (bill?.consultationPaymentDate as string | undefined) ??
+    null;
+  const consultationPaymentMethod: string | null =
+    (bill?.consultationBill?.paymentMethod as string | undefined) ??
+    (bill?.consultationPaymentMethod as string | undefined) ??
+    null;
+  const medicationPaymentDate: string | null =
+    (bill?.medicationBill?.paymentDate as string | undefined) ??
+    (bill?.medicationPaymentDate as string | undefined) ??
+    null;
+  const medicationPaymentMethod: string | null =
+    (bill?.medicationBill?.paymentMethod as string | undefined) ??
+    (bill?.medicationPaymentMethod as string | undefined) ??
+    null;
   const rescheduleCount = appointment.rescheduleCount ?? ((appointment as any)?.rescheduleCount ?? 0);
   const hasReachedRescheduleLimit = rescheduleCount >= 2;
   // Allow reschedule and cancel only for pending appointments (Chờ xác nhận)
@@ -1360,23 +1479,13 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
                       </View>
                     ) : null}
 
-                    {/* Payment buttons for prescription */}
+                    {/* Payment information for prescription */}
                     {prescription.totalAmount && prescription.totalAmount > 0 && (
                       <View style={styles.prescriptionPaymentSection}>
-                        {isPrescriptionPaid(prescription._id) ? (
+                        {isPrescriptionPaid(prescription._id) && (
                           <View style={styles.prescriptionPaidBadge}>
                             <Ionicons name="checkmark-circle" size={16} color="#10b981" />
                             <Text style={styles.prescriptionPaidText}>Đã thanh toán</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.prescriptionPaymentButtons}>
-                            <TouchableOpacity
-                              style={[styles.prescriptionPaymentButton, styles.momoPrescriptionButton]}
-                              onPress={() => startPrescriptionPayment(prescription._id, 'momo')}
-                            >
-                              <Ionicons name="wallet-outline" size={16} color="#fff" />
-                              <Text style={styles.prescriptionPaymentButtonText}>Thanh toán MoMo</Text>
-                            </TouchableOpacity>
                           </View>
                         )}
                       </View>
@@ -1514,10 +1623,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
             {appointment.status === 'completed' && !appointment.isReviewed && (
               <TouchableOpacity
                 style={[styles.actionButton, styles.actionButtonYellow]}
-                onPress={() => {
-                  // TODO: Navigate to review screen
-                  Alert.alert('Thông báo', 'Tính năng đánh giá đang được phát triển');
-                }}
+                onPress={openReviewSelectionModal}
               >
                 <Ionicons name="star-outline" size={18} color="#f59e0b" />
                 <Text style={[styles.actionButtonText, { color: '#f59e0b' }]}>Đánh giá</Text>
@@ -1631,7 +1737,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
         )}
 
         {/* Billing Section */}
-        {(appointment.bill?.totalAmount || totalAmount > 0) && (
+        {(bill || totalAmount > 0) && (
           <View style={styles.section}>
             <View style={[styles.sectionHeader, styles.sectionHeaderBlue]}>
               <Ionicons name="card-outline" size={20} color="#fff" />
@@ -1639,72 +1745,263 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
             </View>
             <View style={styles.paymentCard}>
               {/* Hiển thị thông tin từ bill nếu có */}
-              {appointment.bill ? (
+              {bill ? (
                 <>
                   {/* Phí khám */}
-                  {(appointment.bill.consultationAmount || 0) > 0 && (
-                    <View style={styles.paymentFeeRow}>
-                      <View style={styles.paymentFeeLabelRow}>
-                        <Ionicons 
-                          name={appointment.bill.consultationStatus === 'paid' ? 'checkmark-circle' : 'time-outline'} 
-                          size={16} 
-                          color={appointment.bill.consultationStatus === 'paid' ? '#10b981' : '#f59e0b'} 
-                        />
-                        <Text style={styles.paymentFeeLabel}>Phí khám</Text>
+                  {consultationBillAmount > 0 && (
+                    <View style={styles.paymentGroup}>
+                      <View style={styles.paymentGroupHeaderRow}>
+                        <View style={styles.paymentGroupTitleRow}>
+                          <Ionicons 
+                            name={consultationBillStatus === 'paid' ? 'checkmark-circle' : 'medkit-outline'} 
+                            size={18} 
+                            color={consultationBillStatus === 'paid' ? '#10b981' : '#2563eb'} 
+                          />
+                          <Text style={styles.paymentGroupTitle}>Phí Khám Bệnh</Text>
+                        </View>
+                        <View style={styles.paymentGroupStatusBadge}>
+                          <Text style={styles.paymentGroupStatusText}>
+                            {consultationBillStatus === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={styles.paymentFeeAmount}>{formatVnd(appointment.bill.consultationAmount)}</Text>
+                      <View style={styles.paymentGroupAmountRow}>
+                        <Text style={styles.paymentGroupAmount}>{formatVnd(consultationBillAmount)}</Text>
+                        {consultationBillStatus === 'paid' && consultationPaymentDate && (
+                          <Text style={styles.paymentGroupMetaText}>
+                            Đã thanh toán: {formatDateTime(consultationPaymentDate)}
+                          </Text>
+                        )}
+                        {consultationBillStatus === 'paid' && consultationPaymentMethod && (
+                          <Text style={styles.paymentGroupMetaText}>
+                            Phương thức: {consultationPaymentMethod === 'momo'
+                              ? 'MoMo'
+                              : consultationPaymentMethod === 'paypal'
+                              ? 'PayPal'
+                              : consultationPaymentMethod}
+                          </Text>
+                        )}
+                      </View>
+
+                      {consultationBillStatus !== 'paid' && appointment.status !== 'cancelled' && appointment.status !== 'rejected' && (
+                        <View style={styles.paymentActionsRow}>
+                          <View style={styles.paymentMethodsRow}>
+                            <TouchableOpacity
+                              style={[
+                                styles.paymentMethodButton,
+                                selectedConsultationMethod === 'momo' && styles.paymentMethodButtonSelectedMomo,
+                              ]}
+                              onPress={() => setSelectedConsultationMethod('momo')}
+                              disabled={loading}
+                            >
+                              <Ionicons name="wallet-outline" size={18} color={selectedConsultationMethod === 'momo' ? '#fff' : '#374151'} style={{ marginRight: 6 }} />
+                              <Text
+                                style={[
+                                  styles.paymentMethodButtonText,
+                                  selectedConsultationMethod === 'momo' && styles.paymentMethodButtonTextSelected,
+                                ]}
+                              >
+                                MoMo
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                styles.paymentMethodButton,
+                                selectedConsultationMethod === 'paypal' && styles.paymentMethodButtonSelectedPaypal,
+                              ]}
+                              onPress={() => setSelectedConsultationMethod('paypal')}
+                              disabled={loading}
+                            >
+                              <Ionicons name="logo-paypal" size={18} color={selectedConsultationMethod === 'paypal' ? '#fff' : '#374151'} style={{ marginRight: 6 }} />
+                              <Text
+                                style={[
+                                  styles.paymentMethodButtonText,
+                                  selectedConsultationMethod === 'paypal' && styles.paymentMethodButtonTextSelected,
+                                ]}
+                              >
+                                PayPal
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                          <TouchableOpacity
+                            style={[
+                              styles.paymentMainButton,
+                              styles.paymentMainButtonBlue,
+                              (loading || consultationBillAmount <= 0) && styles.paymentMainButtonDisabled,
+                            ]}
+                            onPress={() =>
+                              selectedConsultationMethod === 'paypal'
+                                ? startPaypalPayment()
+                                : startMomoPayment('consultation')
+                            }
+                            disabled={loading || consultationBillAmount <= 0}
+                          >
+                            {loading ? (
+                              <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                              <>
+                                <Ionicons
+                                  name={selectedConsultationMethod === 'paypal' ? 'logo-paypal' : 'wallet-outline'}
+                                  size={18}
+                                  color="#fff"
+                                  style={{ marginRight: 8 }}
+                                />
+                                <Text style={styles.paymentMainButtonText}>
+                                  Thanh toán {formatVnd(consultationBillAmount)}
+                                </Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
                   )}
                   
                   {/* Tiền thuốc */}
-                  {(appointment.bill.medicationAmount || 0) > 0 && (
-                    <View style={styles.paymentFeeRow}>
-                      <View style={styles.paymentFeeLabelRow}>
-                        <Ionicons 
-                          name={appointment.bill.medicationStatus === 'paid' ? 'checkmark-circle' : 'time-outline'} 
-                          size={16} 
-                          color={appointment.bill.medicationStatus === 'paid' ? '#10b981' : '#f59e0b'} 
-                        />
-                        <Text style={styles.paymentFeeLabel}>Tiền thuốc</Text>
+                  {medicationBillAmount > 0 && (
+                    <View style={[styles.paymentGroup, { marginTop: 16 }]}>
+                      <View style={styles.paymentGroupHeaderRow}>
+                        <View style={styles.paymentGroupTitleRow}>
+                          <Ionicons 
+                            name={medicationBillStatus === 'paid' ? 'checkmark-circle' : 'leaf-outline'} 
+                            size={18} 
+                            color={medicationBillStatus === 'paid' ? '#10b981' : '#16a34a'} 
+                          />
+                          <Text style={styles.paymentGroupTitle}>Tiền Thuốc</Text>
+                        </View>
+                        <View style={styles.paymentGroupStatusBadge}>
+                          <Text style={styles.paymentGroupStatusText}>
+                            {medicationBillStatus === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                          </Text>
+                        </View>
                       </View>
-                      <Text style={styles.paymentFeeAmount}>{formatVnd(appointment.bill.medicationAmount)}</Text>
+                      <View style={styles.paymentGroupAmountRow}>
+                        <Text style={styles.paymentGroupAmount}>{formatVnd(medicationBillAmount)}</Text>
+                        {medicationBillStatus === 'paid' && medicationPaymentDate && (
+                          <Text style={styles.paymentGroupMetaText}>
+                            Đã thanh toán: {formatDateTime(medicationPaymentDate)}
+                          </Text>
+                        )}
+                        {medicationBillStatus === 'paid' && medicationPaymentMethod && (
+                          <Text style={styles.paymentGroupMetaText}>
+                            Phương thức: {medicationPaymentMethod === 'momo'
+                              ? 'MoMo'
+                              : medicationPaymentMethod === 'paypal'
+                              ? 'PayPal'
+                              : medicationPaymentMethod}
+                          </Text>
+                        )}
+                      </View>
+
+                      {medicationBillStatus !== 'paid' && appointment.status !== 'cancelled' && appointment.status !== 'rejected' && (
+                        <View style={styles.paymentActionsRow}>
+                          <View style={styles.paymentMethodsRow}>
+                            <TouchableOpacity
+                              style={[
+                                styles.paymentMethodButton,
+                                selectedMedicationMethod === 'momo' && styles.paymentMethodButtonSelectedMomo,
+                              ]}
+                              onPress={() => setSelectedMedicationMethod('momo')}
+                              disabled={loading}
+                            >
+                              <Ionicons name="wallet-outline" size={18} color={selectedMedicationMethod === 'momo' ? '#fff' : '#374151'} style={{ marginRight: 6 }} />
+                              <Text
+                                style={[
+                                  styles.paymentMethodButtonText,
+                                  selectedMedicationMethod === 'momo' && styles.paymentMethodButtonTextSelected,
+                                ]}
+                              >
+                                MoMo
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                styles.paymentMethodButton,
+                                selectedMedicationMethod === 'paypal' && styles.paymentMethodButtonSelectedPaypal,
+                              ]}
+                              onPress={() => setSelectedMedicationMethod('paypal')}
+                              disabled={loading}
+                            >
+                              <Ionicons name="logo-paypal" size={18} color={selectedMedicationMethod === 'paypal' ? '#fff' : '#374151'} style={{ marginRight: 6 }} />
+                              <Text
+                                style={[
+                                  styles.paymentMethodButtonText,
+                                  selectedMedicationMethod === 'paypal' && styles.paymentMethodButtonTextSelected,
+                                ]}
+                              >
+                                PayPal
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                          <TouchableOpacity
+                            style={[
+                              styles.paymentMainButton,
+                              styles.paymentMainButtonGreen,
+                              (loading || medicationBillAmount <= 0) && styles.paymentMainButtonDisabled,
+                            ]}
+                            onPress={() =>
+                              selectedMedicationMethod === 'paypal'
+                                ? startPaypalPayment()
+                                : startMomoPayment('medication')
+                            }
+                            disabled={loading || medicationBillAmount <= 0}
+                          >
+                            {loading ? (
+                              <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                              <>
+                                <Ionicons
+                                  name={selectedMedicationMethod === 'paypal' ? 'logo-paypal' : 'wallet-outline'}
+                                  size={18}
+                                  color="#fff"
+                                  style={{ marginRight: 8 }}
+                                />
+                                <Text style={styles.paymentMainButtonText}>
+                                  Thanh toán {formatVnd(medicationBillAmount)}
+                                </Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
                   )}
                   
                   {/* Phí nằm viện */}
-                  {(appointment.bill.hospitalizationAmount || 0) > 0 && (
+                  {hospitalizationBillAmount > 0 && (
                     <View style={styles.paymentFeeRow}>
                       <View style={styles.paymentFeeLabelRow}>
                         <Ionicons 
-                          name={appointment.bill.hospitalizationStatus === 'paid' ? 'checkmark-circle' : 'time-outline'} 
+                          name={hospitalizationBillStatus === 'paid' ? 'checkmark-circle' : 'time-outline'} 
                           size={16} 
-                          color={appointment.bill.hospitalizationStatus === 'paid' ? '#10b981' : '#f59e0b'} 
+                          color={hospitalizationBillStatus === 'paid' ? '#10b981' : '#f59e0b'} 
                         />
                         <Text style={styles.paymentFeeLabel}>Phí nằm viện</Text>
                       </View>
-                      <Text style={styles.paymentFeeAmount}>{formatVnd(appointment.bill.hospitalizationAmount)}</Text>
+                      <Text style={styles.paymentFeeAmount}>{formatVnd(hospitalizationBillAmount)}</Text>
                     </View>
                   )}
                   
-                  {((appointment.bill.consultationAmount || 0) > 0 || (appointment.bill.medicationAmount || 0) > 0 || (appointment.bill.hospitalizationAmount || 0) > 0) && (
-                    <View style={styles.paymentDivider} />
-                  )}
-                  
-                  <View style={styles.paymentTotalRow}>
-                    <Text style={styles.paymentTotalLabel}>Tổng hóa đơn</Text>
-                    <Text style={styles.paymentTotalAmount}>{formatVnd(appointment.bill.totalAmount || 0)}</Text>
-                  </View>
-                  
-                  {appointment.bill.overallStatus === 'partial' && (
-                    <View style={styles.paymentPartialInfo}>
-                      <Text style={styles.paymentPartialLabel}>Đã thanh toán: {formatVnd(appointment.bill.paidAmount || 0)}</Text>
-                      <Text style={[styles.paymentPartialLabel, { fontWeight: '700', color: '#dc2626' }]}>Còn lại: {formatVnd(appointment.bill.remainingAmount || 0)}</Text>
+                  {(consultationBillAmount > 0 || medicationBillAmount > 0 || hospitalizationBillAmount > 0) && (
+                    <View>
+                      <View style={styles.paymentDivider} />
+                      <View style={styles.paymentTotalRow}>
+                        <Text style={styles.paymentTotalLabel}>Tổng hóa đơn</Text>
+                        <Text style={styles.paymentTotalAmount}>{formatVnd(billTotalAmount)}</Text>
+                      </View>
                     </View>
                   )}
                   
-                  {appointment.bill.overallStatus === 'unpaid' && (appointment.bill.totalAmount || 0) > 0 && (
+                  {overallBillStatus === 'partial' && (
                     <View style={styles.paymentPartialInfo}>
-                      <Text style={[styles.paymentPartialLabel, { fontWeight: '700', color: '#dc2626' }]}>Số tiền cần thanh toán: {formatVnd(appointment.bill.totalAmount || 0)}</Text>
+                      <Text style={styles.paymentPartialLabel}>Đã thanh toán: {formatVnd(billPaidAmount)}</Text>
+                      <Text style={[styles.paymentPartialLabel, { fontWeight: '700', color: '#dc2626' }]}>Còn lại: {formatVnd(billRemainingAmount)}</Text>
+                    </View>
+                  )}
+                  
+                  {overallBillStatus === 'unpaid' && billTotalAmount > 0 && (
+                    <View style={styles.paymentPartialInfo}>
+                      <Text style={[styles.paymentPartialLabel, { fontWeight: '700', color: '#dc2626' }]}>Số tiền cần thanh toán: {formatVnd(billTotalAmount)}</Text>
                     </View>
                   )}
                   
@@ -1713,70 +2010,33 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
                     <View style={[
                       styles.paymentStatusBadge,
                       isPaymentFullyPaid(appointment) && styles.paymentStatusBadgePaid,
-                      appointment.bill.overallStatus === 'partial' && styles.paymentStatusBadgePartial
+                      overallBillStatus === 'partial' && styles.paymentStatusBadgePartial
                     ]}>
                       <Ionicons 
                         name={
                           isPaymentFullyPaid(appointment) ? 'checkmark-circle-outline' : 
-                          appointment.bill.overallStatus === 'partial' ? 'time-outline' : 
+                          overallBillStatus === 'partial' ? 'time-outline' : 
                           'time-outline'
                         } 
                         size={14} 
                         color={
                           isPaymentFullyPaid(appointment) ? '#10b981' : 
-                          appointment.bill.overallStatus === 'partial' ? '#f59e0b' : 
+                          overallBillStatus === 'partial' ? '#f59e0b' : 
                           '#f59e0b'
                         } 
                       />
                       <Text style={[
                         styles.paymentStatusText,
                         isPaymentFullyPaid(appointment) && styles.paymentStatusTextPaid,
-                        appointment.bill.overallStatus === 'partial' && styles.paymentStatusTextPartial
+                        overallBillStatus === 'partial' && styles.paymentStatusTextPartial
                       ]}>
                         {isPaymentFullyPaid(appointment) ? 'Đã thanh toán' : 
-                         appointment.bill.overallStatus === 'partial' ? 'Đã thanh toán một phần' : 
+                         overallBillStatus === 'partial' ? 'Đã thanh toán một phần' : 
                          'Chưa thanh toán'}
                       </Text>
                     </View>
                   </View>
                   
-                  {/* Show payment buttons if not fully paid and appointment is not completed/cancelled/rejected */}
-                  {(!isPaymentFullyPaidForActions(appointment) && 
-                    appointment.status !== 'completed' && 
-                    appointment.status !== 'cancelled' && 
-                    appointment.status !== 'rejected' &&
-                    ((appointment.bill?.remainingAmount ?? 0) > 0 || appointment.bill?.overallStatus === 'unpaid' || appointment.bill?.overallStatus === 'partial')) && (
-                    <View style={styles.paymentActionsRow}>
-                      <TouchableOpacity
-                        style={[styles.paymentActionButton, styles.paypalActionButton]}
-                        onPress={() => startPaypalPayment()}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <>
-                            <Ionicons name="logo-paypal" size={18} color="#fff" style={{ marginRight: 6 }} />
-                            <Text style={styles.paymentActionText}>PayPal</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.paymentActionButton, styles.momoActionButton]}
-                        onPress={startMomoPayment}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <>
-                            <Ionicons name="wallet-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
-                            <Text style={styles.paymentActionText}>MoMo</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  )}
                 </>
               ) : (
                 <>
@@ -1825,49 +2085,72 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
                       <Text style={styles.paymentMethodValue}>{getPaymentMethodText(appointment.paymentMethod)}</Text>
                     </View>
                   )}
-                  {/* Show payment buttons if not fully paid and appointment is not completed/cancelled/rejected */}
-                  {(!isPaymentFullyPaidForActions(appointment) && 
-                    appointment.status !== 'completed' && 
-                    appointment.status !== 'cancelled' && 
-                    appointment.status !== 'rejected' &&
-                    appointment.paymentStatus !== 'paid') && (
-                    <View style={styles.paymentActionsRow}>
-                      <TouchableOpacity
-                        style={[styles.paymentActionButton, styles.paypalActionButton]}
-                        onPress={() => startPaypalPayment()}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <>
-                            <Ionicons name="logo-paypal" size={18} color="#fff" style={{ marginRight: 6 }} />
-                            <Text style={styles.paymentActionText}>PayPal</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.paymentActionButton, styles.momoActionButton]}
-                        onPress={startMomoPayment}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <>
-                            <Ionicons name="wallet-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
-                            <Text style={styles.paymentActionText}>MoMo</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  {/* Không hiển thị nút thanh toán tổng trong chế độ fallback */}
                 </>
               )}
             </View>
           </View>
         )}
       </ScrollView>
+      {reviewSelectionVisible && appointment && (
+        <Modal
+          visible={reviewSelectionVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeReviewSelectionModal}
+        >
+          <View style={styles.reviewModalOverlay}>
+            <View style={styles.reviewModalContainer}>
+              <View style={styles.reviewModalHeader}>
+                <Text style={styles.reviewModalTitle}>Đánh giá lịch khám</Text>
+                <TouchableOpacity onPress={closeReviewSelectionModal} style={styles.reviewModalCloseButton}>
+                  <Ionicons name="close" size={20} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.reviewModalDescription}>
+                Vui lòng chọn đối tượng mà bạn muốn gửi đánh giá cho lịch hẹn này.
+              </Text>
+              <View style={styles.reviewModalOptions}>
+                {appointment.doctorId && (
+                  <TouchableOpacity
+                    style={styles.reviewOptionButton}
+                    onPress={() => handleSelectReviewTarget('doctor')}
+                  >
+                    <View style={[styles.reviewOptionIcon, { backgroundColor: '#eef2ff' }]}>
+                      <Ionicons name="medkit-outline" size={20} color="#4c1d95" />
+                    </View>
+                    <View style={styles.reviewOptionTextWrapper}>
+                      <Text style={styles.reviewOptionTitle}>Đánh giá bác sĩ</Text>
+                      <Text style={styles.reviewOptionSubtitle}>
+                        {(appointment.doctorId.title ? `${appointment.doctorId.title} ` : '') +
+                          (appointment.doctorId.user?.fullName || 'Bác sĩ phụ trách')}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                  </TouchableOpacity>
+                )}
+                {appointment.hospitalId && (
+                  <TouchableOpacity
+                    style={styles.reviewOptionButton}
+                    onPress={() => handleSelectReviewTarget('hospital')}
+                  >
+                    <View style={[styles.reviewOptionIcon, { backgroundColor: '#ecfeff' }]}>
+                      <Ionicons name="business-outline" size={20} color="#0f766e" />
+                    </View>
+                    <View style={styles.reviewOptionTextWrapper}>
+                      <Text style={styles.reviewOptionTitle}>Đánh giá chi nhánh</Text>
+                      <Text style={styles.reviewOptionSubtitle}>
+                        {appointment.hospitalId.name || 'Chi nhánh'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
       {cancelModalVisible && appointment && (
         <Modal
           visible={cancelModalVisible}
@@ -2380,26 +2663,98 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   paymentActionsRow: {
+    marginTop: 16,
+    gap: 12,
+  },
+  paymentGroup: {
+    paddingVertical: 12,
+  },
+  paymentGroupHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  paymentGroupTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  paymentGroupTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  paymentGroupStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#fef3c7',
+  },
+  paymentGroupStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400e',
+  },
+  paymentGroupAmountRow: {
+    marginBottom: 4,
+  },
+  paymentGroupAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  paymentGroupMetaText: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#4b5563',
+  },
+  paymentMethodsRow: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 16,
   },
-  paymentActionButton: {
+  paymentMethodButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
+    backgroundColor: '#e5e7eb',
   },
-  paypalActionButton: {
+  paymentMethodButtonSelectedMomo: {
+    backgroundColor: '#ea4c89',
+  },
+  paymentMethodButtonSelectedPaypal: {
     backgroundColor: '#2563eb',
   },
-  momoActionButton: {
-    backgroundColor: '#ae2070',
+  paymentMethodButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
   },
-  paymentActionText: {
-    color: '#fff',
+  paymentMethodButtonTextSelected: {
+    color: '#ffffff',
+  },
+  paymentMainButton: {
+    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentMainButtonBlue: {
+    backgroundColor: '#2563eb',
+  },
+  paymentMainButtonGreen: {
+    backgroundColor: '#16a34a',
+  },
+  paymentMainButtonDisabled: {
+    opacity: 0.6,
+  },
+  paymentMainButtonText: {
+    color: '#ffffff',
     fontWeight: '700',
     fontSize: 14,
   },
@@ -2522,27 +2877,71 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#10b981',
   },
-  prescriptionPaymentButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  prescriptionPaymentButton: {
+  reviewModalOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  reviewModalContainer: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 20,
+  },
+  reviewModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    gap: 6,
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  momoPrescriptionButton: {
-    backgroundColor: '#ae2070',
+  reviewModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
   },
-  prescriptionPaymentButtonText: {
-    color: '#fff',
+  reviewModalCloseButton: {
+    padding: 4,
+  },
+  reviewModalDescription: {
     fontSize: 14,
-    fontWeight: '600',
+    color: '#4b5563',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  reviewModalOptions: {
+    gap: 12,
+  },
+  reviewOptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: '#f9fafb',
+  },
+  reviewOptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  reviewOptionTextWrapper: {
+    flex: 1,
+  },
+  reviewOptionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  reviewOptionSubtitle: {
+    fontSize: 13,
+    color: '#6b7280',
   },
   cancelModalOverlay: {
     flex: 1,

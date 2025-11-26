@@ -13,179 +13,165 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Doctor, apiService } from '../services/api';
-import { AppIcons, IconColors, IconSizes } from '../config/icons';
-import { useAuth } from '../contexts/AuthContext';
+import { ServiceItem, apiService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 type Props = {
   navigation: any;
 };
 
-export default function DoctorListScreen({ navigation }: Props) {
+export default function ServiceListScreen({ navigation }: Props) {
   const { user } = useAuth();
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
+  const insets = useSafeAreaInsets();
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [filteredServices, setFilteredServices] = useState<ServiceItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
-  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('all');
-  const [specialties, setSpecialties] = useState<string[]>([]);
+  const [priceRange, setPriceRange] = useState<string>('all');
 
   useEffect(() => {
-    loadDoctors();
+    loadServices();
   }, []);
 
   useEffect(() => {
-    filterDoctors();
-  }, [searchQuery, selectedFilter, selectedSpecialty, doctors]);
+    filterServices();
+  }, [searchQuery, selectedFilter, priceRange, services]);
 
-  const loadDoctors = async () => {
+  const loadServices = async () => {
     try {
       setLoading(true);
-      console.log('Loading doctors...');
-      const response = await apiService.getDoctors({ limit: 100 });
-      console.log('Doctors response:', response);
+      console.log('Loading services...');
+      const response = await apiService.getServices({ limit: 100 });
+      console.log('Services response:', response);
       
       if (response.success && response.data) {
         // Handle different response structures
-        let doctorsData: Doctor[] = [];
-        if ('doctors' in response.data) {
-          doctorsData = response.data.doctors || [];
+        let servicesData: ServiceItem[] = [];
+        if ('services' in response.data) {
+          servicesData = response.data.services || [];
         } else if ('data' in response.data) {
-          doctorsData = (response.data as any).data || [];
+          servicesData = response.data.data || [];
         } else if (Array.isArray(response.data)) {
-          doctorsData = response.data;
+          servicesData = response.data;
         }
         
-        console.log('Doctors data:', doctorsData);
-        setDoctors(doctorsData);
-        
-        // Extract unique specialties
-        const uniqueSpecialties = [...new Set(
-          doctorsData
-            .map((d: Doctor) => d.specialtyId?.name)
-            .filter(Boolean)
-        )] as string[];
-        setSpecialties(['all', ...uniqueSpecialties]);
+        console.log('Services data:', servicesData);
+        setServices(servicesData);
       } else {
-        console.log('No doctors data found');
-        setDoctors([]);
-        setSpecialties(['all']);
+        console.log('No services data found');
+        setServices([]);
       }
     } catch (error) {
-      console.error('Error loading doctors:', error);
-      setDoctors([]);
-      setSpecialties(['all']);
+      console.error('Error loading services:', error);
+      Alert.alert('Lỗi', 'Không thể tải danh sách dịch vụ. Vui lòng thử lại.');
+      setServices([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filterDoctors = () => {
-    console.log('Filtering doctors:', {
-      totalDoctors: doctors.length,
-      searchQuery,
-      selectedFilter,
-      selectedSpecialty
-    });
-    
-    let filtered = doctors;
+  const filterServices = () => {
+    let filtered = services;
 
     // Filter by search query
     if (searchQuery.trim()) {
-      filtered = filtered.filter(doctor =>
-        doctor.user?.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doctor.specialtyId?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doctor.hospitalId?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+      filtered = filtered.filter(service =>
+        service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (service.description && service.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (service.shortDescription && service.shortDescription.toLowerCase().includes(searchQuery.toLowerCase()))
       );
-      console.log('After search filter:', filtered.length);
     }
 
     // Filter by active status
     if (selectedFilter === 'active') {
-      filtered = filtered.filter(doctor => doctor.isAvailable !== false);
-      console.log('After active filter:', filtered.length);
+      filtered = filtered.filter(service => service.isActive !== false);
     }
 
-    // Filter by specialty
-    if (selectedSpecialty !== 'all') {
-      filtered = filtered.filter(doctor => doctor.specialtyId?.name === selectedSpecialty);
-      console.log('After specialty filter:', filtered.length);
+    // Filter by price range
+    if (priceRange !== 'all') {
+      switch (priceRange) {
+        case 'low':
+          filtered = filtered.filter(service => service.price < 500000);
+          break;
+        case 'medium':
+          filtered = filtered.filter(service => service.price >= 500000 && service.price < 2000000);
+          break;
+        case 'high':
+          filtered = filtered.filter(service => service.price >= 2000000);
+          break;
+      }
     }
 
-    console.log('Final filtered doctors:', filtered.length);
-    setFilteredDoctors(filtered);
+    setFilteredServices(filtered);
   };
 
-  const handleDoctorPress = (doctor: Doctor) => {
-    console.log('Doctor pressed:', doctor.user?.fullName);
-    navigation.navigate('DoctorDetail', { id: doctor._id });
+  const handleServicePress = (service: ServiceItem) => {
+    console.log('Service pressed:', service.name);
+    navigation.navigate('ServiceDetail', { serviceId: service._id });
   };
 
   const handleBackPress = () => {
     navigation.goBack();
   };
 
-  const renderDoctorCard = (doctor: Doctor) => (
+  const renderServiceCard = (service: ServiceItem) => (
     <TouchableOpacity
-      key={doctor._id}
-      style={styles.doctorCard}
-      onPress={() => handleDoctorPress(doctor)}
+      key={service._id}
+      style={styles.serviceCard}
+      onPress={() => handleServicePress(service)}
       activeOpacity={0.7}
     >
-      <View style={styles.avatarContainer}>
-        {doctor.user?.avatarUrl ? (
-          <Image
-            source={{ uri: doctor.user.avatarUrl }}
-            style={styles.doctorAvatar}
-            defaultSource={{ uri: 'https://placehold.co/200x200' }}
-          />
-        ) : (
-          <View style={styles.defaultAvatar}>
-            <Ionicons name={AppIcons.user} size={IconSizes.xl} color={IconColors.primary} />
-          </View>
+      <Image
+        source={{
+          uri: service.imageUrl || service.image?.secureUrl || 'https://placehold.co/200x120',
+        }}
+        style={styles.serviceImage}
+        defaultSource={{ uri: 'https://placehold.co/200x120' }}
+      />
+      <View style={styles.serviceContent}>
+        <Text style={styles.serviceName} numberOfLines={2}>
+          {service.name}
+        </Text>
+        {(service.description || service.shortDescription) && (
+          <Text style={styles.serviceDescription} numberOfLines={2}>
+            {service.description || service.shortDescription}
+          </Text>
         )}
-      </View>
-      <View style={styles.doctorContent}>
-        <Text style={styles.doctorName} numberOfLines={1}>
-          {(doctor.title || 'BS.').replace(/CK[0-9]+/g, '').trim()} {doctor.user?.fullName || 'Chưa cập nhật'}
-        </Text>
-        <Text style={styles.specialty} numberOfLines={1}>
-          {doctor.specialtyId?.name || 'Đang cập nhật chuyên khoa'}
-        </Text>
-        <Text style={styles.hospital} numberOfLines={1}>
-          {doctor.hospitalId?.name || 'Đang cập nhật bệnh viện'}
-        </Text>
-        <View style={styles.ratingContainer}>
-          <Ionicons name={AppIcons.star} size={12} color={IconColors.warning} />
-          <Text style={styles.rating}>
-            {doctor.averageRating ? Number(doctor.averageRating).toFixed(1) : 'N/A'}
+        <View style={styles.priceContainer}>
+          <Text style={styles.servicePrice}>
+            {service.price.toLocaleString('vi-VN')}đ
           </Text>
-          <Text style={styles.experience}>
-            • {typeof doctor.experience === 'number' ? `${doctor.experience} năm kinh nghiệm` : 'Chưa cập nhật'}
-          </Text>
-        </View>
-        <View style={styles.feeContainer}>
-          <Text style={styles.consultationFee}>
-            {doctor.consultationFee ? `${doctor.consultationFee.toLocaleString('vi-VN')}đ` : 'Liên hệ'}
-          </Text>
+          {service.specialtyId && (
+            <Text style={styles.specialtyName}>
+              {typeof service.specialtyId === 'string' ? service.specialtyId : service.specialtyId.name}
+            </Text>
+          )}
         </View>
         <TouchableOpacity 
-          style={styles.consultButton}
-          onPress={(e) => {
-            e.stopPropagation();
+          style={styles.bookingButton} 
+          onPress={() => {
             if (!user) {
-              Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để đặt lịch khám', [
+              Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để đặt khám', [
                 { text: 'Hủy', style: 'cancel' },
                 { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
               ]);
             } else {
-              navigation.navigate('Booking');
+              // Navigate to booking screen with pre-filled service data
+              const specialtyId = typeof service.specialtyId === 'object' 
+                ? service.specialtyId._id 
+                : service.specialtyId;
+              
+              navigation.navigate('Booking', {
+                serviceId: service._id,
+                specialtyId: specialtyId || undefined,
+              });
             }
           }}
         >
-          <Text style={styles.consultButtonText}>Đặt lịch ngay</Text>
+          <Text style={styles.bookingButtonText}>Đặt khám ngay</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -198,26 +184,26 @@ export default function DoctorListScreen({ navigation }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-          <Ionicons name={AppIcons.back} size={IconSizes.md} color={IconColors.dark} />
+          <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Danh sách bác sĩ</Text>
+        <Text style={styles.headerTitle}>Danh sách dịch vụ</Text>
         <View style={styles.placeholder} />
       </View>
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
-          <Ionicons name={AppIcons.search} size={IconSizes.sm} color={IconColors.default} />
+          <Ionicons name="search" size={20} color="#666" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm kiếm bác sĩ..."
+            placeholder="Tìm kiếm dịch vụ..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor="#999"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name={AppIcons.close} size={IconSizes.sm} color={IconColors.default} />
+              <Ionicons name="close-circle" size={20} color="#666" />
             </TouchableOpacity>
           )}
         </View>
@@ -257,54 +243,93 @@ export default function DoctorListScreen({ navigation }: Props) {
         </ScrollView>
       </View>
 
-      {/* Specialty Filter */}
-      <View style={styles.specialtyFilterContainer}>
+      {/* Price Range Filter */}
+      <View style={styles.priceFilterContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-          {specialties.map((specialty) => (
-            <TouchableOpacity
-              key={specialty}
-              style={[
-                styles.filterButton,
-                selectedSpecialty === specialty && styles.filterButtonActive
-              ]}
-              onPress={() => setSelectedSpecialty(specialty)}
-            >
-              <Text style={[
-                styles.filterButtonText,
-                selectedSpecialty === specialty && styles.filterButtonTextActive
-              ]}>
-                {specialty === 'all' ? 'Tất cả chuyên khoa' : specialty}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              priceRange === 'all' && styles.filterButtonActive
+            ]}
+            onPress={() => setPriceRange('all')}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              priceRange === 'all' && styles.filterButtonTextActive
+            ]}>
+              Tất cả giá
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              priceRange === 'low' && styles.filterButtonActive
+            ]}
+            onPress={() => setPriceRange('low')}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              priceRange === 'low' && styles.filterButtonTextActive
+            ]}>
+              Dưới 500k
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              priceRange === 'medium' && styles.filterButtonActive
+            ]}
+            onPress={() => setPriceRange('medium')}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              priceRange === 'medium' && styles.filterButtonTextActive
+            ]}>
+              500k - 2tr
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              priceRange === 'high' && styles.filterButtonActive
+            ]}
+            onPress={() => setPriceRange('high')}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              priceRange === 'high' && styles.filterButtonTextActive
+            ]}>
+              Trên 2tr
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
       {/* Results Count */}
       <View style={styles.resultsContainer}>
         <Text style={styles.resultsText}>
-          {filteredDoctors.length} bác sĩ
+          {filteredServices.length} dịch vụ
         </Text>
       </View>
 
-      {/* Doctor List */}
+      {/* Service List */}
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={IconColors.primary} />
+          <ActivityIndicator size="large" color="#0a84ff" />
           <Text style={styles.loadingText}>Đang tải...</Text>
         </View>
       ) : (
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
           showsVerticalScrollIndicator={false}
         >
-          {filteredDoctors.length > 0 ? (
-            filteredDoctors.map(renderDoctorCard)
+          {filteredServices.length > 0 ? (
+            filteredServices.map(renderServiceCard)
           ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name={AppIcons.doctorOutline} size={IconSizes.xxl} color={IconColors.light} />
-              <Text style={styles.emptyText}>Không tìm thấy bác sĩ nào</Text>
+              <Ionicons name="construct" size={64} color="#ccc" />
+              <Text style={styles.emptyText}>Không tìm thấy dịch vụ nào</Text>
               <Text style={styles.emptySubtext}>
                 Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc
               </Text>
@@ -368,7 +393,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
-  specialtyFilterContainer: {
+  priceFilterContainer: {
     backgroundColor: '#fff',
     paddingVertical: 8,
     borderBottomWidth: 1,
@@ -411,7 +436,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 24,
   },
-  doctorCard: {
+  serviceCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -425,76 +450,53 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     overflow: 'hidden',
-    minHeight: 140,
+    minHeight: 120,
   },
-  avatarContainer: {
-    width: 100,
-    height: 140,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  doctorAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  serviceImage: {
+    width: 120,
+    height: 155,
     backgroundColor: '#f0f0f0',
+    alignSelf: 'center',
   },
-  defaultAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#f0f8ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#0a84ff',
-  },
-  doctorContent: {
+  serviceContent: {
     flex: 1,
     padding: 12,
     justifyContent: 'space-between',
   },
-  doctorName: {
+  serviceName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 4,
+    lineHeight: 20,
   },
-  specialty: {
-    fontSize: 14,
-    color: '#0a84ff',
-    marginBottom: 2,
-  },
-  hospital: {
+  serviceDescription: {
     fontSize: 12,
     color: '#666',
-    marginBottom: 6,
+    marginBottom: 8,
+    lineHeight: 16,
   },
-  ratingContainer: {
+  priceContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
-  },
-  rating: {
-    fontSize: 12,
-    color: '#ff9500',
-    fontWeight: '600',
-    marginLeft: 4,
-    marginRight: 8,
-  },
-  experience: {
-    fontSize: 12,
-    color: '#666',
-  },
-  feeContainer: {
     marginBottom: 8,
   },
-  consultationFee: {
-    fontSize: 14,
+  servicePrice: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#0a84ff',
   },
-  consultButton: {
+  specialtyName: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    backgroundColor: '#f0f8ff',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  bookingButton: {
     backgroundColor: '#0a84ff',
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -509,7 +511,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  consultButtonText: {
+  bookingButtonText: {
     color: '#fff',
     fontSize: 13,
     fontWeight: '600',

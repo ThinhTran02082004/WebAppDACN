@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Home from '../screens/Home';
 import AccountScreen from '../screens/Account';
-import AppointmentScheduleScreen from '../screens/Schedule';
+import AppointmentScheduleScreen from '../screens/Schedule/Schedule';
 import MedsScreen from '../screens/Meds';
 import MessagesScreen from '../screens/Messages';
 import Ionicons from '@react-native-vector-icons/ionicons';

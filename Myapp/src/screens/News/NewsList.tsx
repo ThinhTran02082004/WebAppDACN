@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { NewsItem, apiService } from '../services/api';
-import NewsCard from '../components/NewsCard';
+import { NewsItem, apiService } from '../../services/api';
+import NewsCard from '../../components/NewsCard';
 
 type Props = {
   navigation: any;
@@ -41,15 +41,17 @@ export default function NewsListScreen({ navigation }: Props) {
       const response = await apiService.getNews({ limit: 100, isPublished: true as any });
       console.log('News response:', response);
       
-      if (response.success && response.data) {
-        // Handle different response structures
-        let newsData = [];
-        if ('news' in response.data) {
-          newsData = response.data.news || [];
-        } else if ('data' in response.data) {
-          newsData = response.data.data || [];
-        } else if (Array.isArray(response.data)) {
-          newsData = response.data;
+      if (response.success && (response as any).data) {
+        // Handle different response structures (API có thể trả về nhiều dạng)
+        let newsData: NewsItem[] = [];
+        const respData: any = (response as any).data;
+
+        if (respData && 'news' in respData) {
+          newsData = respData.news || [];
+        } else if (respData && 'data' in respData) {
+          newsData = respData.data || [];
+        } else if (Array.isArray(respData)) {
+          newsData = respData as NewsItem[];
         }
         
         console.log('News data:', newsData);
@@ -107,7 +109,7 @@ export default function NewsListScreen({ navigation }: Props) {
   const renderNewsCard = (newsItem: NewsItem) => (
     <NewsCard
       key={newsItem._id}
-      newsItem={newsItem}
+      news={newsItem}
       onPress={handleNewsPress}
     />
   );

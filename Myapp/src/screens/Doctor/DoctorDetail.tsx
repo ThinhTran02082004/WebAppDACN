@@ -13,8 +13,8 @@ import {
   Alert,
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { apiService, Doctor } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
+import { apiService, Doctor } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -171,8 +171,23 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
       navigation.navigate('Login');
       return;
     }
-    // Navigate to booking screen
-    navigation.navigate('Booking');
+    // Navigate to booking screen with pre-filled data
+    if (doctor) {
+      const specialtyId = typeof doctor.specialtyId === 'object' 
+        ? doctor.specialtyId._id 
+        : doctor.specialtyId;
+      const hospitalId = typeof doctor.hospitalId === 'object' 
+        ? doctor.hospitalId._id 
+        : doctor.hospitalId;
+      
+      navigation.navigate('Booking', {
+        doctorId: doctor._id,
+        specialtyId: specialtyId || undefined,
+        hospitalId: hospitalId || undefined,
+      });
+    } else {
+      navigation.navigate('Booking');
+    }
   };
 
   const handleVideoCall = () => {

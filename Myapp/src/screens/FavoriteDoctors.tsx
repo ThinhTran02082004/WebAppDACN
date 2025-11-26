@@ -55,7 +55,21 @@ export default function FavoriteDoctorsScreen() {
 
   const handleBack = () => (navigation as any).goBack();
   const handleCardPress = (doc: any) => (navigation as any).navigate('DoctorDetail', { id: doc._id });
-  const handleConsultPress = (_doc: any) => (navigation as any).navigate('Booking');
+  const handleConsultPress = (doc: any) => {
+    // Navigate to booking screen with pre-filled doctor data
+    const specialtyId = typeof doc.specialtyId === 'object' 
+      ? doc.specialtyId._id 
+      : doc.specialtyId;
+    const hospitalId = typeof doc.hospitalId === 'object' 
+      ? doc.hospitalId._id 
+      : doc.hospitalId;
+    
+    (navigation as any).navigate('Booking', {
+      doctorId: doc._id,
+      specialtyId: specialtyId || undefined,
+      hospitalId: hospitalId || undefined,
+    });
+  };
 
   return (
     <SafeAreaView style={styles.container}>

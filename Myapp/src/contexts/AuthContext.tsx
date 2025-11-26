@@ -9,6 +9,7 @@ type AuthContextData = {
   loading: boolean;
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signInWithGoogle: (token: string, tokenType?: 'idToken' | 'accessToken', rememberMe?: boolean) => Promise<void>;
+  signInWithFacebook: (accessToken: string, userID: string, rememberMe?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
   signUp: (data: any) => Promise<void>;
   resendVerification: (email: string) => Promise<void>;
@@ -121,6 +122,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const signInWithFacebook = async (accessToken: string, userID: string, rememberMe = false) => {
+    try {
+      const res = await apiService.facebookLogin(accessToken, userID);
+      if (res.success && res.data?.token) {
+        if (rememberMe) await AsyncStorage.setItem('token', res.data.token);
+        apiService.setToken(res.data.token);
+        const me = await apiService.getCurrentUser();
+        if (me.success) setUser(me.data || null);
+      } else {
+        throw new Error(res.message || 'Facebook login failed');
+      }
+    } catch (e) {
+      throw e;
+    }
+  };
+
   const resendVerification = async (email: string) => {
     const res = await apiService.resendVerification(email);
     if (!res.success) throw new Error(res.message || 'Resend verification failed');
@@ -131,7 +148,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp, resendVerification, signInWithGoogle, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp, resendVerification, signInWithGoogle, signInWithFacebook, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

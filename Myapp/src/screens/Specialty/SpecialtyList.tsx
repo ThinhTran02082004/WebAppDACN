@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Specialty, apiService, Doctor, ServiceItem } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
+import { Specialty, apiService, Doctor, ServiceItem } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 type Props = {
   navigation: any;
@@ -228,7 +228,10 @@ export default function SpecialtyListScreen({ navigation }: Props) {
                 { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
               ]);
             } else {
-              navigation.navigate('Booking');
+              // Navigate to booking screen with pre-filled specialty
+              navigation.navigate('Booking', {
+                specialtyId: specialty._id,
+              });
             }
           }}
         >

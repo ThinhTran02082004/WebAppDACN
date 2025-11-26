@@ -158,6 +158,17 @@ class ApiService {
       } catch {
         // ignore
       }
+      // If data is FormData, remove Content-Type header to let axios set it automatically
+      // This is important for React Native FormData to work correctly
+      if (config.data instanceof FormData && config.headers) {
+        // Remove Content-Type from both common headers and request-specific headers
+        delete (config.headers as any)['Content-Type'];
+        delete (config.headers as any)['content-type'];
+        // Also remove from defaults if present
+        if ((this.client.defaults.headers as any).common?.['Content-Type']) {
+          delete (config.headers as any)['Content-Type'];
+        }
+      }
       // add start time for logging
       (config as any).__startTime = Date.now();
       console.log(`[api] -> ${config.method?.toUpperCase() || 'GET'} ${config.baseURL || ''}${config.url}`);
@@ -404,6 +415,24 @@ class ApiService {
     }
   }
 
+  async createDoctorReview(payload: { appointmentId: string; doctorId: string; rating: number; content: string }): Promise<ApiResponse<any>> {
+    try {
+      const res = await this.client.post('/reviews/doctor', payload);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async createHospitalReview(payload: { appointmentId: string; hospitalId: string; rating: number; content: string }): Promise<ApiResponse<any>> {
+    try {
+      const res = await this.client.post('/reviews/hospital', payload);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
   async getDoctorSchedules(doctorId: string): Promise<ApiResponse<any[]>> {
     try {
       await this.probeBackend();
@@ -448,9 +477,9 @@ class ApiService {
     }
   }
 
-  async facebookLogin(facebookToken: string): Promise<ApiResponse<{ user: any; token: string }>> {
+  async facebookLogin(accessToken: string, userID: string): Promise<ApiResponse<{ user: any; token: string }>> {
     try {
-      const res = await this.client.post('/auth/facebook', { token: facebookToken });
+      const res = await this.client.post('/auth/facebook/token', { accessToken, userID });
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);
@@ -531,6 +560,8 @@ class ApiService {
 
   async uploadAvatar(uri: string, type: string = 'image/jpeg', name: string = 'avatar.jpg'): Promise<ApiResponse<any>> {
     try {
+      console.log('[api] Starting avatar upload:', { uri, type, name });
+      
       // Create FormData for multipart/form-data upload
       const formData = new FormData();
       formData.append('avatar', {
@@ -539,10 +570,50 @@ class ApiService {
         name: name,
       } as any);
 
-      // Don't set Content-Type header - axios will set it automatically with boundary
-      const res = await this.client.post('/auth/profile/avatar', formData);
+      // Get authorization token
+      let authHeader = '';
+      try {
+        const inMemoryToken = (this.client.defaults.headers as any).Authorization;
+        if (inMemoryToken) {
+          authHeader = inMemoryToken;
+        } else {
+          const token = await AsyncStorage.getItem('token');
+          if (token) {
+            authHeader = `Bearer ${token}`;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // Create a separate axios instance for file uploads to avoid header conflicts
+      // This ensures FormData is handled correctly in React Native
+      // Use BASE_URL directly to ensure correct URL for Android (10.0.2.2) vs iOS (localhost)
+      // Recalculate BASE_URL to ensure it's correct for current platform
+      const currentBaseURL = Platform.OS === 'android' 
+        ? "http://10.0.2.2:5000/api" 
+        : "http://localhost:5000/api";
+      
+      const uploadClient = axios.create({
+        baseURL: currentBaseURL,
+        timeout: 30000, // Increase timeout for file uploads
+        headers: authHeader ? { Authorization: authHeader } : {},
+        // Don't set Content-Type - let axios/FormData set it automatically
+      });
+
+      console.log('[api] Uploading to:', `${currentBaseURL}/auth/profile/avatar`);
+      console.log('[api] Platform:', Platform.OS, 'Current BASE_URL:', currentBaseURL);
+      
+      const res = await uploadClient.post('/auth/profile/avatar', formData);
       return this.handleResponse(res);
     } catch (e) {
+      console.error('[api] Upload avatar error details:', {
+        message: (e as any)?.message,
+        code: (e as any)?.code,
+        response: (e as any)?.response?.data,
+        status: (e as any)?.response?.status,
+        stack: (e as any)?.stack,
+      });
       this.handleError(e);
     }
   }
@@ -672,6 +743,17 @@ class ApiService {
     }
   }
 
+  // Billing - get bill by appointment (used by mobile app, same as web UserBilling)
+  async getAppointmentBill(appointmentId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/billing/appointment/${appointmentId}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
   async checkMomoStatus(orderId: string): Promise<ApiResponse<{ payment: { status: string; appointmentId: string } }>> {
     try {
       const res = await this.client.get(`/payments/momo/status/${orderId}`);
@@ -737,6 +819,22 @@ class ApiService {
     try {
       await this.probeBackend();
       const res = await this.client.post(`/video-rooms/${roomId}/end`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getVideoCallHistory(params?: {
+    page?: number;
+    limit?: number;
+    appointmentId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get('/video-rooms/history', { params });
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);

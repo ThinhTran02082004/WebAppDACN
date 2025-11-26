@@ -11,10 +11,13 @@ import {
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { SpecialtyCard } from '../components/SpecialtyCard';
-import HeaderSearch from '../components/HeaderSearch';
+import HeaderSearch from '../components/Header';
 import QuickAccess from '../components/QuickAccess';
 import DoctorCard from '../components/DoctorCard';
 import Banner from '../components/Banner';
+import ServiceCard from '../components/ServiceCard';
+import NewsCard from '../components/NewsCard';
+import FacilityCard from '../components/FacilityCard';
 import { apiService, Hospital, Doctor, ServiceItem, NewsItem } from '../services/api';
 import type { Specialty } from '../types/specialty';
 import { API_BASE, clearApiHost, resetApiHost } from '../config';
@@ -38,9 +41,10 @@ const quickAccessItems = [
   },
   { 
     id: '3',
-    title: 'Video call', 
-    icon: AppIcons.video,
+    title: 'Dịch vụ', 
+    icon: AppIcons.service,
   },
+
   { 
     id: '4',
     title: 'Bác sĩ', 
@@ -52,9 +56,19 @@ const quickAccessItems = [
     icon: AppIcons.news,
   },
   { 
-    id: '7',
-    title: 'Dịch vụ', 
-    icon: AppIcons.service,
+    id: '3',
+    title: 'Lịch sử\nVideo Call', 
+    icon: AppIcons.video,
+  },
+  { 
+    id: '8',
+    title: 'Bác sĩ\nyêu thích', 
+    icon: AppIcons.favorite,
+  },
+  { 
+    id: '9',
+    title: 'Lịch sử\nthanh toán', 
+    icon: AppIcons.card,
   },
 
 ];
@@ -103,11 +117,11 @@ export default function Home({ navigation }: Props) {
       setDoctors([]);
        
             const [hospitalsResponse, doctorsResponse, specialtiesResponse, servicesResponse, newsResponse] = await Promise.all([
-        apiService.getHospitals({ limit: 10, isActive: true }),
-        apiService.getDoctors({}),
-        apiService.getSpecialties({ limit: 12, isActive: true }),
-        apiService.getServices({ limit: 12, isActive: true }),
-        apiService.getNews({ limit: 6, isPublished: true as any })
+        apiService.getHospitals({ limit: 5, isActive: true }),
+        apiService.getDoctors({ limit: 5 }),
+        apiService.getSpecialties({ limit: 10, isActive: true }),
+        apiService.getServices({ limit: 10, isActive: true }),
+        apiService.getNews({})
       ]);
       
       // Defensive: API may return unexpected shapes or undefined data
@@ -219,7 +233,9 @@ export default function Home({ navigation }: Props) {
         navigation.navigate('SpecialtyList');
         break;
       case '3':
-        break;
+          // Dịch vụ
+          navigation.navigate('ServiceList');
+          break;
       case '4':
         // Đặt lịch khám với bác sĩ
         navigation.navigate('DoctorList');
@@ -229,8 +245,21 @@ export default function Home({ navigation }: Props) {
         navigation.navigate('NewsList');
         break;
       case '7':
-        // Dịch vụ
-        navigation.navigate('ServiceList');
+          // Lịch sử Video Call
+          requireLogin(() => {
+            navigation.navigate('VideoCallHistory' as any);
+          });
+      case '8':
+        // Bác sĩ yêu thích
+        requireLogin(() => {
+          navigation.navigate('FavoriteDoctors' as any);
+        });
+        break;
+      case '9':
+        // Lịch sử thanh toán
+        requireLogin(() => {
+          navigation.navigate('PaymentHistory' as any);
+        });
         break;
       default:
         console.log('Unknown function');
@@ -245,7 +274,10 @@ export default function Home({ navigation }: Props) {
     if (!user) {
       navigation.navigate('Login');
     } else {
-      navigation.navigate('Booking');
+      // Navigate to booking screen with pre-filled hospital
+      navigation.navigate('Booking', {
+        hospitalId: facility._id,
+      });
     }
   };
 
@@ -253,13 +285,28 @@ export default function Home({ navigation }: Props) {
     if (!user) {
       navigation.navigate('Login');
     } else {
-      navigation.navigate('Booking');
+      // Navigate to booking screen with pre-filled specialty
+      navigation.navigate('Booking', {
+        specialtyId: specialty._id,
+      });
     }
   };
 
   const handleDoctorConsultPress = (doctor: any) => {
     requireLogin(() => {
-      navigation.navigate('Booking');
+      // Navigate to booking screen with pre-filled doctor data
+      const specialtyId = typeof doctor.specialtyId === 'object' 
+        ? doctor.specialtyId._id 
+        : doctor.specialtyId;
+      const hospitalId = typeof doctor.hospitalId === 'object' 
+        ? doctor.hospitalId._id 
+        : doctor.hospitalId;
+      
+      navigation.navigate('Booking', {
+        doctorId: doctor._id,
+        specialtyId: specialtyId || undefined,
+        hospitalId: hospitalId || undefined,
+      });
     });
   };
 
@@ -302,40 +349,12 @@ export default function Home({ navigation }: Props) {
             contentContainerStyle={styles.facilityScrollContent}
           >
             {hospitals.map((facility) => (
-              <TouchableOpacity
+              <FacilityCard
                 key={facility._id}
-                style={styles.facilityItem}
-                onPress={() => handleFacilityPress(facility)}
-                activeOpacity={0.7}
-              >
-                <Image
-                  source={{
-                    uri: facility.imageUrl || facility.image?.secureUrl || 'https://placehold.co/160x120',
-                  }}
-                  style={styles.facilityImage}
-                  defaultSource={{ uri: 'https://placehold.co/160x120' }}
-                />
-                <View style={styles.facilityContent}>
-                  <Text style={styles.facilityName} numberOfLines={2}>
-                    {facility.name}
-                  </Text>
-                  <View style={styles.locationContainer}>
-                    <Ionicons name="location" size={10} color="#666" />
-                    <Text style={styles.facilityAddress} numberOfLines={1}>
-                      {facility.address}
-                    </Text>
-                  </View>
-                  <TouchableOpacity 
-                    style={styles.facilityBookingButton} 
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleFacilityBookingPress(facility);
-                    }}
-                  >
-                    <Text style={styles.facilityBookingButtonText}>Đặt khám ngay</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
+                facility={facility}
+                onPress={handleFacilityPress}
+                onBookingPress={handleFacilityBookingPress}
+              />
             ))}
           </ScrollView>
         </View>
@@ -354,15 +373,14 @@ export default function Home({ navigation }: Props) {
         {specialties && specialties.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScrollContent}>
             {specialties.map((specialty) => (
-              <View key={specialty._id} style={styles.specialtyCardContainer}>
-                <SpecialtyCard
-                  specialty={specialty}
-                  onPress={(specialty) => {
-                    navigation.navigate('SpecialtyDetail', { specialtyId: specialty._id });
-                  }}
-                  onBookingPress={handleSpecialtyBookingPress}
-                />
-              </View>
+              <SpecialtyCard
+                key={specialty._id}
+                specialty={specialty}
+                onPress={(specialty) => {
+                  navigation.navigate('SpecialtyDetail', { specialtyId: specialty._id });
+                }}
+                onBookingPress={handleSpecialtyBookingPress}
+              />
             ))}
           </ScrollView>
         ) : (
@@ -385,38 +403,25 @@ export default function Home({ navigation }: Props) {
         {services && services.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScrollContent}>
             {services.map((sv) => (
-              <TouchableOpacity 
-                key={sv._id} 
-                style={styles.serviceCard}
-                onPress={() => navigation.navigate('ServiceDetail', { serviceId: sv._id })}
-                activeOpacity={0.7}
-              >
-                <Image
-                  source={{ uri: sv.imageUrl || sv.image?.secureUrl || 'https://placehold.co/160x120' }}
-                  style={styles.serviceImage}
-                  defaultSource={{ uri: 'https://placehold.co/160x120' }}
-                />
-                <View style={styles.serviceContent}>
-                  <Text numberOfLines={2} style={styles.serviceName}>{sv.name}</Text>
-                  {sv.description && (
-                    <Text numberOfLines={2} style={styles.serviceDescription}>{sv.description}</Text>
-                  )}
-                  <Text style={styles.servicePrice}>{(sv.price || 0).toLocaleString('vi-VN')}đ</Text>
-                  <TouchableOpacity 
-                    style={styles.bookingButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      if (!user) {
-                        navigation.navigate('Login');
-                      } else {
-                        navigation.navigate('Booking');
-                      }
-                    }}
-                  >
-                    <Text style={styles.bookingButtonText}>Đặt khám</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
+              <ServiceCard
+                key={sv._id}
+                service={sv}
+                onPress={(service) => navigation.navigate('ServiceDetail', { serviceId: service._id })}
+                onBookingPress={(service) => {
+                  if (!user) {
+                    navigation.navigate('Login');
+                  } else {
+                    const specialtyId = typeof service.specialtyId === 'object'
+                      ? service.specialtyId._id
+                      : (service as any).specialtyId;
+
+                    navigation.navigate('Booking', {
+                      serviceId: service._id,
+                      specialtyId: specialtyId || undefined,
+                    });
+                  }
+                }}
+              />
             ))}
           </ScrollView>
         ) : (
@@ -444,14 +449,13 @@ export default function Home({ navigation }: Props) {
               contentContainerStyle={styles.doctorsScrollContent}
             >
               {doctors.map((doctor: any) => (
-                <View key={doctor._id} style={styles.doctorCardContainer}>
-                  <DoctorCard
-                    doctor={doctor}
-                    onConsultPress={handleDoctorConsultPress}
-                    onCardPress={handleDoctorCardPress}
-                    vertical={true}
-                  />
-                </View>
+                <DoctorCard
+                  key={doctor._id}
+                  doctor={doctor}
+                  onConsultPress={handleDoctorConsultPress}
+                  onCardPress={handleDoctorCardPress}
+                  vertical={true}
+                />
               ))}
             </ScrollView>
           ) : (
@@ -474,26 +478,11 @@ export default function Home({ navigation }: Props) {
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScrollContent}>
           {news.map((n) => (
-            <TouchableOpacity 
-              key={n._id} 
-              style={styles.newsCard}
-              onPress={() => navigation.navigate('NewsDetail', { newsId: n._id })}
-              activeOpacity={0.7}
-            >
-              {n.image?.secureUrl ? (
-                <Image 
-                  source={{ uri: n.image.secureUrl }} 
-                  style={styles.newsImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.newsImage}>
-                  <Ionicons name="newspaper" size={24} color="#ccc" />
-                </View>
-              )}
-              <Text style={styles.newsTitle} numberOfLines={2}>{n.title}</Text>
-              {n.summary ? (<Text style={styles.newsSummary} numberOfLines={2}>{n.summary}</Text>) : null}
-            </TouchableOpacity>
+            <NewsCard
+              key={n._id}
+              news={n}
+              onPress={(news) => navigation.navigate('NewsDetail', { newsId: news._id })}
+            />
           ))}
         </ScrollView>
       </View>
@@ -545,73 +534,9 @@ const styles = StyleSheet.create({
   hScrollContent: {
     paddingHorizontal: 16,
   },
-  serviceCard: {
-    width: 160,
-    height: 280,
-    marginRight: 12,
-    marginBottom: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
-  },
-  serviceImage: {
-    width: '100%',
-    height: 120,
-    backgroundColor: '#f0f0f0',
-  },
-  serviceContent: {
-    padding: 12,
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  serviceName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  serviceDescription: {
-    fontSize: 11,
-    color: '#666',
-    marginBottom: 6,
-    lineHeight: 14,
-  },
-  servicePrice: {
-    fontSize: 13,
-    color: '#0a84ff',
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  bookingButton: {
-    backgroundColor: '#0a84ff',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    alignSelf: 'stretch',
-  },
-  bookingButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   doctorsScrollContent: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-  },
-  doctorCardContainer: {
-    width: 160,
-    marginRight: 12,
-  },
-  specialtyCardContainer: {
-    width: 160,
-    marginRight: 12,
   },
   emptyWrap: {
     justifyContent: 'center',
@@ -638,100 +563,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  newsCard: {
-    width: 160,
-    height: 200,
-    marginRight: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 12,
-  },
-  newsImage: {
-    height: 100,
-    borderRadius: 8,
-    backgroundColor: '#eee',
-    marginBottom: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  newsTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#333',
-  },
-  newsSummary: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#666',
-  },
   facilityListContainer: {
     marginBottom: 8,
   },
   facilityScrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 10,
-  },
-  facilityItem: {
-    width: 160,
-    height: 255,
-    marginRight: 12,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
-  },
-  facilityImage: {
-    width: '100%',
-    height: 120,
-    backgroundColor: '#f0f0f0',
-  },
-  facilityContent: {
-    padding: 12,
-    flex: 1,
-  },
-  facilityName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 6,
-    lineHeight: 18,
-  },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  facilityAddress: {
-    fontSize: 12,
-    color: '#666',
-    flex: 1,
-    marginLeft: 4,
-  },
-  facilityBookingButton: {
-    backgroundColor: '#0a84ff',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    marginTop: 8,
-    alignSelf: 'stretch',
-  },
-  facilityBookingButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
   },
 });
