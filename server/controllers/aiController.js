@@ -195,6 +195,13 @@ exports.getChatHistory = async (req, res) => {
  */
 const saveChat = async (userId, userPrompt, aiResponse, usedTool) => {
   try {
+    // Kiểm tra aiResponse không được rỗng hoặc undefined
+    // Nếu rỗng, không lưu để tránh lỗi validation
+    if (!aiResponse || (typeof aiResponse === 'string' && aiResponse.trim() === '')) {
+      console.warn("Bỏ qua lưu lịch sử chat vì aiResponse rỗng hoặc không hợp lệ");
+      return;
+    }
+
     const newChat = new ChatHistory({
         userId: userId,
         userPrompt: userPrompt,

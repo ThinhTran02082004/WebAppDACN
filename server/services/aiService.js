@@ -193,7 +193,31 @@ const availableTools = {
             const userId = cache.getUserId(sessionId);
             if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
                 return { error: 'Vui lòng đăng nhập để chúng tôi có thể kê đơn.' };
-    }
+            }
+
+            // Kiểm tra giới hạn: mỗi ngày chỉ được tạo tối đa 2 đơn thuốc
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            const prescriptionsToday = await PrescriptionDraft.countDocuments({
+                patientId: userId,
+                createdAt: {
+                    $gte: today,
+                    $lt: tomorrow
+                },
+                status: { $ne: 'cancelled' } // Không tính các đơn đã hủy
+            });
+
+            if (prescriptionsToday >= 2) {
+                return {
+                    error: 'Bạn đã tạo đủ 2 đơn thuốc trong ngày hôm nay. Vui lòng quay lại vào ngày mai để tạo đơn mới.',
+                    limitReached: true,
+                    prescriptionsToday: prescriptionsToday,
+                    limit: 2
+                };
+            }
 
             const medicalAdvice = await callSearchAgent(symptom);
             const keywords = extractKeywords(medicalAdvice, symptom);
@@ -510,8 +534,9 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
     while (true) {
         const call = result.response.functionCalls()?.[0];
         if (!call) {
+            const responseText = result.response.text() || 'Xin lỗi, tôi không thể xử lý yêu cầu này. Vui lòng thử lại.';
             return {
-                text: result.response.text(),
+                text: responseText,
                 usedTool: toolCalled 
             };
         }

@@ -62,21 +62,17 @@ const tools = {
         },
         {
             name: "bookAppointment",
-            description: "Đặt lịch hẹn sau khi người dùng đã chọn một mã tham chiếu (ví dụ: L01, L02, L08) từ danh sách slots đã trả về trước đó. Bạn PHẢI sử dụng slotId và serviceId từ kết quả của findAvailableSlots trong lịch sử chat, KHÔNG được tự tạo slotId. QUAN TRỌNG: Khi người dùng nói 'chọn L01' hoặc 'tôi chọn L01', bạn PHẢI gọi tool này NGAY, KHÔNG gọi lại findAvailableSlots.",
+            description: "Đặt lịch hẹn sau khi người dùng đã chọn một mã tham chiếu (ví dụ: L01, L02, L08) hoặc số thứ tự (ví dụ: 1, 2, 8) từ danh sách slots đã trả về trước đó. QUAN TRỌNG: Khi người dùng nói 'chọn L01', 'tôi chọn số 1', hoặc 'đặt lịch L08', bạn PHẢI gọi tool này NGAY với slotIndex tương ứng, KHÔNG gọi lại findAvailableSlots.",
             parameters: {
                 type: "OBJECT",
                 properties: {
-                    slotId: { 
+                    slotIndex: { 
                         type: "STRING", 
-                        description: "slotId chính xác từ kết quả của findAvailableSlots TRƯỚC ĐÓ trong lịch sử chat (format: scheduleId_timeSlotId). Bạn PHẢI tìm trong lịch sử chat để lấy slotId từ danh sách availableSlots đã trả về, KHÔNG được tự tạo hoặc suy đoán. Nếu người dùng chọn L08, bạn phải tìm trong lịch sử chat slot có referenceCode='L08' và lấy slotId tương ứng từ đó." 
-                    },
-                    serviceId: {
-                        type: "STRING",
-                        description: "serviceId từ kết quả của findAvailableSlots TRƯỚC ĐÓ trong lịch sử chat (nếu có). Lấy từ slot đã chọn để đảm bảo đặt đúng dịch vụ mà người dùng yêu cầu."
+                        description: "Mã tham chiếu (ví dụ: 'L01', 'L08') hoặc số thứ tự (ví dụ: '1', '8') mà người dùng đã chọn từ danh sách slots. Tool sẽ tự động tìm slot tương ứng từ cache dựa trên referenceCode hoặc số thứ tự này." 
                     },
                     sessionId: { type: "STRING", description: "ID của phiên chat hiện tại (bắt buộc)." }
                 },
-                required: ["slotId", "sessionId"]
+                required: ["slotIndex", "sessionId"]
             }
         },
         {
@@ -123,15 +119,14 @@ const tools = {
         },
         {
             name: "checkInventoryAndPrescribe",
-            description: "Kiểm tra kho thuốc dựa trên hoạt chất/từ khóa và tạo đơn thuốc nháp nếu có hàng.",
+            description: "Kiểm tra kho thuốc dựa trên triệu chứng và tạo đơn thuốc nháp nếu có hàng. Tool này sẽ tự động tra cứu hoạt chất phù hợp từ triệu chứng.",
             parameters: {
                 type: "OBJECT",
                 properties: {
-                    searchQuery: { type: "STRING", description: "Tên hoạt chất hoặc thuốc mà AI đã tìm được sau khi tra cứu (ví dụ: Paracetamol, Ibuprofen)." },
-                    symptom: { type: "STRING", description: "Triệu chứng của người dùng để lưu vào đơn." },
+                    symptom: { type: "STRING", description: "Triệu chứng của người dùng (ví dụ: 'đau đầu', 'sốt cao', 'đau bụng'). Tool sẽ tự động tra cứu hoạt chất phù hợp từ triệu chứng này." },
                     sessionId: { type: "STRING", description: "ID phiên chat hiện tại (để xác định người dùng)." }
                 },
-                required: ["searchQuery", "symptom", "sessionId"]
+                required: ["symptom", "sessionId"]
             }
         },
         {
