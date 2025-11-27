@@ -648,10 +648,30 @@ class ApiService {
     }
   }
 
+  async getDailyAppointmentCount(date: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get('/appointments/user/patient/daily-count', { params: { date } });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
   async getUserPrescriptionHistory(params?: { page?: number; limit?: number; status?: string }): Promise<ApiResponse<any>> {
     try {
       await this.probeBackend();
       const res = await this.client.get('/prescriptions/user/history', { params });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getPrescriptionById(prescriptionId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/prescriptions/${prescriptionId}`);
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);

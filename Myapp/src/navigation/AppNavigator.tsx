@@ -33,6 +33,7 @@ import ChatDetailScreen from '../screens/ChatDetail';
 import VideoCallScreen from '../screens/VideoCall';
 import VideoCallNotification from '../components/VideoCallNotification';
 import ReviewFormScreen from '../screens/ReviewForm';
+import PrescriptionDetailScreen from '../screens/PrescriptionDetail';
 
 function RootNavigator() {
   const { loading, user } = useAuth();
@@ -72,6 +73,7 @@ function RootNavigator() {
         <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
         <Stack.Screen name="VideoCall" component={VideoCallScreen} />
         <Stack.Screen name="ReviewForm" component={ReviewFormScreen} />
+        <Stack.Screen name="PrescriptionDetail" component={PrescriptionDetailScreen} />
       </Stack.Navigator>
       {user && <VideoCallNotification />}
     </>
@@ -126,6 +128,7 @@ export type RootStackParamList = {
     };
   };
   ReviewForm: { appointmentId: string; targetType: 'doctor' | 'hospital'; appointment?: any | null };
+  PrescriptionDetail: { prescriptionId: string };
 };
 
 // const Stack = createStackNavigator<RootStackParamList>();

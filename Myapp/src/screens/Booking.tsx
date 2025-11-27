@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList, Image, Modal, Alert, useWindowDimensions, TextInput, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
@@ -151,6 +151,12 @@ export default function BookingAllInOne() {
   });
   const [availableDates, setAvailableDates] = useState<Set<string>>(new Set());
   const [doctorSchedules, setDoctorSchedules] = useState<any[]>([]);
+  const [dailyLimitInfo, setDailyLimitInfo] = useState({
+    status: 'idle',
+    count: 0,
+    limit: 3,
+    date: '',
+  });
 
   // Step 4
   const [appointmentType, setAppointmentType] = useState<string>('first-visit');
@@ -478,9 +484,15 @@ export default function BookingAllInOne() {
     load();
   }, [selectedSpecialty]);
 
+  const limitThreshold = dailyLimitInfo.limit || 3;
+  const dailyLimitReached = dailyLimitInfo.status === 'loaded' &&
+    dailyLimitInfo.date === date &&
+    dailyLimitInfo.count >= limitThreshold;
+  const isCheckingDailyLimit = dailyLimitInfo.status === 'loading';
+
   const canNextStep1 = !!(selectedBranch && selectedSpecialty);
   const canNextStep2 = !!(doctorId && serviceId);
-  const canNextStep3 = !!(date && timeSlot);
+  const canNextStep3 = !!(date && timeSlot) && !dailyLimitReached;
 
   const formatVnd = (amount?: number) => {
     if (typeof amount !== 'number') return '';
@@ -674,6 +686,17 @@ export default function BookingAllInOne() {
     };
     loadDaySlots();
   }, [doctorId, date, doctorSchedules]);
+
+  useEffect(() => {
+    if (!date) {
+      setDailyLimitInfo({
+        status: 'idle',
+        count: 0,
+        limit: 3,
+        date: '',
+      });
+    }
+  }, [date]);
   const buildMonthMatrix = (cursor: Date) => {
     const year = cursor.getFullYear();
     const month = cursor.getMonth();
@@ -706,6 +729,77 @@ export default function BookingAllInOne() {
     for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
     return weeks;
   };
+
+  const checkDailyAppointmentLimit = useCallback(async (isoDate: string) => {
+    if (!isoDate) return { blocked: false, limit: 3, count: 0 };
+    setDailyLimitInfo((prev) => ({
+      ...prev,
+      status: 'loading',
+      date: isoDate,
+    }));
+    try {
+      const response = await apiService.getDailyAppointmentCount(isoDate);
+      const payload = (response as any)?.data;
+      const count = typeof payload?.count === 'number' ? payload.count : payload?.data?.count || 0;
+      const limitFromApi = typeof payload?.limit === 'number' ? payload.limit : payload?.data?.limit || 3;
+      const limitValue = limitFromApi || 3;
+      const isBlocked = count >= limitValue;
+      setDailyLimitInfo({
+        status: 'loaded',
+        count,
+        limit: limitValue,
+        date: isoDate,
+      });
+      return { blocked: isBlocked, limit: limitValue, count };
+    } catch (error) {
+      console.error('Error checking daily appointment limit:', error);
+      setDailyLimitInfo((prev) => ({
+        ...prev,
+        status: 'error',
+      }));
+      return { blocked: false, limit: 3, count: 0 };
+    }
+  }, []);
+
+  const handleDateSelect = useCallback(async (isoDate: string) => {
+    if (!isoDate) return;
+    const currentLimit = dailyLimitInfo.limit || 3;
+
+    if (dailyLimitInfo.status === 'loaded' && dailyLimitInfo.date === isoDate) {
+      if (dailyLimitInfo.count >= currentLimit) {
+        setDateOpen(false);
+        ToastService.show(
+          'error',
+          'Giới hạn lịch hẹn',
+          `Bạn đã có ${dailyLimitInfo.count}/${currentLimit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`
+        );
+        return;
+      }
+      setDate(isoDate);
+      setTimeSlot(null);
+      setSelectedSlot(null);
+      setDateOpen(false);
+      setTimeout(() => setTimeOpen(true), 150);
+      return;
+    }
+
+    const { blocked, limit, count } = await checkDailyAppointmentLimit(isoDate);
+    if (blocked) {
+      setDateOpen(false);
+      ToastService.show(
+        'error',
+        'Giới hạn lịch hẹn',
+        `Bạn đã có ${count}/${limit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`
+      );
+      return;
+    }
+
+    setDate(isoDate);
+    setTimeSlot(null);
+    setSelectedSlot(null);
+    setDateOpen(false);
+    setTimeout(() => setTimeOpen(true), 150);
+  }, [checkDailyAppointmentLimit, dailyLimitInfo, setDateOpen]);
 
   const submit = async () => {
     if (isSubmitting) return;
@@ -989,52 +1083,56 @@ export default function BookingAllInOne() {
             </View>
           </Modal>
 
-          <Text style={[styles.title, { marginTop: 16 }]}>Chọn dịch vụ</Text>
-          <View style={styles.dropdown}>
-            <TouchableOpacity style={styles.dropdownHeader} onPress={() => setServiceOpen(true)}>
-              <Text style={styles.dropdownHeaderText}>
-                {services.find(s => s._id === serviceId)?.name || 'Chọn dịch vụ'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <Modal visible={serviceOpen} transparent animationType="fade" onRequestClose={() => setServiceOpen(false)}>
-            <View style={[styles.modalBackdrop, { justifyContent: 'flex-end' }]}>
-              <View
-                style={[
-                  styles.modalCard,
-                  {
-                    paddingBottom: insets.bottom + 12,
-                    width: '100%',
-                    maxWidth: '100%',
-                    height: Math.round(screenHeight * 0.74),
-                    borderTopLeftRadius: 16,
-                    borderTopRightRadius: 16,
-                    borderBottomLeftRadius: 0,
-                    borderBottomRightRadius: 0,
-                  },
-                ]}
-              >
-                <Text style={styles.modalTitle}>Chọn dịch vụ</Text>
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8, paddingHorizontal: 8 }}>
-                  {services.map((item: any) => (
-                    <TouchableOpacity
-                      key={item._id}
-                      style={[styles.serviceCard, serviceId === item._id && styles.serviceCardActive]}
-                      onPress={() => { setServiceId(item._id); setServiceOpen(false); }}
-                      activeOpacity={0.9}
-                    >
-                      <Text numberOfLines={2} style={styles.serviceName}>{item.name}</Text>
-                      <Text style={styles.servicePrice}>{formatVnd(item.price)}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <TouchableOpacity style={styles.modalClose} onPress={() => setServiceOpen(false)}>
-                  <Text style={styles.modalCloseText}>Đóng</Text>
+          {doctorId ? (
+            <>
+              <Text style={[styles.title, { marginTop: 16 }]}>Chọn dịch vụ</Text>
+              <View style={styles.dropdown}>
+                <TouchableOpacity style={styles.dropdownHeader} onPress={() => setServiceOpen(true)}>
+                  <Text style={styles.dropdownHeaderText}>
+                    {services.find(s => s._id === serviceId)?.name || 'Chọn dịch vụ'}
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </Modal>
+
+              <Modal visible={serviceOpen} transparent animationType="fade" onRequestClose={() => setServiceOpen(false)}>
+                <View style={[styles.modalBackdrop, { justifyContent: 'flex-end' }]}>
+                  <View
+                    style={[
+                      styles.modalCard,
+                      {
+                        paddingBottom: insets.bottom + 12,
+                        width: '100%',
+                        maxWidth: '100%',
+                        height: Math.round(screenHeight * 0.74),
+                        borderTopLeftRadius: 16,
+                        borderTopRightRadius: 16,
+                        borderBottomLeftRadius: 0,
+                        borderBottomRightRadius: 0,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.modalTitle}>Chọn dịch vụ</Text>
+                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8, paddingHorizontal: 8 }}>
+                      {services.map((item: any) => (
+                        <TouchableOpacity
+                          key={item._id}
+                          style={[styles.serviceCard, serviceId === item._id && styles.serviceCardActive]}
+                          onPress={() => { setServiceId(item._id); setServiceOpen(false); }}
+                          activeOpacity={0.9}
+                        >
+                          <Text numberOfLines={2} style={styles.serviceName}>{item.name}</Text>
+                          <Text style={styles.servicePrice}>{formatVnd(item.price)}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    <TouchableOpacity style={styles.modalClose} onPress={() => setServiceOpen(false)}>
+                      <Text style={styles.modalCloseText}>Đóng</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </Modal>
+            </>
+          ) : null}
 
           <BottomActions 
             disabled={!canNextStep2} 
@@ -1060,7 +1158,7 @@ export default function BookingAllInOne() {
           </TouchableOpacity>
           <Modal visible={dateOpen} transparent animationType="fade" onRequestClose={() => setDateOpen(false)}>
             <View style={[styles.modalBackdrop, { justifyContent: 'flex-end' }]}>
-              <View style={[styles.modalCard, { width: '100%', maxWidth: '100%', height: Math.round(screenHeight * 0.74), borderTopLeftRadius: 16, borderTopRightRadius: 16, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, paddingBottom: insets.bottom + 12 }]}>
+              <View style={[styles.modalCard, { width: '100%', maxWidth: '100%', height: Math.round(screenHeight * 0.72), borderTopLeftRadius: 16, borderTopRightRadius: 16, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, paddingBottom: Math.max(6, insets.bottom + 2) }]}>
                 <View style={styles.calHeader}>
                   <TouchableOpacity style={styles.calNavBtn} onPress={() => setMonthCursor((prev: Date) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}>
                     <Ionicons name={AppIcons.chevronBack as any} size={18} color="#111827" />
@@ -1089,7 +1187,16 @@ export default function BookingAllInOne() {
                         const isPast = isPastLocal(iso);
                         const isAvailable = availableDates.has(iso);
                         return (
-                          <TouchableOpacity key={iso} style={styles.calDay} onPress={() => { if (isCurrentMonth && isAvailable && !isPast) { setDate(iso); setDateOpen(false); } }} activeOpacity={0.8}>
+                          <TouchableOpacity
+                            key={iso}
+                            style={styles.calDay}
+                            onPress={() => {
+                              if (isCurrentMonth && isAvailable && !isPast) {
+                                handleDateSelect(iso);
+                              }
+                            }}
+                            activeOpacity={0.8}
+                          >
                             <View style={[styles.calDayCircle, isSelected && styles.calDayCircleSelected, !isCurrentMonth && styles.calDayCircleMuted, ((isCurrentMonth && !isAvailable) || isPast) && { opacity: 0.35 }]}>
                               <Text style={[styles.calDayText, isSelected && styles.calDayTextSelected, !isCurrentMonth && styles.calDayTextMuted]}>{cell.date.getDate()}</Text>
                               {isCurrentMonth && isAvailable && !isSelected && !isPast ? <View style={styles.calDot} /> : null}
@@ -1100,21 +1207,75 @@ export default function BookingAllInOne() {
                     </View>
                   ))}
                 </ScrollView>
+                <TouchableOpacity style={styles.modalClose} onPress={() => setDateOpen(false)}>
+                  <Text style={styles.modalCloseText}>Đóng</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </Modal>
 
+          {isCheckingDailyLimit && (
+            <View style={styles.limitInfo}>
+              <ActivityIndicator size="small" color="#2563eb" style={{ marginRight: 8 }} />
+              <Text style={styles.limitInfoText}>
+                Đang kiểm tra số lịch hẹn của bạn cho ngày {dailyLimitInfo.date ? formatDateDDMMYYYY(dailyLimitInfo.date) : ''}...
+              </Text>
+            </View>
+          )}
+
+          {dailyLimitInfo.status === 'error' && (
+            <View style={styles.limitInfoWarning}>
+              <Ionicons name="information-circle" size={18} color="#92400e" style={{ marginRight: 8 }} />
+              <Text style={styles.limitInfoWarningText}>
+                Không thể kiểm tra giới hạn lịch hẹn. Bạn vẫn có thể thử lại hoặc chọn ngày khác.
+              </Text>
+            </View>
+          )}
+
           <Text style={[styles.title, { marginTop: 16 }]}>Chọn giờ</Text>
-          <TouchableOpacity style={styles.calendarTrigger} onPress={() => setTimeOpen(true)}>
+          <TouchableOpacity
+            style={styles.calendarTrigger}
+            onPress={() => {
+              if (dailyLimitReached) {
+                ToastService.show(
+                  'error',
+                  'Giới hạn lịch hẹn',
+                  'Bạn đã đạt giới hạn 3 lịch hẹn trong ngày này. Vui lòng chọn ngày khác.'
+                );
+                return;
+              }
+              setTimeOpen(true);
+            }}
+          >
             <Ionicons name={AppIcons.time as any} size={16} color={IconColors.primary} />
             <Text style={styles.calendarText}>{selectedSlot ? formatHourRange(selectedSlot.startTime, selectedSlot.endTime) : (timeSlot ? `${normalizeTime(timeSlot)} - ` : 'Chọn giờ')}</Text>
           </TouchableOpacity>
 
           <Modal visible={timeOpen} transparent animationType="fade" onRequestClose={() => setTimeOpen(false)}>
             <View style={[styles.modalBackdrop, { justifyContent: 'flex-end' }]}>
-              <View style={[styles.modalCard, { width: '100%', maxWidth: '100%', height: Math.round(screenHeight * 0.6), borderTopLeftRadius: 16, borderTopRightRadius: 16, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, paddingBottom: insets.bottom + 12 }]}> 
+              <View style={[
+                styles.modalCard,
+                {
+                  width: '100%',
+                  maxWidth: '100%',
+                  height: Math.round(screenHeight * 0.6),
+                  borderTopLeftRadius: 16,
+                  borderTopRightRadius: 16,
+                  borderBottomLeftRadius: 0,
+                  borderBottomRightRadius: 0,
+                  paddingBottom: Math.max(6, insets.bottom + 2),
+                },
+              ]}> 
                 <Text style={styles.modalTitle}>Chọn khung giờ</Text>
-                {dayTimeSlots.length === 0 && !timeLoading ? (
+                {dailyLimitReached ? (
+                  <View style={styles.limitAlertModal}>
+                    <Ionicons name="warning" size={18} color="#b91c1c" style={{ marginRight: 8 }} />
+                    <View>
+                      <Text style={styles.limitAlertTitle}>Bạn đã đạt giới hạn 3 lịch hẹn trong ngày này.</Text>
+                      <Text style={styles.limitAlertText}>Vui lòng chọn ngày khác để tiếp tục đặt lịch.</Text>
+                    </View>
+                  </View>
+                ) : dayTimeSlots.length === 0 && !timeLoading ? (
                   <View style={{ width: '100%', alignItems: 'center', paddingVertical: 16 }}>
                     <Text style={{ color: '#6b7280', fontWeight: '600' }}>Không có khung giờ</Text>
                   </View>
@@ -1143,7 +1304,7 @@ export default function BookingAllInOne() {
                         const endMin = (isNaN(eh) ? 0 : eh) * 60 + (isNaN(em) ? 0 : em);
                         isPastTime = endMin <= nowMin;
                       }
-                      const disabled = fullyBooked || isBookedFlag || isPastTime;
+                      const disabled = fullyBooked || isBookedFlag || isPastTime || dailyLimitReached;
                       const active = !disabled && timeSlot && normalizeTime(timeSlot) === normalizeTime(start);
                       const marginStyle = { marginRight: (index % 3 === 2) ? 0 : 8 } as any;
                       return (
@@ -1536,6 +1697,13 @@ const styles = StyleSheet.create({
   calendarTrigger: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, 
                      borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8 },
   calendarText: { color: '#111827', fontWeight: '700', marginLeft: 8 },
+  limitInfo: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#bfdbfe', marginTop: 8 },
+  limitInfoText: { color: '#1e40af', fontSize: 12, flex: 1 },
+  limitAlertModal: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fee2e2', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#fecaca', marginBottom: 12 },
+  limitAlertTitle: { color: '#b91c1c', fontWeight: '700', marginBottom: 4 },
+  limitAlertText: { color: '#b91c1c', fontSize: 12 },
+  limitInfoWarning: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fffbeb', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#fcd34d', marginTop: 8 },
+  limitInfoWarningText: { color: '#92400e', fontSize: 12, flex: 1 },
   pill: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 999,
           marginRight: 8, backgroundColor: '#fff' },
   pillActive: { borderColor: '#0a84ff', backgroundColor: '#eff6ff' },
