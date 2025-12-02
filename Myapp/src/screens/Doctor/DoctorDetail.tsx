@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -68,6 +68,23 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
   const [isFavorite, setIsFavorite] = useState(false);
   const [isLoadingFavorite, setIsLoadingFavorite] = useState(false);
   const { user } = useAuth();
+  const displayAverageRating = useMemo(() => {
+    const reviewAverage = Number(reviewStats.averageRating);
+    if (Number.isFinite(reviewAverage) && reviewAverage > 0) {
+      return reviewAverage;
+    }
+    const doctorAverage = doctor?.ratings?.average ?? doctor?.averageRating;
+    const normalizedDoctorAverage = Number(doctorAverage);
+    return Number.isFinite(normalizedDoctorAverage) && normalizedDoctorAverage > 0
+      ? normalizedDoctorAverage
+      : null;
+  }, [reviewStats.averageRating, doctor]);
+
+  const displayRatingCount = useMemo(() => {
+    if (reviewStats.total > 0) return reviewStats.total;
+    const docCount = doctor?.ratings?.count ?? (doctor as any)?.ratingCount;
+    return Number.isFinite(Number(docCount)) ? Number(docCount) : 0;
+  }, [reviewStats.total, doctor]);
 
   useEffect(() => {
     const load = async () => {
@@ -126,9 +143,10 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
           const reviewsArray = Array.isArray(dataObj) ? dataObj : (dataObj.reviews || dataObj.data || []);
           const total = dataObj.count || dataObj.total || reviewsArray.length || 0;
           setReviews(reviewsArray);
+          const averageRating = Number(dataObj.averageRating ?? dataObj.average ?? 0);
           setReviewStats({
             total,
-            averageRating: dataObj.averageRating || 0,
+            averageRating: Number.isFinite(averageRating) ? averageRating : 0,
           });
           setReviewsPage(1);
           setHasMoreReviews(reviewsArray.length < total);
@@ -331,9 +349,9 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
           <View style={styles.ratingContainer}>
             <Ionicons name="star" size={16} color="#ff9500" />
             <Text style={styles.rating}>
-              {reviewStats.averageRating > 0 ? reviewStats.averageRating.toFixed(1) : (doctor.averageRating ? Number(doctor.averageRating).toFixed(1) : 'N/A')}
+              {displayAverageRating ? displayAverageRating.toFixed(1) : 'N/A'}
             </Text>
-            <Text style={styles.ratingCount}>({reviewStats.total} đánh giá)</Text>
+            <Text style={styles.ratingCount}>({displayRatingCount} đánh giá)</Text>
           </View>
 
           {/* Quick Info */}

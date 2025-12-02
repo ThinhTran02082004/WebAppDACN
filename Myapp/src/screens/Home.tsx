@@ -56,7 +56,7 @@ const quickAccessItems = [
     icon: AppIcons.news,
   },
   { 
-    id: '3',
+    id: '7',
     title: 'Lịch sử\nVideo Call', 
     icon: AppIcons.video,
   },
@@ -249,6 +249,7 @@ export default function Home({ navigation }: Props) {
           requireLogin(() => {
             navigation.navigate('VideoCallHistory' as any);
           });
+          break;
       case '8':
         // Bác sĩ yêu thích
         requireLogin(() => {

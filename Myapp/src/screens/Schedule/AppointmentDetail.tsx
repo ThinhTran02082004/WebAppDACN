@@ -744,8 +744,8 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
           Alert.alert('Lỗi', 'Không thể khởi tạo thanh toán MoMo.');
         }
       } else if (method === 'paypal') {
-        // PayPal payment for prescription - similar to MoMo
-        Alert.alert('Thông báo', 'Thanh toán PayPal cho đơn thuốc đang được phát triển. Vui lòng sử dụng MoMo.');
+        await startPaypalPayment({ billType: 'medication', prescriptionId });
+        return;
       }
     } catch (e: any) {
       console.error('[Payment] Error paying prescription:', e);
@@ -753,29 +753,61 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     }
   };
 
-  const startPaypalPayment = async (prescriptionId?: string) => {
+  const startPaypalPayment = async (options?: { billType?: 'consultation' | 'medication'; prescriptionId?: string }) => {
     try {
       if (!appointment?._id) return;
-      
-      // If prescriptionId is provided, this is a prescription payment
-      if (prescriptionId) {
-        const prescription = sortedPrescriptions.find(p => p._id === prescriptionId);
-        if (!prescription || !prescription.totalAmount) {
-          Alert.alert('Lỗi', 'Không tìm thấy đơn thuốc hoặc số tiền không hợp lệ.');
+
+      const billTypeOverride = options?.billType || 'consultation';
+
+      let amount = 0;
+      let targetPrescription: Prescription | null = null;
+
+      if (billTypeOverride === 'medication') {
+        targetPrescription =
+          getPrescriptionById(options?.prescriptionId || null) ||
+          findMedicationPaymentTarget();
+
+        if (!targetPrescription?._id) {
+          Alert.alert('Lỗi', 'Không tìm thấy đơn thuốc cần thanh toán.');
           return;
         }
-        
-        // For prescription payment, we need to use a different approach
-        // Since PayPal API might not support prescriptionId directly, we'll use the appointment payment
-        // but with billType='medication' and the prescription amount
-        Alert.alert('Thông báo', 'Thanh toán PayPal cho đơn thuốc đang được phát triển. Vui lòng sử dụng MoMo.');
-        return;
+
+        amount = targetPrescription.totalAmount || 0;
+        if (amount <= 0) {
+          Alert.alert('Lỗi', 'Số tiền đơn thuốc không hợp lệ.');
+          return;
+        }
+      } else {
+        if (bill) {
+          amount = consultationBillAmount;
+        } else {
+          amount = appointment.totalAmount || (consultationFee + serviceFee);
+        }
+
+        if (amount <= 0) {
+          Alert.alert('Thông báo', 'Không có khoản phí khám cần thanh toán.');
+          return;
+        }
       }
-      
-      const created = await apiService.createPaypalPayment(appointment._id);
+
+      const paymentPayload: {
+        appointmentId: string;
+        amount: number;
+        billType?: string;
+        prescriptionId?: string;
+      } = {
+        appointmentId: appointment._id,
+        amount: Number(amount),
+        billType: billTypeOverride,
+      };
+
+      if (billTypeOverride === 'medication' && targetPrescription?._id) {
+        paymentPayload.prescriptionId = targetPrescription._id;
+      }
+
+      const created = await apiService.createPaypalPayment(paymentPayload);
       const approvalUrl = (created?.data as any)?.approvalUrl;
       if (approvalUrl) {
-        // Reflect the user's chosen payment method immediately in the UI
         setAppointment(prev =>
           prev
             ? {
@@ -800,6 +832,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
       let amount = 0;
       let billType: 'consultation' | 'medication' | 'hospitalization' = 'consultation';
       let orderInfo = `Thanh toán lịch hẹn #${appointment._id.substring(0, 8)}`;
+      let targetPrescription: Prescription | null = null;
 
       // Ưu tiên dùng bill từ API /billing/appointment (appointmentBill), fallback về appointment.bill
       const rawBill: any = appointmentBill || (appointment as any).bill || null;
@@ -831,9 +864,14 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
           billType = 'consultation';
           orderInfo = `Thanh toán phí khám - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
         } else if (billTypeOverride === 'medication') {
-          amount = medicationAmount;
+          targetPrescription = findMedicationPaymentTarget();
+          if (!targetPrescription?._id) {
+            Alert.alert('Lỗi', 'Không tìm thấy đơn thuốc cần thanh toán.');
+            return;
+          }
+          amount = targetPrescription.totalAmount || medicationAmount;
           billType = 'medication';
-          orderInfo = `Thanh toán tiền thuốc - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
+          orderInfo = `Thanh toán đơn thuốc đợt ${targetPrescription.prescriptionOrder || 1} - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
         } else {
           if (remainingAmount > 0) {
             amount = remainingAmount;
@@ -841,6 +879,15 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
             amount = (rawBill.totalAmount as number | undefined) ?? 0;
           }
         }
+      } else if (billTypeOverride === 'medication') {
+        targetPrescription = findMedicationPaymentTarget();
+        if (!targetPrescription?._id) {
+          Alert.alert('Lỗi', 'Không tìm thấy đơn thuốc cần thanh toán.');
+          return;
+        }
+        amount = targetPrescription.totalAmount || 0;
+        billType = 'medication';
+        orderInfo = `Thanh toán đơn thuốc đợt ${targetPrescription.prescriptionOrder || 1} - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`;
       } else {
         amount = appointment.totalAmount || (appointment.consultationFee || 0) + (appointment.serviceFee || 0);
         billType = 'consultation';
@@ -852,13 +899,24 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
       }
       
       const redirectUrl = 'https://mymobileapp.local/payment/result';
-      const paymentParams = {
+      const paymentParams: {
+        appointmentId: string;
+        amount: number;
+        billType: 'consultation' | 'medication' | 'hospitalization';
+        orderInfo: string;
+        redirectUrl: string;
+        prescriptionId?: string;
+      } = {
         appointmentId: appointment._id,
         amount: Number(amount),
         billType: billType,
         orderInfo: orderInfo,
         redirectUrl,
       };
+
+      if (billType === 'medication' && targetPrescription?._id) {
+        paymentParams.prescriptionId = targetPrescription._id;
+      }
       console.log('[Payment] Creating MoMo payment with params:', paymentParams);
       const created = await apiService.createMomoPayment(paymentParams);
       console.log('[Payment] MoMo payment created, response:', created);
@@ -1250,9 +1308,21 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
 
   const upsertPrescription = (raw: any) => {
     if (!raw) return;
-    const source = raw.prescriptionId ? { ...raw.prescriptionId, totalAmount: raw.prescriptionId?.totalAmount ?? raw.amount, status: raw.prescriptionId?.status ?? raw.paymentStatus } : raw;
+    const hasEmbeddedPrescription = raw.prescriptionId && typeof raw.prescriptionId === 'object';
+    const normalizedSource = hasEmbeddedPrescription
+      ? {
+          ...raw.prescriptionId,
+          totalAmount: raw.prescriptionId?.totalAmount ?? raw.amount,
+          status: raw.prescriptionId?.status ?? raw.paymentStatus,
+        }
+      : raw;
+    const source = normalizedSource;
     if (!source) return;
-    const generatedId = source._id || raw._id || raw.prescriptionId?._id || raw.id;
+    const normalizedPrescriptionId =
+      typeof raw.prescriptionId === 'string'
+        ? raw.prescriptionId
+        : raw.prescriptionId?._id;
+    const generatedId = source._id || normalizedPrescriptionId || raw._id || raw.id;
     const id = generatedId ? String(generatedId) : `pres-${prescriptionMap.size + 1}`;
     const existing = prescriptionMap.get(id) || ({ _id: id } as Prescription);
 
@@ -1277,7 +1347,9 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     prescriptionMap.set(id, normalized);
   };
 
-  const initialPrescriptions = Array.isArray(appointment.prescriptions) ? appointment.prescriptions : [];
+  const initialPrescriptions = Array.isArray(appointment.prescriptions)
+    ? appointment.prescriptions
+    : [];
   initialPrescriptions.forEach(upsertPrescription);
 
   const billPrescriptions = (appointment as any)?.bill?.medicationBill?.prescriptionPayments;
@@ -1285,13 +1357,49 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
     billPrescriptions.forEach(upsertPrescription);
   }
 
+  // Chỉ dùng đơn thuốc trong hồ sơ bệnh án khi không có dữ liệu đơn thuốc chính
   const medicalRecordPrescriptions = (appointment as any)?.medicalRecord?.prescription;
-  if (Array.isArray(medicalRecordPrescriptions)) {
+  const hasPrimaryPrescriptions =
+    initialPrescriptions.length > 0 ||
+    (Array.isArray(billPrescriptions) && billPrescriptions.length > 0);
+
+  if (!hasPrimaryPrescriptions && Array.isArray(medicalRecordPrescriptions)) {
     medicalRecordPrescriptions.forEach(upsertPrescription);
   }
 
   const combinedPrescriptions = Array.from(prescriptionMap.values());
   const sortedPrescriptions = combinedPrescriptions.sort((a, b) => (a?.prescriptionOrder || 1) - (b?.prescriptionOrder || 1));
+
+  const getPrescriptionById = (id?: string | null): Prescription | null => {
+    if (!id) return null;
+    const idStr = id.toString();
+    return (
+      sortedPrescriptions.find(p => p._id === idStr) ||
+      prescriptionMap.get(idStr) ||
+      null
+    );
+  };
+
+  const findMedicationPaymentTarget = (): Prescription | null => {
+    const billPrescriptionPayments = Array.isArray((appointment as any)?.bill?.medicationBill?.prescriptionPayments)
+      ? (appointment as any).bill.medicationBill.prescriptionPayments
+      : [];
+
+    for (const payment of billPrescriptionPayments) {
+      const paymentStatus = payment?.status || payment?.paymentStatus;
+      if (paymentStatus === 'paid') continue;
+      const candidateId =
+        payment?.prescriptionId?._id?.toString() ||
+        payment?.prescriptionId?.toString() ||
+        payment?._id?.toString();
+      const candidate = getPrescriptionById(candidateId);
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    return sortedPrescriptions.find(p => !isPrescriptionPaid(p._id)) || sortedPrescriptions[0] || null;
+  };
 
   // Helper function to get room information
   function getRoomInfo(appt: Appointment | null) {
@@ -1831,7 +1939,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
                             ]}
                             onPress={() =>
                               selectedConsultationMethod === 'paypal'
-                                ? startPaypalPayment()
+                                ? startPaypalPayment({ billType: 'consultation' })
                                 : startMomoPayment('consultation')
                             }
                             disabled={loading || consultationBillAmount <= 0}
@@ -1941,7 +2049,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
                             ]}
                             onPress={() =>
                               selectedMedicationMethod === 'paypal'
-                                ? startPaypalPayment()
+                                ? startPaypalPayment({ billType: 'medication' })
                                 : startMomoPayment('medication')
                             }
                             disabled={loading || medicationBillAmount <= 0}

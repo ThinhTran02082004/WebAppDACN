@@ -21,6 +21,21 @@ import { apiService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 
+interface AppointmentMessageData {
+  appointmentId?: string | { _id?: string; id?: string };
+  bookingCode?: string;
+  doctorName?: string;
+  patientName?: string;
+  hospitalName?: string;
+  serviceName?: string;
+  appointmentDate?: string;
+  timeSlot?: {
+    startTime?: string;
+    endTime?: string;
+  };
+  status?: string;
+}
+
 interface Message {
   _id: string;
   content: string;
@@ -28,7 +43,73 @@ interface Message {
   timestamp: string;
   type?: string;
   messageType?: string;
+  appointmentData?: AppointmentMessageData;
 }
+
+const appointmentStatusStyles: Record<
+  string,
+  { label: string; background: string; border: string; color: string }
+> = {
+  pending: { label: 'Chờ xác nhận', background: '#fff7ed', border: '#fed7aa', color: '#c2410c' },
+  confirmed: { label: 'Đã xác nhận', background: '#eff6ff', border: '#bfdbfe', color: '#1d4ed8' },
+  completed: { label: 'Hoàn thành', background: '#ecfdf5', border: '#bbf7d0', color: '#047857' },
+  cancelled: { label: 'Đã hủy', background: '#fef2f2', border: '#fecaca', color: '#b91c1c' },
+  rejected: { label: 'Từ chối', background: '#f3f4f6', border: '#e5e7eb', color: '#374151' },
+};
+
+const getAppointmentStatusInfo = (status?: string) => {
+  if (!status) {
+    return { label: 'Không xác định', background: '#e0e7ff', border: '#c7d2fe', color: '#3730a3' };
+  }
+  const normalized = status.toLowerCase();
+  return appointmentStatusStyles[normalized] || {
+    label: status,
+    background: '#e0f2fe',
+    border: '#bae6fd',
+    color: '#0369a1',
+  };
+};
+
+const formatAppointmentDate = (dateStr?: string) => {
+  if (!dateStr) return '—';
+  try {
+    return new Date(dateStr).toLocaleDateString('vi-VN', {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+};
+
+const formatAppointmentTimeRange = (slot?: { startTime?: string; endTime?: string }) => {
+  if (!slot?.startTime || !slot?.endTime) return '—';
+  return `${slot.startTime} - ${slot.endTime}`;
+};
+
+const extractAppointmentId = (raw?: string | { _id?: string; id?: string }) => {
+  if (!raw) return undefined;
+  if (typeof raw === 'string') return raw;
+  return raw._id || raw.id;
+};
+
+const formatDoctorDisplayName = (rawName?: string) => {
+  if (!rawName) return 'Đang cập nhật';
+  const name = rawName.trim();
+  if (!name) return 'Đang cập nhật';
+  const normalized = name.replace(/^bác sĩ\s+/i, '').replace(/^bs\.?\s*/i, '');
+  return `BS. ${normalized}`;
+};
+
+const formatHospitalDisplayName = (rawName?: string) => {
+  if (!rawName) return 'Đang cập nhật';
+  const name = rawName.trim();
+  if (!name) return 'Đang cập nhật';
+  const withoutPrefix = name.replace(/^bv\.?\s*/i, '');
+  return `Bv ${withoutPrefix || name}`;
+};
 
 export default function ChatDetailScreen() {
   const navigation = useNavigation();
@@ -270,6 +351,18 @@ export default function ChatDetailScreen() {
     }
   };
 
+  const handleOpenAppointmentCard = useCallback(
+    (appointmentData?: AppointmentMessageData) => {
+      const appointmentId = extractAppointmentId(appointmentData?.appointmentId);
+      if (!appointmentId) {
+        Alert.alert('Thông báo', 'Không tìm thấy thông tin lịch hẹn để mở.');
+        return;
+      }
+      navigation.navigate('AppointmentDetail' as never, { appointmentId } as never);
+    },
+    [navigation]
+  );
+
   const renderMessage = ({ item }: { item: Message }) => {
     // Check if this is a system message (video call start/end, system notifications)
     const isSystemMessage = item.messageType === 'video_call_end' || 
@@ -292,10 +385,103 @@ export default function ChatDetailScreen() {
       );
     }
 
-    // Regular message rendering
     const isMine = isMyMessage(item);
     const senderId = typeof item.senderId === 'object' ? item.senderId?._id : item.senderId;
     const senderName = typeof item.senderId === 'object' ? item.senderId?.fullName : 'Unknown';
+
+    if (item.messageType === 'appointment' && item.appointmentData) {
+      const appointmentId = extractAppointmentId(item.appointmentData.appointmentId);
+      const statusInfo = getAppointmentStatusInfo(item.appointmentData.status);
+      return (
+        <View
+          style={[
+            styles.messageContainer,
+            isMine ? styles.myMessageContainer : styles.otherMessageContainer,
+          ]}
+        >
+          {!isMine && (
+            <View style={styles.avatarContainer}>
+              {typeof item.senderId === 'object' && item.senderId?.avatarUrl ? (
+                <Image source={{ uri: item.senderId.avatarUrl }} style={styles.messageAvatar} />
+              ) : (
+                <View style={styles.messageAvatarPlaceholder}>
+                  <Text style={styles.messageAvatarText}>{senderName.charAt(0).toUpperCase()}</Text>
+                </View>
+              )}
+            </View>
+          )}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[
+              styles.appointmentCardWrapper,
+              isMine && styles.appointmentCardWrapperMine,
+            ]}
+            onPress={() => handleOpenAppointmentCard(item.appointmentData)}
+          >
+            <View style={styles.appointmentCardHeader}>
+              <View style={styles.appointmentCardTitleRow}>
+                <Ionicons name="calendar-outline" size={18} color="#2563eb" />
+                <Text style={styles.appointmentCardTitle}>Lịch hẹn</Text>
+              </View>
+              <View
+                style={[
+                  styles.appointmentStatusBadge,
+                  {
+                    backgroundColor: statusInfo.background,
+                    borderColor: statusInfo.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.appointmentStatusText, { color: statusInfo.color }]}>
+                  {statusInfo.label}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.appointmentInfoRow}>
+              <Text style={styles.appointmentInfoLabel}>Mã</Text>
+              <Text style={styles.appointmentInfoValue}>
+                {item.appointmentData.bookingCode || (appointmentId ? `#${appointmentId}` : '—')}
+              </Text>
+            </View>
+            <View style={styles.appointmentInfoRow}>
+              <Text style={styles.appointmentInfoLabel}>Bác sĩ</Text>
+              <Text style={styles.appointmentInfoValue} numberOfLines={1}>
+                {formatDoctorDisplayName(item.appointmentData.doctorName)}
+              </Text>
+            </View>
+            <View style={styles.appointmentInfoRow}>
+              <Text style={styles.appointmentInfoLabel}>Ngày</Text>
+              <Text style={styles.appointmentInfoValue}>
+                {formatAppointmentDate(item.appointmentData.appointmentDate)}
+              </Text>
+            </View>
+            <View style={styles.appointmentInfoRow}>
+              <Text style={styles.appointmentInfoLabel}>Giờ</Text>
+              <Text style={styles.appointmentInfoValue}>
+                {formatAppointmentTimeRange(item.appointmentData.timeSlot)}
+              </Text>
+            </View>
+            {item.appointmentData.hospitalName ? (
+              <View style={styles.appointmentInfoRow}>
+                <Text style={styles.appointmentInfoLabel}>Cơ sở</Text>
+                <Text style={styles.appointmentInfoValue} numberOfLines={1}>
+                  {formatHospitalDisplayName(item.appointmentData.hospitalName)}
+                </Text>
+              </View>
+            ) : null}
+            <Text
+              style={[
+                styles.messageTime,
+                styles.appointmentTimestamp,
+                isMine && styles.myMessageTime,
+              ]}
+            >
+              {formatTime(item.timestamp || (item as any).createdAt)}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
 
     return (
       <View
@@ -679,7 +865,86 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   myMessageTime: {
-    color: '#e0e7ff',
+    color: '#333',
+  },
+  appointmentCardWrapper: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#dbeafe',
+    padding: 14,
+    maxWidth: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  appointmentCardWrapperMine: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#bfdbfe',
+  },
+  appointmentCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  appointmentCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  appointmentCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2563eb',
+  },
+  appointmentStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  appointmentStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  appointmentInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 12,
+  },
+  appointmentInfoLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  appointmentInfoValue: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '600',
+  },
+  appointmentCardFooter: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  appointmentCardFooterText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  appointmentTimestamp: {
+    marginTop: 8,
   },
   inputContainer: {
     flexDirection: 'row',

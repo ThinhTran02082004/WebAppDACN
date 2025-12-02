@@ -160,7 +160,10 @@ export default function DoctorListScreen({ navigation }: Props) {
         <View style={styles.ratingContainer}>
           <Ionicons name={AppIcons.star} size={12} color={IconColors.warning} />
           <Text style={styles.rating}>
-            {doctor.averageRating ? Number(doctor.averageRating).toFixed(1) : 'N/A'}
+            {(() => {
+              const rating = doctor.ratings?.average ?? doctor.averageRating;
+              return rating && Number(rating) > 0 ? Number(rating).toFixed(1) : 'N/A';
+            })()}
           </Text>
           <Text style={styles.experience}>
             • {typeof doctor.experience === 'number' ? `${doctor.experience} năm kinh nghiệm` : 'Chưa cập nhật'}

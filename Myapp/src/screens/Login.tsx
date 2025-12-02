@@ -16,7 +16,8 @@ import { ToastService } from '../services/ToastService';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { GOOGLE_CLIENT_ID } from '../config';
-import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
+import { LoginManager, AccessToken, Settings } from 'react-native-fbsdk-next';
+import { FACEBOOK_APP_ID } from '../config';
 
 // Configure once at module load using the shared config value from environment
 if (GOOGLE_CLIENT_ID) {
@@ -92,7 +93,6 @@ export default function LoginScreen({ navigation }: Props) {
         // Try to get tokens if idToken is not available
         try {
           const tokens = await GoogleSignin.getTokens();
-          console.log('[GoogleSignin] getTokens:', tokens);
           idToken = tokens.idToken;
         } catch (tErr) {
           console.warn('GoogleSignin.getTokens() failed', tErr);
@@ -150,52 +150,123 @@ export default function LoginScreen({ navigation }: Props) {
   const handleFacebookLogin = async () => {
     try {
       setLoading(true);
+      console.log('[FacebookLogin] Starting Facebook login process');
+      
+      // Verify Facebook SDK is configured
+      if (!FACEBOOK_APP_ID) {
+        throw new Error('Facebook App ID chưa được cấu hình. Vui lòng kiểm tra file .env');
+      }
+      console.log('[FacebookLogin] Facebook App ID configured:', FACEBOOK_APP_ID);
+      
+      // Verify LoginManager is available (native module check)
+      if (!LoginManager) {
+        throw new Error('Facebook LoginManager không khả dụng. Vui lòng kiểm tra cài đặt native module.');
+      }
       
       // Ensure clean state to avoid reusing stale sessions
       try {
         await LoginManager.logOut();
-      } catch {
+        console.log('[FacebookLogin] Logged out from previous session');
+      } catch (error: any) {
         // ignore if no session
+        console.log('[FacebookLogin] Logout error (ignored):', error?.message || error);
       }
 
       // Request login with permissions
-      const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
+      console.log('[FacebookLogin] Requesting login with permissions');
+      let result;
+      try {
+        result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
+      } catch (loginError: any) {
+        // Catch native errors that might cause crashes
+        console.error('[FacebookLogin] LoginManager.logInWithPermissions error:', loginError);
+        throw new Error(`Lỗi khi mở Facebook login: ${loginError?.message || 'Unknown error'}`);
+      }
+      console.log('[FacebookLogin] Login result:', { 
+        isCancelled: result.isCancelled, 
+        error: result.error,
+        declinedPermissions: result.declinedPermissions 
+      });
 
       if (result.isCancelled) {
-        console.log('User cancelled Facebook login');
+        console.log('[FacebookLogin] User cancelled Facebook login');
         return;
       }
 
+      // Check for errors in result
+      if (result.error) {
+        const errorMsg = result.error || 'Lỗi đăng nhập Facebook';
+        console.error('[FacebookLogin] Login result error:', errorMsg);
+        throw new Error(errorMsg);
+      }
+
       // Get access token
+      console.log('[FacebookLogin] Getting access token');
       const tokenData = await AccessToken.getCurrentAccessToken();
       
       if (!tokenData || !tokenData.accessToken) {
+        console.error('[FacebookLogin] No access token received');
         throw new Error('Không thể lấy token từ Facebook');
       }
 
       // Get user ID from token data
       const userID = tokenData.userID;
       if (!userID) {
+        console.error('[FacebookLogin] No user ID in token data');
         throw new Error('Không thể lấy User ID từ Facebook');
       }
 
-      console.log('[FacebookLogin] Access token obtained, userID:', userID);
+      console.log('[FacebookLogin] Access token obtained successfully, userID:', userID);
       
       // Sign in with Facebook using access token and user ID
+      console.log('[FacebookLogin] Calling signInWithFacebook');
       await signInWithFacebook(tokenData.accessToken, userID, rememberMe);
-      ToastService.show('success', 'Thành công', 'Đăng nhập bằng Facebook thành công');
-      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
-    } catch (error: any) {
-      console.error('Facebook Sign-In Error:', error);
+      console.log('[FacebookLogin] signInWithFacebook completed successfully');
       
-      if (error.message?.includes('cancelled')) {
+      // Wait a bit to ensure state is updated
+      await new Promise((resolve: any) => setTimeout(resolve, 200));
+      
+      ToastService.show('success', 'Thành công', 'Đăng nhập bằng Facebook thành công');
+      
+      // Navigate safely with error handling
+      try {
+        console.log('[FacebookLogin] Navigating to Home');
+        navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+        console.log('[FacebookLogin] Navigation successful');
+      } catch (navError: any) {
+        console.error('[FacebookLogin] Navigation error:', navError?.message || navError);
+        // Fallback navigation
+        try {
+          navigation.navigate('Home' as never);
+        } catch (fallbackError: any) {
+          console.error('[FacebookLogin] Fallback navigation also failed:', fallbackError?.message || fallbackError);
+          ToastService.show('error', 'Lỗi', 'Đăng nhập thành công nhưng không thể chuyển trang. Vui lòng khởi động lại app.');
+        }
+      }
+    } catch (error: any) {
+      console.error('[FacebookLogin] Facebook Sign-In Error:', {
+        message: error?.message,
+        stack: error?.stack,
+        code: error?.code,
+        response: error?.response?.data
+      });
+      
+      // Check for specific error types
+      const errorMessage = error?.message || String(error) || 'Đăng nhập Facebook thất bại';
+      
+      if (errorMessage.toLowerCase().includes('cancelled') || errorMessage.toLowerCase().includes('canceled')) {
         // User cancelled, don't show error
-        console.log('User cancelled Facebook Sign-In');
+        console.log('[FacebookLogin] User cancelled Facebook Sign-In');
+      } else if (errorMessage.toLowerCase().includes('network_error') || errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('cannot reach')) {
+        ToastService.show('error', 'Lỗi mạng', 'Không thể kết nối đến Facebook. Vui lòng kiểm tra kết nối internet.');
+      } else if (errorMessage.toLowerCase().includes('developer_error') || errorMessage.toLowerCase().includes('configuration') || errorMessage.toLowerCase().includes('app_id')) {
+        ToastService.show('error', 'Lỗi cấu hình', 'Lỗi cấu hình Facebook. Vui lòng kiểm tra Facebook App ID trong cấu hình.');
       } else {
-        ToastService.show('error', 'Lỗi', error.message || 'Đăng nhập Facebook thất bại');
+        ToastService.show('error', 'Lỗi', errorMessage);
       }
     } finally {
       setLoading(false);
+      console.log('[FacebookLogin] Login process completed, loading set to false');
     }
   };
 

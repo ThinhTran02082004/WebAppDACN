@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { marginTop: 12, color: '#666' },
   listWrap: { flexDirection: 'row', flexWrap: 'wrap' },
-  cardWrap: { width: 160, marginRight: 12, marginBottom: 12 },
+  cardWrap: { width: 160, marginRight: 16, marginBottom: 12 },
   emptyWrap: { alignItems: 'center', paddingVertical: 64, backgroundColor: '#fff', margin: 16, borderRadius: 12 },
   emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: '700', color: '#666' },
   emptyDesc: { marginTop: 4, fontSize: 14, color: '#999', textAlign: 'center', paddingHorizontal: 16 },

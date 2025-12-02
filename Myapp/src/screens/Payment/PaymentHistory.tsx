@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView, RefreshControl } from 'react-native';
+import React, { useCallback, useState, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView, RefreshControl, Modal, Platform, TextInput } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +41,9 @@ export default function PaymentHistoryScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [tempDateInput, setTempDateInput] = useState('');
 
   const formatVnd = (amount?: number) => {
     if (typeof amount !== 'number') return '0 ₫';
@@ -207,6 +210,97 @@ export default function PaymentHistoryScreen() {
     }
   };
 
+  // Format date to YYYY-MM-DD for comparison
+  const formatDateForComparison = (date: Date | string): string => {
+    try {
+      const d = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(d.getTime())) return '';
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch {
+      return '';
+    }
+  };
+
+  // Check if two dates are on the same day
+  const isSameDay = (date1: Date | string, date2: Date | string): boolean => {
+    const d1 = formatDateForComparison(date1);
+    const d2 = formatDateForComparison(date2);
+    return d1 !== '' && d2 !== '' && d1 === d2;
+  };
+
+  // Filter payments by selected date
+  const filteredPayments = useMemo(() => {
+    if (!selectedDate) return payments;
+    return payments.filter((payment) => {
+      if (!payment.date) return false;
+      return isSameDay(payment.date, selectedDate);
+    });
+  }, [payments, selectedDate]);
+
+  // Handle date selection from input (DD/MM/YYYY or YYYY-MM-DD)
+  const handleDateInput = (input: string) => {
+    setTempDateInput(input);
+    
+    // Try to parse different date formats
+    let parsedDate: Date | null = null;
+    
+    // Format: DD/MM/YYYY
+    const ddmmyyyy = input.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (ddmmyyyy) {
+      const [, day, month, year] = ddmmyyyy;
+      parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    
+    // Format: YYYY-MM-DD
+    const yyyymmdd = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (yyyymmdd && !parsedDate) {
+      const [, year, month, day] = yyyymmdd;
+      parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    }
+    
+    // Validate parsed date
+    if (parsedDate && !isNaN(parsedDate.getTime())) {
+      // Check if date is reasonable (not too far in future/past)
+      const now = new Date();
+      const minDate = new Date(2020, 0, 1);
+      const maxDate = new Date(now.getFullYear() + 1, 11, 31);
+      
+      if (parsedDate >= minDate && parsedDate <= maxDate) {
+        setSelectedDate(parsedDate);
+      }
+    }
+  };
+
+  // Handle date picker confirm
+  const handleDatePickerConfirm = () => {
+    if (tempDateInput) {
+      handleDateInput(tempDateInput);
+    }
+    setShowDatePicker(false);
+  };
+
+  // Clear date filter
+  const clearDateFilter = () => {
+    setSelectedDate(null);
+    setTempDateInput('');
+  };
+
+  // Format selected date for display (DD/MM/YYYY)
+  const formatSelectedDateDisplay = (date: Date | null): string => {
+    if (!date) return '';
+    try {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return '';
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#007AFF" />
@@ -217,20 +311,148 @@ export default function PaymentHistoryScreen() {
         <Text style={styles.headerTitle}>Lịch sử thanh toán</Text>
       </View>
 
+      {/* Date Search Bar */}
+      <View style={styles.searchContainer}>
+        <TouchableOpacity
+          style={styles.dateSearchButton}
+          onPress={() => {
+            if (selectedDate) {
+              setTempDateInput(formatSelectedDateDisplay(selectedDate));
+            }
+            setShowDatePicker(true);
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="calendar-outline" size={20} color={IconColors.primary} />
+          <Text style={styles.dateSearchText}>
+            {selectedDate ? formatSelectedDateDisplay(selectedDate) : 'Tìm theo ngày'}
+          </Text>
+          {selectedDate && (
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation();
+                clearDateFilter();
+              }}
+              style={styles.clearDateButton}
+            >
+              <Ionicons name="close-circle" size={20} color="#6b7280" />
+            </TouchableOpacity>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Date Picker Modal */}
+      <Modal
+        visible={showDatePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chọn ngày</Text>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <Ionicons name="close" size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.modalLabel}>Nhập ngày (Định dạng: DD/MM/YYYY)</Text>
+              <TextInput
+                style={styles.dateInput}
+                placeholder="VD: 25/12/2024"
+                placeholderTextColor="#9ca3af"
+                value={tempDateInput || formatSelectedDateDisplay(selectedDate)}
+                onChangeText={setTempDateInput}
+                keyboardType="numeric"
+              />
+              <View style={styles.quickDateButtons}>
+                <TouchableOpacity
+                  style={styles.quickDateButton}
+                  onPress={() => {
+                    const today = new Date();
+                    const formatted = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+                    setTempDateInput(formatted);
+                    setSelectedDate(today);
+                  }}
+                >
+                  <Text style={styles.quickDateButtonText}>Hôm nay</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickDateButton}
+                  onPress={() => {
+                    const yesterday = new Date();
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    const formatted = `${String(yesterday.getDate()).padStart(2, '0')}/${String(yesterday.getMonth() + 1).padStart(2, '0')}/${yesterday.getFullYear()}`;
+                    setTempDateInput(formatted);
+                    setSelectedDate(yesterday);
+                  }}
+                >
+                  <Text style={styles.quickDateButtonText}>Hôm qua</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickDateButton}
+                  onPress={() => {
+                    const weekAgo = new Date();
+                    weekAgo.setDate(weekAgo.getDate() - 7);
+                    const formatted = `${String(weekAgo.getDate()).padStart(2, '0')}/${String(weekAgo.getMonth() + 1).padStart(2, '0')}/${weekAgo.getFullYear()}`;
+                    setTempDateInput(formatted);
+                    setSelectedDate(weekAgo);
+                  }}
+                >
+                  <Text style={styles.quickDateButtonText}>7 ngày trước</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => {
+                  setTempDateInput('');
+                  setShowDatePicker(false);
+                }}
+              >
+                <Text style={styles.modalCancelButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalConfirmButton]}
+                onPress={handleDatePickerConfirm}
+              >
+                <Text style={styles.modalConfirmButtonText}>Áp dụng</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={IconColors.primary} />}
         showsVerticalScrollIndicator={false}
       >
-        {(!payments || payments.length === 0) && !loading ? (
+        {(!filteredPayments || filteredPayments.length === 0) && !loading ? (
           <View style={styles.emptyWrap}>
             <Ionicons name="card-outline" size={64} color="#d1d5db" />
-            <Text style={styles.emptyTitle}>Chưa có giao dịch</Text>
-            <Text style={styles.emptyDesc}>Bạn chưa có thanh toán nào được ghi nhận</Text>
+            <Text style={styles.emptyTitle}>
+              {selectedDate ? 'Không có giao dịch trong ngày này' : 'Chưa có giao dịch'}
+            </Text>
+            <Text style={styles.emptyDesc}>
+              {selectedDate
+                ? `Không tìm thấy thanh toán nào vào ngày ${formatSelectedDateDisplay(selectedDate)}`
+                : 'Bạn chưa có thanh toán nào được ghi nhận'}
+            </Text>
+            {selectedDate && (
+              <TouchableOpacity
+                style={styles.clearFilterButton}
+                onPress={clearDateFilter}
+              >
+                <Text style={styles.clearFilterButtonText}>Xóa bộ lọc</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
-          payments.map((p) => {
+          filteredPayments.map((p) => {
             const color = getStatusColor(p.status);
             return (
               <TouchableOpacity
@@ -321,11 +543,147 @@ const styles = StyleSheet.create({
   },
   backButton: { position: 'absolute', top: 50, left: 20, zIndex: 1 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  searchContainer: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  dateSearchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  dateSearchText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  clearDateButton: {
+    marginLeft: 8,
+    padding: 2,
+  },
   scroll: { flex: 1 },
   scrollContent: { padding: 16 },
   emptyWrap: { alignItems: 'center', paddingVertical: 64 },
   emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: '700', color: '#111827' },
-  emptyDesc: { marginTop: 4, fontSize: 14, color: '#6b7280' },
+  emptyDesc: { marginTop: 4, fontSize: 14, color: '#6b7280', textAlign: 'center', paddingHorizontal: 32 },
+  clearFilterButton: {
+    marginTop: 16,
+    backgroundColor: IconColors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  clearFilterButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalBody: {
+    padding: 16,
+  },
+  modalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#111827',
+    backgroundColor: '#fff',
+  },
+  quickDateButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+  },
+  quickDateButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: IconColors.primary,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  quickDateButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IconColors.primary,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  modalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  modalCancelButton: {
+    backgroundColor: '#f3f4f6',
+    marginRight: 8,
+  },
+  modalCancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  modalConfirmButton: {
+    backgroundColor: IconColors.primary,
+  },
+  modalConfirmButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
   paymentItem: {
     backgroundColor: '#fff',
     borderRadius: 12,

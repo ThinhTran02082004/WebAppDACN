@@ -124,17 +124,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInWithFacebook = async (accessToken: string, userID: string, rememberMe = false) => {
     try {
+      console.log('[AuthContext] Starting Facebook login with userID:', userID);
       const res = await apiService.facebookLogin(accessToken, userID);
-      if (res.success && res.data?.token) {
-        if (rememberMe) await AsyncStorage.setItem('token', res.data.token);
-        apiService.setToken(res.data.token);
-        const me = await apiService.getCurrentUser();
-        if (me.success) setUser(me.data || null);
-      } else {
-        throw new Error(res.message || 'Facebook login failed');
+      
+      if (!res) {
+        throw new Error('Không nhận được phản hồi từ server');
       }
-    } catch (e) {
-      throw e;
+      
+      if (res.success && res.data?.token) {
+        console.log('[AuthContext] Facebook login successful, setting token');
+        if (rememberMe) {
+          await AsyncStorage.setItem('token', res.data.token);
+        }
+        apiService.setToken(res.data.token);
+        
+        console.log('[AuthContext] Fetching current user info');
+        const me = await apiService.getCurrentUser();
+        if (me.success && me.data) {
+          console.log('[AuthContext] User info fetched, setting user:', me.data._id);
+          setUser(me.data);
+        } else {
+          console.warn('[AuthContext] Failed to fetch user info, but login was successful');
+          // Still consider login successful even if we can't fetch user info
+        }
+      } else {
+        const errorMessage = res.message || 'Facebook login failed';
+        console.error('[AuthContext] Facebook login failed:', errorMessage);
+        throw new Error(errorMessage);
+      }
+    } catch (e: any) {
+      console.error('[AuthContext] Facebook login error:', e);
+      // Re-throw with more context if needed
+      if (e?.response?.data?.message) {
+        throw new Error(e.response.data.message);
+      } else if (e?.message) {
+        throw e;
+      } else {
+        throw new Error('Đăng nhập Facebook thất bại. Vui lòng thử lại.');
+      }
     }
   };
 

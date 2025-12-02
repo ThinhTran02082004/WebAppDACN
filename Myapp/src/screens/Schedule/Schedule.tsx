@@ -744,13 +744,27 @@ export default function AppointmentScheduleScreen({ navigation, route }: any) {
                               const totalMedicationAmount = appointment.bill.medicationAmount || 0;
                               const remainingMedicationAmount = getRemainingMedicationAmount(appointment);
                               const isFullyPaid = appointment.bill.medicationStatus === 'paid' && appointment.status !== 'pending';
-                              
-                              // If fully paid, don't show medication amount
+
+                              // Nếu đã thanh toán hết tiền thuốc -> hiển thị dòng với dấu check
                               if (isFullyPaid) {
-                                return null;
+                                return (
+                                  <View style={styles.paymentBreakdownRow}>
+                                    <View style={styles.paymentBreakdownLabel}>
+                                      <Ionicons
+                                        name="checkmark-circle"
+                                        size={14}
+                                        color="#10b981"
+                                      />
+                                      <Text style={styles.paymentBreakdownText}>Tiền thuốc:</Text>
+                                    </View>
+                                    <Text style={styles.paymentBreakdownAmount}>
+                                      {formatVnd(totalMedicationAmount)}
+                                    </Text>
+                                  </View>
+                                );
                               }
-                              
-                              // If partially paid, show remaining amount
+
+                              // Nếu đã thanh toán một phần -> hiển thị số tiền còn lại
                               if (remainingMedicationAmount < totalMedicationAmount && remainingMedicationAmount > 0) {
                                 return (
                                   <View style={styles.paymentBreakdownRow}>
@@ -769,7 +783,7 @@ export default function AppointmentScheduleScreen({ navigation, route }: any) {
                                 );
                               }
                               
-                              // If not paid at all, show total amount
+                              // Nếu chưa thanh toán -> hiển thị tổng tiền thuốc
                               return (
                                 <View style={styles.paymentBreakdownRow}>
                                   <View style={styles.paymentBreakdownLabel}>

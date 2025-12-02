@@ -288,20 +288,6 @@ export default function ServiceListScreen({ navigation }: Props) {
               500k - 2tr
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.filterButton,
-              priceRange === 'high' && styles.filterButtonActive
-            ]}
-            onPress={() => setPriceRange('high')}
-          >
-            <Text style={[
-              styles.filterButtonText,
-              priceRange === 'high' && styles.filterButtonTextActive
-            ]}>
-              Trên 2tr
-            </Text>
-          </TouchableOpacity>
         </ScrollView>
       </View>
 

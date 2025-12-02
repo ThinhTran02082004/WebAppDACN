@@ -80,6 +80,10 @@ export interface Doctor {
   consultationFee: number;
   isAvailable: boolean;
   averageRating?: number;
+  ratings?: {
+    average?: number;
+    count?: number;
+  };
   services?: Array<{
     _id: string;
     name: string;
@@ -733,10 +737,15 @@ class ApiService {
   }
 
   // Payments - PayPal: create and execute
-  async createPaypalPayment(appointmentId: string): Promise<ApiResponse<{ paymentId: string; approvalUrl: string }>> {
+  async createPaypalPayment(params: {
+    appointmentId: string;
+    amount: number;
+    billType?: string;
+    prescriptionId?: string;
+  }): Promise<ApiResponse<{ paymentId: string; approvalUrl: string }>> {
     try {
       await this.probeBackend();
-      const res = await this.client.post('/payments/paypal/create', { appointmentId });
+      const res = await this.client.post('/payments/paypal/create', params);
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);

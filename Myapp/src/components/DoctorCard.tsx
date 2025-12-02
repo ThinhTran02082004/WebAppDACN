@@ -81,7 +81,10 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
           <View style={styles.ratingContainerVertical}>
             <Ionicons name="star" size={12} color="#ff9500" />
             <Text style={styles.rating}>
-              {doctor.averageRating ? Number(doctor.averageRating).toFixed(1) : 'N/A'}
+              {(() => {
+                const rating = doctor.ratings?.average ?? doctor.averageRating;
+                return rating && Number(rating) > 0 ? Number(rating).toFixed(1) : 'N/A';
+              })()}
             </Text>
             <Text style={styles.experience}>
               • {typeof doctor.experience === 'number' ? `${doctor.experience} năm` : 'Chưa cập nhật'}
@@ -153,7 +156,10 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
           <View style={styles.ratingContainer}>
             <Ionicons name="star" size={12} color="#ff9500" />
             <Text style={styles.rating}>
-              {doctor.averageRating ? Number(doctor.averageRating).toFixed(1) : 'N/A'}
+              {(() => {
+                const rating = doctor.ratings?.average ?? doctor.averageRating;
+                return rating && Number(rating) > 0 ? Number(rating).toFixed(1) : 'N/A';
+              })()}
             </Text>
             <Text style={styles.experience}>
               • {typeof doctor.experience === 'number' ? `${doctor.experience} năm kinh nghiệm` : 'Chưa cập nhật'}

@@ -16,7 +16,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { NewsItem, apiService } from '../../services/api';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 
-// type NewsDetailRouteProp = RouteProp<RootStackParamList, 'NewsDetail'>;
 
 export default function NewsDetailScreen() {
   const navigation = useNavigation();
@@ -36,8 +35,6 @@ export default function NewsDetailScreen() {
       setLoading(true);
       setError(null);
       
-      // Since we don't have a specific getNewsById endpoint, 
-      // we'll get all news and find the one with matching ID
       const response = await apiService.getNews({ limit: 1000, isPublished: true as any });
       
       if (response.success && response.data) {

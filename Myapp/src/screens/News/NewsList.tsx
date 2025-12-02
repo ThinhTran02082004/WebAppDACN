@@ -9,11 +9,11 @@ import {
   StatusBar,
   SafeAreaView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { NewsItem, apiService } from '../../services/api';
-import NewsCard from '../../components/NewsCard';
 
 type Props = {
   navigation: any;
@@ -107,11 +107,35 @@ export default function NewsListScreen({ navigation }: Props) {
   };
 
   const renderNewsCard = (newsItem: NewsItem) => (
-    <NewsCard
+    <TouchableOpacity
       key={newsItem._id}
-      news={newsItem}
-      onPress={handleNewsPress}
-    />
+      style={styles.newsListCard}
+      activeOpacity={0.8}
+      onPress={() => handleNewsPress(newsItem)}
+    >
+      {newsItem.image?.secureUrl ? (
+        <Image
+          source={{ uri: newsItem.image.secureUrl }}
+          style={styles.newsListImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.newsListImagePlaceholder}>
+          <Ionicons name="newspaper-outline" size={28} color="#a0aec0" />
+        </View>
+      )}
+      <View style={styles.newsListContent}>
+        <Text style={styles.newsListDate}>{formatDate(newsItem.createdAt || new Date())}</Text>
+        <Text style={styles.newsListTitle} numberOfLines={2}>
+          {newsItem.title}
+        </Text>
+        {newsItem.summary ? (
+          <Text style={styles.newsListSummary} numberOfLines={3}>
+            {newsItem.summary}
+          </Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -332,6 +356,50 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 8,
     textAlign: 'center',
+  },
+  newsListCard: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  newsListImage: {
+    width: '100%',
+    height: 160,
+    backgroundColor: '#e5e7eb',
+  },
+  newsListImagePlaceholder: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f0f1f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newsListContent: {
+    padding: 16,
+  },
+  newsListDate: {
+    fontSize: 13,
+    color: '#8c8c8c',
+    marginBottom: 6,
+  },
+  newsListTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1f2937',
+    lineHeight: 24,
+  },
+  newsListSummary: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 20,
   },
 });
 
