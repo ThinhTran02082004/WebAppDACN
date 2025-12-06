@@ -601,6 +601,32 @@ const cacheAnswer = async (userPrompt, aiResponse) => {
 const Specialty = require('../models/Specialty');
 
 const MANUAL_SPECIALTY_MAP = [
+  // QUAN TRỌNG: Sắp xếp theo độ dài keyword (dài trước, ngắn sau) để tránh match sai
+  // Ví dụ: "nội khoa" phải match trước "ho" (vì "nội khoa" chứa "ho")
+  
+  // Chuyên khoa cụ thể - ưu tiên cao nhất (exact match)
+  {
+    keywords: ['nội khoa', 'khoa nội', 'nội tổng quát'],
+    specialtyName: 'Nội khoa'
+  },
+  {
+    keywords: ['ngoại khoa', 'khoa ngoại'],
+    specialtyName: 'Ngoại khoa'
+  },
+  {
+    keywords: ['nội hô hấp', 'hô hấp', 'khoa hô hấp'],
+    specialtyName: 'Nội Hô Hấp'
+  },
+  {
+    keywords: ['nội tim mạch', 'tim mạch', 'khoa tim mạch'],
+    specialtyName: 'Nội Tim Mạch'
+  },
+  {
+    keywords: ['nội tiêu hóa', 'tiêu hóa', 'khoa tiêu hóa'],
+    specialtyName: 'Nội Tiêu Hoá'
+  },
+  
+  // Triệu chứng và từ khóa khác
   {
     keywords: ['tiêm phòng', 'tiêm vaccine', 'vaccine', 'tiêm ngừa', 'chích ngừa', 'tiêm chủng'],
     specialtyName: 'Nhi khoa'
@@ -610,15 +636,39 @@ const MANUAL_SPECIALTY_MAP = [
     specialtyName: 'Sản khoa'
   },
   {
-    keywords: ['ho', 'ho khan', 'ho có đờm', 'ho nhiều', 'ho lâu ngày', 'ho dai dẳng', 'hô hấp', 'đường hô hấp', 'viêm phổi', 'viêm phế quản', 'khó thở', 'hen suyễn', 'hen phế quản'],
+    // Ho đơn giản → Nội khoa (tổng quát, có thể khám nhiều bệnh)
+    // Lưu ý: Phải đứng sau "nội khoa" để tránh match sai khi query là "nội khoa"
+    keywords: ['ho'],
+    specialtyName: 'Nội khoa'
+  },
+  {
+    // Ho kèm triệu chứng cụ thể → Nội Hô Hấp (chuyên sâu về hô hấp)
+    keywords: ['ho khan', 'ho có đờm', 'ho nhiều', 'ho lâu ngày', 'ho dai dẳng', 'ho mãn tính', 'ho ra máu', 'đường hô hấp', 'viêm phổi', 'viêm phế quản', 'khó thở', 'hen suyễn', 'hen phế quản', 'tắc nghẽn phổi'],
     specialtyName: 'Nội Hô Hấp'
   },
   {
-    keywords: ['đau tim', 'tim mạch', 'huyết áp', 'tăng huyết áp', 'hạ huyết áp', 'nhồi máu cơ tim', 'suy tim', 'rối loạn nhịp tim'],
+    // Tim mạch nhẹ/chung → Nội khoa (có thể khám)
+    keywords: ['tim đập nhanh', 'tim đập chậm', 'hồi hộp', 'đánh trống ngực'],
+    specialtyName: 'Nội khoa'
+  },
+  {
+    // Tim mạch nặng/cụ thể → Nội Tim Mạch (chuyên sâu)
+    keywords: ['đau tim', 'nhồi máu cơ tim', 'suy tim', 'rối loạn nhịp tim', 'bệnh tim bẩm sinh', 'van tim', 'thiếu máu cơ tim'],
     specialtyName: 'Nội Tim Mạch'
   },
   {
-    keywords: ['đau bụng', 'tiêu hóa', 'tiêu chảy', 'táo bón', 'đau dạ dày', 'viêm dạ dày', 'loét dạ dày', 'trào ngược'],
+    // Huyết áp → Nội Tim Mạch (chuyên khoa về tim mạch)
+    keywords: ['huyết áp', 'tăng huyết áp', 'hạ huyết áp', 'huyết áp cao', 'huyết áp thấp'],
+    specialtyName: 'Nội Tim Mạch'
+  },
+  {
+    // Tiêu hóa nhẹ/chung → Nội khoa (có thể khám)
+    keywords: ['đau bụng', 'tiêu chảy', 'táo bón'],
+    specialtyName: 'Nội khoa'
+  },
+  {
+    // Tiêu hóa nặng/cụ thể → Nội Tiêu Hóa (chuyên sâu)
+    keywords: ['đau dạ dày', 'viêm dạ dày', 'loét dạ dày', 'trào ngược', 'viêm loét dạ dày', 'ung thư dạ dày', 'viêm đại tràng', 'hội chứng ruột kích thích'],
     specialtyName: 'Nội Tiêu Hoá'
   },
   {
@@ -637,29 +687,83 @@ const findSpecialtyMapping = async (symptomQuery) => {
     console.log(`[Qdrant Mapper] Đang tìm mapping cho: "${symptomQuery}" (normalized: "${normalized}")`);
     
     // Kiểm tra manual mapping trước
+    // QUAN TRỌNG: Sắp xếp keywords theo độ dài (dài trước) để match chính xác hơn
     for (const manual of MANUAL_SPECIALTY_MAP) {
-      const matchedKeyword = manual.keywords.find(keyword => normalized.includes(keyword.toLowerCase()));
-      if (matchedKeyword) {
-        console.log(`[Manual Mapper] Tìm thấy keyword "${matchedKeyword}" trong query "${symptomQuery}"`);
-        if (!manual._cachedId) {
-          // Tìm chuyên khoa không phân biệt hoa/thường
-          let specialtyDoc = await Specialty.findOne({ name: manual.specialtyName }).select('_id name');
-          if (!specialtyDoc) {
-            // Thử tìm với regex không phân biệt hoa/thường
-            specialtyDoc = await Specialty.findOne({ name: { $regex: new RegExp(`^${manual.specialtyName}$`, 'i') } }).select('_id name');
+      // Sắp xếp keywords theo độ dài (dài nhất trước) để ưu tiên match chính xác
+      const sortedKeywords = [...manual.keywords].sort((a, b) => b.length - a.length);
+      
+      for (const keyword of sortedKeywords) {
+        const keywordLower = keyword.toLowerCase();
+        const keywordNormalized = keywordLower.trim();
+        
+        // Kiểm tra exact match trước (query chính xác bằng keyword)
+        if (normalized === keywordNormalized) {
+          console.log(`[Manual Mapper] Exact match: "${keyword}" trong query "${symptomQuery}"`);
+          if (!manual._cachedId) {
+            let specialtyDoc = await Specialty.findOne({ name: manual.specialtyName }).select('_id name');
+            if (!specialtyDoc) {
+              specialtyDoc = await Specialty.findOne({ name: { $regex: new RegExp(`^${manual.specialtyName}$`, 'i') } }).select('_id name');
+            }
+            if (!specialtyDoc) {
+              console.warn(`[Manual Mapper] Không tìm thấy chuyên khoa "${manual.specialtyName}" trong database`);
+              break;
+            }
+            manual._cachedId = specialtyDoc._id.toString();
+            console.log(`[Manual Mapper] Đã cache specialtyId: ${manual._cachedId} cho "${manual.specialtyName}" (tìm thấy: "${specialtyDoc.name}")`);
           }
-          if (!specialtyDoc) {
-            console.warn(`[Manual Mapper] Không tìm thấy chuyên khoa "${manual.specialtyName}" trong database`);
-            continue;
-          }
-          manual._cachedId = specialtyDoc._id.toString();
-          console.log(`[Manual Mapper] Đã cache specialtyId: ${manual._cachedId} cho "${manual.specialtyName}" (tìm thấy: "${specialtyDoc.name}")`);
+          console.log(`[Manual Mapper] "${symptomQuery}" được map thủ công -> "${manual.specialtyName}" (ID: ${manual._cachedId})`);
+          return {
+            specialtyId: manual._cachedId,
+            specialtyName: manual.specialtyName
+          };
         }
-        console.log(`[Manual Mapper] "${symptomQuery}" được map thủ công -> "${manual.specialtyName}" (ID: ${manual._cachedId})`);
-        return {
-          specialtyId: manual._cachedId,
-          specialtyName: manual.specialtyName
-        };
+        
+        // Kiểm tra word boundary match (từ độc lập, không phải substring)
+        // Ví dụ: "ho" chỉ match khi là từ riêng, không match trong "nội khoa"
+        const wordBoundaryRegex = new RegExp(`\\b${keywordLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (wordBoundaryRegex.test(normalized)) {
+          console.log(`[Manual Mapper] Word boundary match: "${keyword}" trong query "${symptomQuery}"`);
+          if (!manual._cachedId) {
+            let specialtyDoc = await Specialty.findOne({ name: manual.specialtyName }).select('_id name');
+            if (!specialtyDoc) {
+              specialtyDoc = await Specialty.findOne({ name: { $regex: new RegExp(`^${manual.specialtyName}$`, 'i') } }).select('_id name');
+            }
+            if (!specialtyDoc) {
+              console.warn(`[Manual Mapper] Không tìm thấy chuyên khoa "${manual.specialtyName}" trong database`);
+              break;
+            }
+            manual._cachedId = specialtyDoc._id.toString();
+            console.log(`[Manual Mapper] Đã cache specialtyId: ${manual._cachedId} cho "${manual.specialtyName}" (tìm thấy: "${specialtyDoc.name}")`);
+          }
+          console.log(`[Manual Mapper] "${symptomQuery}" được map thủ công -> "${manual.specialtyName}" (ID: ${manual._cachedId})`);
+          return {
+            specialtyId: manual._cachedId,
+            specialtyName: manual.specialtyName
+          };
+        }
+        
+        // Fallback: substring match (chỉ cho keywords dài >= 4 ký tự để tránh false positive)
+        // Ví dụ: "nội khoa" (8 ký tự) có thể match trong "tìm bác sĩ nội khoa"
+        if (keyword.length >= 4 && normalized.includes(keywordLower)) {
+          console.log(`[Manual Mapper] Substring match (keyword dài): "${keyword}" trong query "${symptomQuery}"`);
+          if (!manual._cachedId) {
+            let specialtyDoc = await Specialty.findOne({ name: manual.specialtyName }).select('_id name');
+            if (!specialtyDoc) {
+              specialtyDoc = await Specialty.findOne({ name: { $regex: new RegExp(`^${manual.specialtyName}$`, 'i') } }).select('_id name');
+            }
+            if (!specialtyDoc) {
+              console.warn(`[Manual Mapper] Không tìm thấy chuyên khoa "${manual.specialtyName}" trong database`);
+              break;
+            }
+            manual._cachedId = specialtyDoc._id.toString();
+            console.log(`[Manual Mapper] Đã cache specialtyId: ${manual._cachedId} cho "${manual.specialtyName}" (tìm thấy: "${specialtyDoc.name}")`);
+          }
+          console.log(`[Manual Mapper] "${symptomQuery}" được map thủ công -> "${manual.specialtyName}" (ID: ${manual._cachedId})`);
+          return {
+            specialtyId: manual._cachedId,
+            specialtyName: manual.specialtyName
+          };
+        }
       }
     }
     

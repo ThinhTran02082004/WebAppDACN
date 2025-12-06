@@ -10,6 +10,36 @@ const { findSpecialtyMapping, findServiceMapping, findDoctorMapping } = require(
  * Tools tìm kiếm: bệnh viện, bác sĩ, và lịch trống
  */
 
+/**
+ * Kiểm tra xem query có phải là tên bác sĩ không
+ * @param {string} query - Query cần kiểm tra
+ * @returns {Object|null} - Object chứa tên bác sĩ nếu tìm thấy, null nếu không
+ */
+const extractDoctorName = (query) => {
+    if (!query || typeof query !== 'string') return null;
+    
+    // Pattern: "bác sĩ" hoặc "bs" hoặc "doctor" + tên (2-4 từ tiếng Việt, bắt đầu bằng chữ hoa)
+    // Ví dụ: "bác sĩ Vũ Thị Hà", "khám bác sĩ Vũ Thị Hà", "Bác sĩ Vũ Thị Hà"
+    const patterns = [
+        /(?:^|\s)(?:bác\s*sĩ|bs|doctor)\s+([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]{2,30})/i,
+        /(?:^|\s)(?:khám|đặt\s*lịch|tìm)\s+(?:bác\s*sĩ|bs|doctor)\s+([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]{2,30})/i
+    ];
+    
+    for (const pattern of patterns) {
+        const match = query.match(pattern);
+        if (match && match[1]) {
+            const doctorName = match[1].trim();
+            // Kiểm tra tên có ít nhất 2 từ (họ và tên)
+            const words = doctorName.split(/\s+/).filter(w => w.length > 0);
+            if (words.length >= 2 && words.length <= 4) {
+                return { doctorName, fullMatch: match[0].trim() };
+            }
+        }
+    }
+    
+    return null;
+};
+
 const searchTools = {
     "findHospitals": async ({ specialty, city, name }) => {
         try {
@@ -174,8 +204,22 @@ const searchTools = {
                 }
             }
             
-            // ƯU TIÊN 1: Nếu chưa có specialtyDoc và có query, dùng Qdrant Mapper với query
+            // ƯU TIÊN 1: Kiểm tra xem query có phải là tên bác sĩ không
+            // Nếu là tên bác sĩ, không map thành chuyên khoa, sẽ tìm bác sĩ trực tiếp ở bước sau
+            let isDoctorNameQuery = false;
+            let extractedDoctorName = null;
+            
             if (!specialtyDoc && query) {
+                extractedDoctorName = extractDoctorName(query);
+                if (extractedDoctorName) {
+                    isDoctorNameQuery = true;
+                    console.log(`[Tool] 🔍 Phát hiện query là tên bác sĩ: "${extractedDoctorName.doctorName}" (từ "${extractedDoctorName.fullMatch}")`);
+                    console.log(`[Tool] ⏭️ Bỏ qua mapping thành chuyên khoa, sẽ tìm bác sĩ trực tiếp ở bước sau`);
+                }
+            }
+            
+            // ƯU TIÊN 2: Nếu chưa có specialtyDoc và có query và KHÔNG phải là tên bác sĩ, dùng Qdrant Mapper với query
+            if (!specialtyDoc && query && !isDoctorNameQuery) {
                 console.log(`[Tool] Đang dùng Qdrant Mapper để tìm chuyên khoa cho query "${query}"...`);
                 try {
                     const mapping = await findSpecialtyMapping(query);
@@ -195,9 +239,9 @@ const searchTools = {
                 }
             }
             
-            // FALLBACK: Nếu Qdrant không tìm thấy và có query, thử tìm bằng tên chính xác với word boundaries
+            // FALLBACK: Nếu Qdrant không tìm thấy và có query và KHÔNG phải là tên bác sĩ, thử tìm bằng tên chính xác với word boundaries
             // (tránh trường hợp "ho" match với "Khoa" trong "Nam Khoa")
-            if (!specialtyDoc && query) {
+            if (!specialtyDoc && query && !isDoctorNameQuery) {
                 console.log(`[Tool] ⚠️ Qdrant không tìm thấy, đang thử tìm chuyên khoa bằng tên chính xác (FALLBACK)...`);
                 
                 // Với query ngắn (<= 3 ký tự), dùng exact match hoặc word boundaries
@@ -222,80 +266,133 @@ const searchTools = {
                 }
             }
 
-            if (!specialtyDoc) {
+            // Nếu query là tên bác sĩ, không cần specialtyDoc (sẽ tìm bác sĩ trực tiếp)
+            // Nếu không phải tên bác sĩ và không có specialtyDoc, trả về lỗi
+            if (!specialtyDoc && !isDoctorNameQuery) {
                 const searchTerm = specialty || query || 'không xác định';
                 console.log(`[Tool] ERROR: Không tìm thấy chuyên khoa cho "${searchTerm}"`);
                 return { error: `Xin lỗi, hệ thống không thể xác định chuyên khoa cho "${searchTerm}". Vui lòng thử lại với từ khóa khác hoặc chỉ định rõ chuyên khoa bạn muốn khám.` };
             }
 
-            console.log(`[Tool] Đã xác định chuyên khoa: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
-
-            // 2. Tìm service phù hợp với query (nếu có) - SỬ DỤNG QDRANT MAPPER
-            let matchedService = null;
-            console.log(`[Tool] Đang tìm service phù hợp với query "${query}"...`);
+            // Nếu query là tên bác sĩ, tìm bác sĩ trực tiếp trước
+            let doctors = [];
+            let foundDoctorByName = false;
             
-            // Ưu tiên 1: Sử dụng Qdrant Service Mapper để tìm service phù hợp nhất
-            const qdrantServices = await findServiceMapping(query, specialtyDoc._id.toString());
-            
-            if (qdrantServices.length > 0) {
-                // Lấy service có score cao nhất từ Qdrant
-                const topService = qdrantServices[0];
-                console.log(`[Tool] Qdrant tìm thấy service: "${topService.serviceName}" (Score: ${topService.score.toFixed(3)})`);
+            if (isDoctorNameQuery && extractedDoctorName) {
+                console.log(`[Tool] 🔍 Đang tìm bác sĩ trực tiếp theo tên: "${extractedDoctorName.doctorName}"`);
                 
-                // Query từ MongoDB để lấy dữ liệu mới nhất (đảm bảo dữ liệu không bị lỗi thời)
-                const serviceFromDB = await Service.findById(topService.serviceId)
-                    .where({ isActive: true, specialtyId: specialtyDoc._id });
+                // Tìm bác sĩ theo tên (không cần specialty)
+                const doctorNameLower = extractedDoctorName.doctorName.toLowerCase();
+                const allDoctors = await Doctor.find({ isAvailable: { $ne: false } })
+                    .populate('user', 'fullName')
+                    .populate('specialtyId', 'name')
+                    .populate('services');
                 
-                if (serviceFromDB) {
-                    matchedService = serviceFromDB;
-                    console.log(`[Tool] ✅ Đã xác nhận service từ DB: "${matchedService.name}" (ID: ${matchedService._id})`);
+                // Filter bác sĩ có tên khớp
+                doctors = allDoctors.filter(doctor => {
+                    const doctorName = doctor.user?.fullName || '';
+                    return doctorName.toLowerCase().includes(doctorNameLower);
+                });
+                
+                if (doctors.length > 0) {
+                    foundDoctorByName = true;
+                    console.log(`[Tool] ✅ Tìm thấy ${doctors.length} bác sĩ với tên "${extractedDoctorName.doctorName}"`);
+                    
+                    // Lấy specialty từ bác sĩ đầu tiên (nếu có)
+                    if (doctors[0].specialtyId) {
+                        specialtyDoc = doctors[0].specialtyId;
+                        console.log(`[Tool] ✅ Đã xác định chuyên khoa từ bác sĩ: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
+                    } else {
+                        console.log(`[Tool] ⚠️ Bác sĩ "${extractedDoctorName.doctorName}" không có chuyên khoa`);
+                    }
                 } else {
-                    console.log(`[Tool] ⚠️ Service từ Qdrant không còn tồn tại trong DB, tìm kiếm fallback...`);
+                    console.log(`[Tool] ⚠️ Không tìm thấy bác sĩ với tên "${extractedDoctorName.doctorName}"`);
                 }
             }
             
-            // Fallback: Nếu Qdrant không tìm thấy hoặc service không còn tồn tại, tìm trực tiếp từ MongoDB
-            if (!matchedService) {
-                console.log(`[Tool] Fallback: Tìm service trực tiếp từ MongoDB...`);
+            // Nếu không tìm thấy bác sĩ theo tên hoặc không phải query tên bác sĩ, cần có specialtyDoc
+            if (!foundDoctorByName && !specialtyDoc) {
+                const searchTerm = specialty || query || 'không xác định';
+                console.log(`[Tool] ERROR: Không tìm thấy chuyên khoa cho "${searchTerm}"`);
+                return { error: `Xin lỗi, hệ thống không thể xác định chuyên khoa cho "${searchTerm}". Vui lòng thử lại với từ khóa khác hoặc chỉ định rõ chuyên khoa bạn muốn khám.` };
+            }
+            
+            if (specialtyDoc) {
+                console.log(`[Tool] Đã xác định chuyên khoa: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
+            }
+
+            // 2. Tìm service phù hợp với query (nếu có) - SỬ DỤNG QDRANT MAPPER
+            // Chỉ tìm service nếu đã có specialtyDoc
+            let matchedService = null;
+            if (specialtyDoc) {
+                console.log(`[Tool] Đang tìm service phù hợp với query "${query}"...`);
                 
-                // Tìm service có tên khớp với query
-                const services = await Service.find({
-                    specialtyId: specialtyDoc._id,
-                    isActive: true,
-                    name: { $regex: query, $options: 'i' }
-                }).limit(5);
-                
-                if (services.length > 0) {
-                    matchedService = services[0];
-                    console.log(`[Tool] Tìm thấy service phù hợp (MongoDB): "${matchedService.name}" (ID: ${matchedService._id})`);
-                } else {
-                    // Nếu không tìm thấy service khớp tên, thử tìm service có tên gần giống
-                    const allServices = await Service.find({
-                        specialtyId: specialtyDoc._id,
-                        isActive: true
-                    });
+                // Ưu tiên 1: Sử dụng Qdrant Service Mapper để tìm service phù hợp nhất
+                const qdrantServices = await findServiceMapping(query, specialtyDoc._id.toString());
+            
+                if (qdrantServices.length > 0) {
+                    // Lấy service có score cao nhất từ Qdrant
+                    const topService = qdrantServices[0];
+                    console.log(`[Tool] Qdrant tìm thấy service: "${topService.serviceName}" (Score: ${topService.score.toFixed(3)})`);
                     
-                    // Tìm service có tên chứa các từ khóa trong query
-                    const queryWords = query.toLowerCase().split(/\s+/);
-                    for (const service of allServices) {
-                        const serviceNameLower = service.name.toLowerCase();
-                        const matchCount = queryWords.filter(word => serviceNameLower.includes(word)).length;
-                        if (matchCount >= queryWords.length * 0.5) { // Ít nhất 50% từ khóa khớp
-                            matchedService = service;
-                            console.log(`[Tool] Tìm thấy service gần khớp (MongoDB): "${matchedService.name}" (ID: ${matchedService._id})`);
-                            break;
+                    // Query từ MongoDB để lấy dữ liệu mới nhất (đảm bảo dữ liệu không bị lỗi thời)
+                    const serviceFromDB = await Service.findById(topService.serviceId)
+                        .where({ isActive: true, specialtyId: specialtyDoc._id });
+                    
+                    if (serviceFromDB) {
+                        matchedService = serviceFromDB;
+                        console.log(`[Tool] ✅ Đã xác nhận service từ DB: "${matchedService.name}" (ID: ${matchedService._id})`);
+                    } else {
+                        console.log(`[Tool] ⚠️ Service từ Qdrant không còn tồn tại trong DB, tìm kiếm fallback...`);
+                    }
+                }
+                
+                // Fallback: Nếu Qdrant không tìm thấy hoặc service không còn tồn tại, tìm trực tiếp từ MongoDB
+                if (!matchedService) {
+                    console.log(`[Tool] Fallback: Tìm service trực tiếp từ MongoDB...`);
+                    
+                    // Tìm service có tên khớp với query
+                    const services = await Service.find({
+                        specialtyId: specialtyDoc._id,
+                        isActive: true,
+                        name: { $regex: query, $options: 'i' }
+                    }).limit(5);
+                    
+                    if (services.length > 0) {
+                        matchedService = services[0];
+                        console.log(`[Tool] Tìm thấy service phù hợp (MongoDB): "${matchedService.name}" (ID: ${matchedService._id})`);
+                    } else {
+                        // Nếu không tìm thấy service khớp tên, thử tìm service có tên gần giống
+                        const allServices = await Service.find({
+                            specialtyId: specialtyDoc._id,
+                            isActive: true
+                        });
+                        
+                        // Tìm service có tên chứa các từ khóa trong query
+                        const queryWords = query.toLowerCase().split(/\s+/);
+                        for (const service of allServices) {
+                            const serviceNameLower = service.name.toLowerCase();
+                            const matchCount = queryWords.filter(word => serviceNameLower.includes(word)).length;
+                            if (matchCount >= queryWords.length * 0.5) { // Ít nhất 50% từ khóa khớp
+                                matchedService = service;
+                                console.log(`[Tool] Tìm thấy service gần khớp (MongoDB): "${matchedService.name}" (ID: ${matchedService._id})`);
+                                break;
+                            }
                         }
                     }
                 }
             }
 
             // 3. Tìm bác sĩ thuộc chuyên khoa và có service phù hợp (nếu có) - SỬ DỤNG QDRANT MAPPER
-            console.log(`[Tool] Đang tìm bác sĩ thuộc chuyên khoa ${specialtyDoc.name}...`);
+            // Nếu đã tìm thấy bác sĩ theo tên, bỏ qua bước này
+            if (!foundDoctorByName) {
+                console.log(`[Tool] Đang tìm bác sĩ thuộc chuyên khoa ${specialtyDoc.name}...`);
+            } else {
+                console.log(`[Tool] ⏭️ Đã tìm thấy bác sĩ theo tên, bỏ qua bước tìm bác sĩ theo chuyên khoa`);
+            }
             
-            let doctors = [];
-            
-            // Ưu tiên 1: Sử dụng Qdrant Doctor Mapper nếu có service
-            if (matchedService) {
+            // Ưu tiên 1: Sử dụng Qdrant Doctor Mapper nếu có service và chưa tìm thấy bác sĩ theo tên
+            if (!foundDoctorByName && matchedService) {
                 const qdrantDoctors = await findDoctorMapping(
                     query, 
                     specialtyDoc._id.toString(), 
@@ -334,7 +431,8 @@ const searchTools = {
             }
             
             // Fallback: Nếu Qdrant không tìm thấy hoặc không có service, tìm trực tiếp từ MongoDB
-            if (doctors.length === 0) {
+            // Chỉ tìm nếu chưa tìm thấy bác sĩ theo tên
+            if (!foundDoctorByName && doctors.length === 0) {
                 console.log(`[Tool] Fallback: Tìm bác sĩ trực tiếp từ MongoDB...`);
                 doctors = await Doctor.find({ 
                     specialtyId: specialtyDoc._id,
