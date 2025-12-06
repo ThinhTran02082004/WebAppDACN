@@ -48,6 +48,11 @@ const quickAccessItems = [
     icon: AppIcons.doctor,
   },
   { 
+    id: '5',
+    title: 'Thanh toán', 
+    icon: AppIcons.card,
+  },
+  { 
     id: '6',
     title: 'Tin tức', 
     icon: AppIcons.news,
@@ -57,7 +62,6 @@ const quickAccessItems = [
     title: 'Dịch vụ', 
     icon: AppIcons.service,
   },
-
 ];
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
@@ -189,14 +193,7 @@ export default function Home({ navigation }: Props) {
 
       setHospitals(hospitalsList);
       setDoctors(doctorsList);
-      // Enrich specialties with counts and normalized image for cards
-      const enrichedSpecialties: Specialty[] = (Array.isArray(specialtiesList) ? specialtiesList : []).map((sp: any) => {
-        const doctorCount = doctorsList.filter((d: any) => d?.specialtyId?._id === sp._id || d?.specialtyId === sp._id).length;
-        const serviceCount = servicesList.filter((sv: any) => (sv?.specialtyId?._id || sv?.specialtyId) === sp._id).length;
-        const normalizedImage = sp.image || sp.imageUrl || sp.image?.secureUrl || (sp.image && sp.image.secureUrl) || undefined;
-        return { ...sp, doctorCount, serviceCount, image: normalizedImage } as Specialty;
-      });
-      setSpecialties(enrichedSpecialties);
+      setSpecialties(specialtiesList);
       setServices(servicesList);
       setNews(newsList);
     } catch (error) {
@@ -242,11 +239,6 @@ export default function Home({ navigation }: Props) {
     action();
   };
 
-  const handleAvatarPress = () => {
-    // Navigate to Account screen (same screen as the one in bottom tabs)
-    navigation.navigate('Home', { screen: 'Account' });
-  };
-
   const handleQuickAccessPress = (item: any) => {
     console.log('Quick access pressed:', item.title);
 
@@ -270,6 +262,9 @@ export default function Home({ navigation }: Props) {
         console.log('Navigate to doctor list');
         navigation.navigate('DoctorList');
         break;
+      case '5':
+        console.log('Navigate to payment');
+        break;
       case '6':
         // Tin tức
         console.log('Navigate to news list');
@@ -290,28 +285,10 @@ export default function Home({ navigation }: Props) {
     navigation.navigate('FacilityDetail', { id: facility._id });
   };
 
-  const handleFacilityBookingPress = (facility: Hospital) => {
-    console.log('Facility booking pressed:', facility.name);
-    if (!user) {
-      navigation.navigate('Login');
-    } else {
-      navigation.navigate('Booking');
-    }
-  };
-
-  const handleSpecialtyBookingPress = (specialty: Specialty) => {
-    console.log('Specialty booking pressed:', specialty.name);
-    if (!user) {
-      navigation.navigate('Login');
-    } else {
-      navigation.navigate('Booking');
-    }
-  };
-
   const handleDoctorConsultPress = (doctor: any) => {
     requireLogin(() => {
       console.log('Doctor consult pressed:', doctor.user.fullName);
-      navigation.navigate('Booking');
+      // TODO: navigation to consult/booking
     });
   };
 
@@ -328,7 +305,6 @@ export default function Home({ navigation }: Props) {
         userName={userName} 
         isLoggedIn={isLoggedIn}
         avatarUrl={user?.avatarUrl}
-        onAvatarPress={handleAvatarPress}
       />
       <ScrollView 
         style={styles.scrollView} 
@@ -351,7 +327,6 @@ export default function Home({ navigation }: Props) {
         <FacilityList 
           facilities={hospitals} 
           onFacilityPress={handleFacilityPress}
-          onBookingPress={handleFacilityBookingPress}
         />
       </View>
 
@@ -375,7 +350,6 @@ export default function Home({ navigation }: Props) {
                   onPress={(specialty) => {
                     navigation.navigate('SpecialtyDetail', { specialtyId: specialty._id });
                   }}
-                  onBookingPress={handleSpecialtyBookingPress}
                 />
               </View>
             ))}
@@ -421,11 +395,7 @@ export default function Home({ navigation }: Props) {
                     style={styles.bookingButton}
                     onPress={(e) => {
                       e.stopPropagation();
-                      if (!user) {
-                        navigation.navigate('Login');
-                      } else {
-                        navigation.navigate('Booking');
-                      }
+                      navigation.navigate('ServiceDetail', { serviceId: sv._id });
                     }}
                   >
                     <Text style={styles.bookingButtonText}>Đặt khám</Text>
@@ -520,7 +490,7 @@ export default function Home({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#f7f7f7',
   },
   scrollView: {
     flex: 1,
@@ -533,7 +503,7 @@ const styles = StyleSheet.create({
   },
   doctorsSection: {
     marginTop: 16,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#f7f7f7',
     paddingTop: 16,
     paddingBottom: 8,
   },

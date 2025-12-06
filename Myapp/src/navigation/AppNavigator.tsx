@@ -4,31 +4,20 @@ import { createStackNavigator } from '@react-navigation/stack';
 import BottomTabs from './BottomTabs';
 import DoctorDetail from '../screens/DoctorDetail';
 import FacilityDetail from '../screens/FacilityDetail';
-import LoginScreen from '../screens/Login';
-import RegisterScreen from '../screens/Register';
-import UsageRegulationsScreen from '../screens/Policy';
-import PrivacyPolicyScreen from '../screens/PrivacyPolicy';
-import TermsOfServiceScreen from '../screens/Terms';
-import FacilityListScreen from '../screens/FacilityList';
-import SpecialtyListScreen from '../screens/SpecialtyList';
-import ServiceListScreen from '../screens/ServiceList';
-import DoctorListScreen from '../screens/DoctorList';
-import NewsListScreen from '../screens/NewsList';
-import NewsDetailScreen from '../screens/NewsDetail';
-import ServiceDetailScreen from '../screens/ServiceDetail';
-import SpecialtyDetailScreen from '../screens/SpecialtyDetail';
-import ProfileScreen from '../screens/Profile';
-import ChangePasswordScreen from '../screens/ResetPassword';
-import FavoriteDoctorsScreen from '../screens/FavoriteDoctors';
-import AppointmentDetailScreen from '../screens/AppointmentDetail';
-import BookingNavigator from './BookingNavigator';
+import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
+import UsageRegulationsScreen from '../screens/UsageRegulationsScreen';
+import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
+import TermsOfServiceScreen from '../screens/TermsOfServiceScreen';
+import FacilityListScreen from '../screens/FacilityListScreen';
+import SpecialtyListScreen from '../screens/SpecialtyListScreen';
+import ServiceListScreen from '../screens/ServiceListScreen';
+import DoctorListScreen from '../screens/DoctorListScreen';
+import NewsListScreen from '../screens/NewsListScreen';
+import NewsDetailScreen from '../screens/NewsDetailScreen';
+import ServiceDetailScreen from '../screens/ServiceDetailScreen';
+import SpecialtyDetailScreen from '../screens/SpecialtyDetailScreen';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { SocketProvider } from '../contexts/SocketContext';
-import PaymentWebView from '../screens/PaymentWebView';
-import PaymentResultScreen from '../screens/PaymentResult';
-import RescheduleScreen from '../screens/Reschedule';
-import PaymentHistoryScreen from '../screens/PaymentHistory';
-import ChatDetailScreen from '../screens/ChatDetail';
 
 function RootNavigator() {
   const { loading } = useAuth();
@@ -54,22 +43,12 @@ function RootNavigator() {
       <Stack.Screen name="NewsDetail" component={NewsDetailScreen} />
       <Stack.Screen name="ServiceDetail" component={ServiceDetailScreen} />
       <Stack.Screen name="SpecialtyDetail" component={SpecialtyDetailScreen} />
-      <Stack.Screen name="Profile" component={ProfileScreen} />
-      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-      <Stack.Screen name="FavoriteDoctors" component={FavoriteDoctorsScreen} />
-      <Stack.Screen name="AppointmentDetail" component={AppointmentDetailScreen} />
-      <Stack.Screen name="Booking" component={BookingNavigator} />
-      <Stack.Screen name="PaymentWebView" component={PaymentWebView} />
-      <Stack.Screen name="PaymentResult" component={PaymentResultScreen} />
-      <Stack.Screen name="Reschedule" component={RescheduleScreen} />
-      <Stack.Screen name="PaymentHistory" component={PaymentHistoryScreen} />
-      <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
     </Stack.Navigator>
   );
 }
 
 export type RootStackParamList = {
-  Home: undefined | { screen: 'Account' | 'Home' | 'Notifications' | 'Appointments' | 'Meds' | 'Messages' };
+  Home: undefined;
   DoctorDetail: { id: string };
   FacilityDetail: { id: string };
   Login: undefined;
@@ -85,17 +64,6 @@ export type RootStackParamList = {
   NewsDetail: { newsId: string };
   ServiceDetail: { serviceId: string };
   SpecialtyDetail: { specialtyId: string };
-  Profile: undefined;
-  ChangePassword: undefined;
-  FavoriteDoctors: undefined;
-  AppointmentDetail: { appointment?: any; appointmentId?: string; fromPayment?: boolean };
-  Booking: undefined;
-  AppointmentSchedule: undefined;
-  PaymentWebView: { url: string; mode: 'paypal' | 'momo'; appointmentId?: string; appointment?: any };
-  PaymentResult: { orderId?: string; resultCode?: string; paymentId?: string; PayerID?: string; mode?: 'momo' | 'paypal'; appointmentId?: string };
-  Reschedule: { appointmentId: string; doctorId: string; currentDate: string };
-  PaymentHistory: undefined;
-  ChatDetail: { conversationId: string; conversation?: any };
 };
 
 // const Stack = createStackNavigator<RootStackParamList>();
@@ -103,11 +71,9 @@ export type RootStackParamList = {
 export default function AppNavigator() {
   return (
     <AuthProvider>
-      <SocketProvider>
-        <NavigationContainer>
-          <RootNavigator />
-        </NavigationContainer>
-      </SocketProvider>
+      <NavigationContainer>
+        <RootNavigator />
+      </NavigationContainer>
     </AuthProvider>
   );
 }

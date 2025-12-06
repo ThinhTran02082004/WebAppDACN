@@ -10,7 +10,6 @@ import {
   SafeAreaView,
   StatusBar,
   Dimensions,
-  Alert,
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { apiService, Doctor } from '../services/api';
@@ -61,12 +60,8 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
   const [reviewStats, setReviewStats] = useState({ total: 0, averageRating: 0 });
   const [loading, setLoading] = useState(true);
   const [loadingReviews, setLoadingReviews] = useState(true);
-  const [reviewsPage, setReviewsPage] = useState(1);
-  const [hasMoreReviews, setHasMoreReviews] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [activeTab, setActiveTab] = useState<'info' | 'reviews'>('info');
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [isLoadingFavorite, setIsLoadingFavorite] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -84,54 +79,21 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
     load();
   }, [id]);
 
-  // Check if doctor is in favorites
-  useEffect(() => {
-    const checkFavorite = async () => {
-      if (!user || !id) {
-        setIsFavorite(false);
-        return;
-      }
-      try {
-        const res = await apiService.getFavoriteDoctors();
-        if (res && res.success) {
-          const data = (res?.data as any);
-          const favoriteDoctors: Doctor[] = Array.isArray(data) ? data : (data?.doctors || []);
-          const isFav = favoriteDoctors.some((doc: Doctor) => doc._id === id);
-          setIsFavorite(isFav);
-        } else {
-          // If response is not successful, assume not favorite
-          setIsFavorite(false);
-        }
-      } catch (error: any) {
-        console.error('Error checking favorite:', error);
-        // If there's an auth error, assume not favorite
-        const errorMessage = error?.message || error?.response?.data?.message || '';
-        if (error?.response?.status === 401 || errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
-          setIsFavorite(false);
-        }
-      }
-    };
-    checkFavorite();
-  }, [id, user]);
-
   useEffect(() => {
     const loadReviews = async () => {
       setLoadingReviews(true);
       try {
-        const res = await apiService.getDoctorReviews(id, { page: 1, limit: 5 });
+        const res = await apiService.getDoctorReviews(id, { limit: 5 });
         console.log('Reviews response:', res);
         if (res.success && res.data) {
-          // API trả về: { data: [...reviews], count/total, averageRating }
+          // API trả về: { data: [...reviews], count, averageRating }
+          const reviewsArray = Array.isArray(res.data) ? res.data : (res.data.reviews || []);
           const dataObj = res.data as any;
-          const reviewsArray = Array.isArray(dataObj) ? dataObj : (dataObj.reviews || dataObj.data || []);
-          const total = dataObj.count || dataObj.total || reviewsArray.length || 0;
           setReviews(reviewsArray);
           setReviewStats({
-            total,
+            total: dataObj.count || dataObj.total || reviewsArray.length || 0,
             averageRating: dataObj.averageRating || 0,
           });
-          setReviewsPage(1);
-          setHasMoreReviews(reviewsArray.length < total);
         }
       } catch (error) {
         console.error('Error loading reviews:', error);
@@ -142,37 +104,14 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
     loadReviews();
   }, [id]);
 
-  const loadMoreReviews = async () => {
-    if (loadingReviews || !hasMoreReviews) return;
-    const nextPage = reviewsPage + 1;
-    setLoadingReviews(true);
-    try {
-      const res = await apiService.getDoctorReviews(id, { page: nextPage, limit: 5 });
-      if (res.success && res.data) {
-        const dataObj = res.data as any;
-        const newReviews: Review[] = Array.isArray(dataObj) ? dataObj : (dataObj.reviews || dataObj.data || []);
-        const total = dataObj.count || dataObj.total || reviewStats.total || 0;
-        setReviews((prev) => [...prev, ...newReviews]);
-        setReviewsPage(nextPage);
-        setHasMoreReviews((prevHasMore) => prevHasMore && (reviews.length + newReviews.length < total));
-        // Keep stats consistent
-        setReviewStats((prev) => ({ ...prev, total }));
-      }
-    } catch (error) {
-      console.error('Error loading more reviews:', error);
-    } finally {
-      setLoadingReviews(false);
-    }
-  };
-
   const handleBookAppointment = () => {
     if (!user) {
       // Yêu cầu đăng nhập
       navigation.navigate('Login');
       return;
     }
-    // Navigate to booking screen
-    navigation.navigate('Booking');
+    // TODO: Navigate to booking screen
+    console.log('Book appointment with doctor:', doctor?._id);
   };
 
   const handleVideoCall = () => {
@@ -182,56 +121,6 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
     }
     // TODO: Navigate to video call
     console.log('Video call with doctor:', doctor?._id);
-  };
-
-  const handleToggleFavorite = async () => {
-    if (!user) {
-      navigation.navigate('Login');
-      return;
-    }
-    if (!doctor?._id || isLoadingFavorite) return;
-
-    setIsLoadingFavorite(true);
-    try {
-      if (isFavorite) {
-        const res = await apiService.removeFavoriteDoctor(doctor._id);
-        if (res && res.success) {
-          setIsFavorite(false);
-        } else {
-          const errorMessage = (res as any)?.message || 'Không thể xóa khỏi yêu thích';
-          if (errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
-            Alert.alert('Lỗi', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-            navigation.navigate('Login');
-          } else {
-            Alert.alert('Lỗi', errorMessage);
-          }
-        }
-      } else {
-        const res = await apiService.addFavoriteDoctor(doctor._id);
-        if (res && res.success) {
-          setIsFavorite(true);
-        } else {
-          const errorMessage = (res as any)?.message || 'Không thể thêm vào yêu thích';
-          if (errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
-            Alert.alert('Lỗi', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-            navigation.navigate('Login');
-          } else {
-            Alert.alert('Lỗi', errorMessage);
-          }
-        }
-      }
-    } catch (error: any) {
-      console.error('Error toggling favorite:', error);
-      const errorMessage = error?.response?.data?.message || error?.message || 'Không thể cập nhật yêu thích';
-      if (error?.response?.status === 401 || errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
-        Alert.alert('Lỗi', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-        navigation.navigate('Login');
-      } else {
-        Alert.alert('Lỗi', errorMessage);
-      }
-    } finally {
-      setIsLoadingFavorite(false);
-    }
   };
 
   if (loading) {
@@ -272,20 +161,8 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.favoriteButton}
-          onPress={handleToggleFavorite}
-          disabled={isLoadingFavorite}
-        >
-          {isLoadingFavorite ? (
-            <ActivityIndicator size="small" color="#0a84ff" />
-          ) : (
-            <Ionicons 
-              name={isFavorite ? "heart" : "heart-outline"} 
-              size={24} 
-              color={isFavorite ? "#ff3b30" : "#333"} 
-            />
-          )}
+        <TouchableOpacity style={styles.favoriteButton}>
+          <Ionicons name="heart-outline" size={24} color="#333" />
         </TouchableOpacity>
       </View>
 
@@ -506,50 +383,28 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
                   {(review.doctorReply || (review.replies && review.replies.length > 0)) && (
                     <View style={styles.doctorReplyContainer}>
                       <View style={styles.doctorReplyHeader}>
-                        <View style={styles.doctorReplyDoctorInfo}>
-                          {doctor?.user?.avatarUrl ? (
-                            <Image
-                              source={{ uri: doctor.user.avatarUrl }}
-                              style={styles.doctorReplyAvatar}
-                            />
-                          ) : (
-                            <View style={[styles.doctorReplyAvatar, styles.doctorReplyAvatarFallback]}>
-                              <Ionicons name="person" size={16} color="#6b7280" />
-                            </View>
-                          )}
-                          <View>
-                            <Text style={styles.doctorReplyDoctorName}>{doctor?.user?.fullName || 'Bác sĩ'}</Text>
-                            {doctor?.title ? (
-                              <Text style={styles.doctorReplyDoctorTitle}>
-                                {(doctor.title || 'BS.').replace(/CK[0-9]+/g, '').trim()}
-                              </Text>
-                            ) : null}
-                          </View>
-                        </View>
-                        <Text style={styles.doctorReplyDate}>
-                          {new Date(
-                            review.doctorReply?.createdAt || review.replies?.[0]?.createdAt || ''
-                          ).toLocaleDateString('vi-VN')}
-                        </Text>
+                        <Ionicons name="medical" size={16} color="#0a84ff" />
+                        <Text style={styles.doctorReplyLabel}>Phản hồi từ bác sĩ</Text>
                       </View>
                       <Text style={styles.doctorReplyText}>
                         {review.doctorReply?.content || review.replies?.[0]?.comment}
+                      </Text>
+                      <Text style={styles.doctorReplyDate}>
+                        {new Date(
+                          review.doctorReply?.createdAt || review.replies?.[0]?.createdAt || ''
+                        ).toLocaleDateString('vi-VN')}
                       </Text>
                     </View>
                   )}
                 </View>
               ))}
 
-              {hasMoreReviews && (
-                <TouchableOpacity style={styles.viewAllReviewsButton} onPress={loadMoreReviews} activeOpacity={0.7}>
+              {reviewStats.total > 5 && (
+                <TouchableOpacity style={styles.viewAllReviewsButton}>
                   <Text style={styles.viewAllReviewsText}>
-                    Xem thêm
+                    Xem tất cả {reviewStats.total} đánh giá
                   </Text>
-                  {loadingReviews ? (
-                    <ActivityIndicator size="small" color="#0a84ff" />
-                  ) : (
-                    <Ionicons name="chevron-down" size={16} color="#0a84ff" />
-                  )}
+                  <Ionicons name="chevron-forward" size={16} color="#0a84ff" />
                 </TouchableOpacity>
               )}
             </>
@@ -570,6 +425,13 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
 
       {/* Bottom Actions */}
       <View style={styles.bottomActions}>
+        <TouchableOpacity
+          style={styles.videoCallButton}
+          onPress={handleVideoCall}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="videocam" size={24} color="#0a84ff" />
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.bookButton}
           onPress={handleBookAppointment}
@@ -950,35 +812,14 @@ const styles = StyleSheet.create({
   },
   doctorReplyHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 6,
   },
-  doctorReplyDoctorInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-  },
-  doctorReplyAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
-  },
-  doctorReplyAvatarFallback: {
-    backgroundColor: '#e5e7eb',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  doctorReplyDoctorName: {
+  doctorReplyLabel: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#0a84ff',
-  },
-  doctorReplyDoctorTitle: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
+    marginLeft: 6,
   },
   doctorReplyText: {
     fontSize: 14,
@@ -989,8 +830,7 @@ const styles = StyleSheet.create({
   doctorReplyDate: {
     fontSize: 11,
     color: '#64b5f6',
-    marginTop: 2,
-    marginLeft: 12,
+    marginTop: 4,
   },
   viewAllReviewsButton: {
     flexDirection: 'row',
@@ -1030,6 +870,16 @@ const styles = StyleSheet.create({
     borderTopColor: '#e0e0e0',
     marginBottom: 48,
     gap: 12,
+  },
+  videoCallButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#f0f8ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#0a84ff',
   },
   bookButton: {
     flex: 1,

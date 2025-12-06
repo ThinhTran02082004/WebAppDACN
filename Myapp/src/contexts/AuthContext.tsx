@@ -12,7 +12,6 @@ type AuthContextData = {
   signOut: () => Promise<void>;
   signUp: (data: any) => Promise<void>;
   resendVerification: (email: string) => Promise<void>;
-  updateUser: (userData: User) => void;
 };
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
@@ -29,24 +28,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // set token in apiService so subsequent requests include Authorization header
           apiService.setToken(token);
           // Optionally fetch current user
-          try {
-            const res = await apiService.getCurrentUser();
-            if (res.success) {
-              setUser(res.data || null);
-            } else {
-              // Token may be invalid, clear it
-              await AsyncStorage.removeItem('token');
-              apiService.setToken(null);
-              setUser(null);
-            }
-          } catch (error: any) {
-            // If getCurrentUser fails with 401, token is expired
-            if (error?.response?.status === 401) {
-              await AsyncStorage.removeItem('token');
-              apiService.setToken(null);
-            }
-            setUser(null);
-          }
+          const res = await apiService.getCurrentUser();
+          if (res.success) setUser(res.data || null);
         }
       } catch {
         // ignore
@@ -126,12 +109,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!res.success) throw new Error(res.message || 'Resend verification failed');
   };
 
-  const updateUser = (userData: User) => {
-    setUser(userData);
-  };
-
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp, resendVerification, signInWithGoogle, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp, resendVerification, signInWithGoogle }}>
       {children}
     </AuthContext.Provider>
   );

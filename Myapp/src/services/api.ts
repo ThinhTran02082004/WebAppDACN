@@ -1,13 +1,9 @@
-import { Platform } from 'react-native';
+// import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// import { API_BASE } from '../config';
 
-// For Android emulator, use 10.0.2.2 to access host machine's localhost
-// For iOS simulator, use localhost
-// For physical devices via WiFi, use your computer's IP address (e.g., http://192.168.1.xxx:5000/api)
-const BASE_URL = Platform.OS === 'android' 
-  ? "http://10.0.2.2:5000/api" 
-  : "http://localhost:5000/api";
+const BASE_URL = "http://localhost:5000/api";
 
 export interface Hospital {
   _id: string;
@@ -93,11 +89,8 @@ export interface Specialty {
   description?: string;
   icon?: string;
   imageUrl?: string;
-  image?: string | { secureUrl: string };
+  image?: { secureUrl: string };
   isActive?: boolean;
-  // Client-enriched fields
-  doctorCount?: number;
-  serviceCount?: number;
 }
 
 export interface ServiceItem {
@@ -142,18 +135,11 @@ class ApiService {
   constructor() {
     console.log('[api] ApiService initialized with baseURL:', this.client.defaults.baseURL);
     this.client.interceptors.request.use(async (config) => {
-        // attach token - prioritize in-memory token first, then fallback to AsyncStorage
+      // attach token
       try {
-        const inMemoryToken = (this.client.defaults.headers as any).Authorization;
-        if (inMemoryToken && config.headers) {
-          // Token already set in memory, use it
-          (config.headers as any).Authorization = inMemoryToken;
-        } else {
-          // Fallback to AsyncStorage
-          const token = await AsyncStorage.getItem('token');
-          if (token && config.headers) {
-            (config.headers as any).Authorization = `Bearer ${token}`;
-          }
+        const token = await AsyncStorage.getItem('token');
+        if (token && config.headers) {
+          (config.headers as any).Authorization = `Bearer ${token}`;
         }
       } catch {
         // ignore
@@ -163,24 +149,6 @@ class ApiService {
       console.log(`[api] -> ${config.method?.toUpperCase() || 'GET'} ${config.baseURL || ''}${config.url}`);
       return config;
     });
-
-    // Add response interceptor to handle 401 errors (unauthorized)
-    this.client.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        if (error?.response?.status === 401) {
-          // Token expired or invalid, clear it
-          try {
-            await AsyncStorage.removeItem('token');
-            (this.client.defaults.headers as any).Authorization = undefined;
-            console.log('[api] Token expired, cleared from storage');
-          } catch {
-            // ignore
-          }
-        }
-        return Promise.reject(error);
-      }
-    );
   }
 
   // Allow setting auth token in-memory (useful for session-like behavior when rememberMe is false)
@@ -308,24 +276,6 @@ class ApiService {
     }
   }
 
-  async getHospitalSpecialties(hospitalId: string): Promise<ApiResponse<any[]>> {
-    try {
-      const res = await this.client.get(`/hospitals/${hospitalId}/specialties`);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async getHospitalServices(hospitalId: string): Promise<ApiResponse<any[]>> {
-    try {
-      const res = await this.client.get(`/hospitals/${hospitalId}/services`);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
   async searchHospitals(searchTerm: string): Promise<ApiResponse<{ hospitals: Hospital[]; total: number; totalPages: number; currentPage: number }>> {
     return this.getHospitals({ search: searchTerm, limit: 20 });
   }
@@ -387,38 +337,13 @@ class ApiService {
       const res = await this.client.get(`/doctors/${id}`);
       return this.handleResponse(res);
     } catch (e) {
-      // Fallbacks for mis-mounted route paths
-      try {
-        // Case 1: route registered as /api/doctors/doctors/:id
-        const alt1 = await this.client.get(`/doctors/doctors/${id}`);
-        return this.handleResponse(alt1);
-      } catch (e2) {
-        try {
-          // Case 2: try without /api prefix entirely (server root)
-          const base = this.client.defaults.baseURL || '';
-          const serverRoot = String(base).replace(/\/_?api\/?$/i, '').replace(/\/$/, '');
-          const alt2 = await axios.get(`${serverRoot}/api/doctors/doctors/${id}`);
-          return this.handleResponse(alt2);
-        } catch (e3) {
-          this.handleError(e3);
-        }
-      }
+      this.handleError(e);
     }
   }
 
   async getDoctorReviews(doctorId: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<any[] | { reviews?: any[]; data?: any[]; count?: number; total?: number; averageRating: number }>> {
     try {
       const res = await this.client.get(`/reviews/doctor/${doctorId}`, { params });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async getDoctorSchedules(doctorId: string): Promise<ApiResponse<any[]>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.get(`/appointments/doctors/${doctorId}/schedules`);
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);
@@ -468,33 +393,6 @@ class ApiService {
     }
   }
 
-  async getFavoriteDoctors(): Promise<ApiResponse<{ doctors: Doctor[] } | Doctor[]>> {
-    try {
-      const res = await this.client.get('/doctors/favorites');
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async addFavoriteDoctor(doctorId: string): Promise<ApiResponse<any>> {
-    try {
-      const res = await this.client.post(`/doctors/${doctorId}/favorite`);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async removeFavoriteDoctor(doctorId: string): Promise<ApiResponse<any>> {
-    try {
-      const res = await this.client.delete(`/doctors/${doctorId}/favorite`);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
   async resendVerification(email: string): Promise<ApiResponse<any>> {
     try {
       const res = await this.client.post('/auth/resend-verification', { email });
@@ -513,245 +411,9 @@ class ApiService {
     }
   }
 
-  async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse<any>> {
-    try {
-      const res = await this.client.post('/auth/change-password', { currentPassword, newPassword });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
   async getCurrentUser(): Promise<ApiResponse<any>> {
     try {
       const res = await this.client.get('/auth/profile');
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async updateProfile(profileData: any): Promise<ApiResponse<any>> {
-    try {
-      const res = await this.client.put('/auth/profile', profileData);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async uploadAvatar(uri: string, type: string = 'image/jpeg', name: string = 'avatar.jpg'): Promise<ApiResponse<any>> {
-    try {
-      // Create FormData for multipart/form-data upload
-      const formData = new FormData();
-      formData.append('avatar', {
-        uri: uri,
-        type: type,
-        name: name,
-      } as any);
-
-      // Don't set Content-Type header - axios will set it automatically with boundary
-      const res = await this.client.post('/auth/profile/avatar', formData);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async createAppointment(payload: any): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.post('/appointments', payload);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async getAvailableSchedules(params: { doctorId: string; date?: string; hospitalId?: string }): Promise<ApiResponse<any[]>> {
-    try {
-      // Public endpoint: /api/schedules
-      const res = await this.client.get('/schedules', { params });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async getUserAppointments(params?: { page?: number; limit?: number; status?: string }): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.get('/appointments/user/patient', { params });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async getUserPrescriptionHistory(params?: { page?: number; limit?: number; status?: string }): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.get('/prescriptions/user/history', { params });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async getPaymentHistory(params?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-    method?: string;
-    billType?: string;
-    appointmentId?: string;
-    startDate?: string;
-    endDate?: string;
-    search?: string;
-  }): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.get('/billing/payment-history', { params });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async getAppointmentById(appointmentId: string): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.get(`/appointments/${appointmentId}`);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async cancelAppointment(appointmentId: string, reason?: string): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const config = reason ? { data: { cancellationReason: reason } } : undefined;
-      const res = await this.client.delete(`/appointments/${appointmentId}`, config);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async rescheduleAppointment(
-    appointmentId: string,
-    payload: { scheduleId: string; timeSlot: { startTime: string; endTime: string }; appointmentDate: string; notes?: string }
-  ): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.put(`/appointments/${appointmentId}/reschedule`, payload);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  // Payments - PayPal: create and execute
-  async createPaypalPayment(appointmentId: string): Promise<ApiResponse<{ paymentId: string; approvalUrl: string }>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.post('/payments/paypal/create', { appointmentId });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async executePaypalPayment(paymentId: string, PayerID: string): Promise<ApiResponse<any>> {
-    try {
-      const res = await this.client.post('/payments/paypal/execute', { paymentId, PayerID });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  // Payments - MoMo: create payment session and check status
-  async createMomoPayment(params: { appointmentId: string; amount: number; billType?: string; prescriptionId?: string; orderInfo?: string; redirectUrl?: string }): Promise<ApiResponse<{ orderId: string; payUrl: string }>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.post('/payments/momo/create', params);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async checkMomoStatus(orderId: string): Promise<ApiResponse<{ payment: { status: string; appointmentId: string } }>> {
-    try {
-      const res = await this.client.get(`/payments/momo/status/${orderId}`);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async verifyMomoPaymentResult(orderId: string, resultCode: string | number): Promise<ApiResponse<{ paymentStatus: string; appointmentId?: string; message?: string }>> {
-    try {
-      const res = await this.client.get(`/payments/momo/result`, {
-        params: { orderId, resultCode },
-      });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  // Chat APIs
-  async getConversations(): Promise<ApiResponse<any[]>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.get('/chat/conversations');
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async getConversationMessages(conversationId: string): Promise<ApiResponse<any[]>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.get(`/chat/conversations/${conversationId}/messages`);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async sendMessage(conversationId: string, content: string): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.post(`/chat/conversations/${conversationId}/messages`, {
-        content
-      });
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async createConversation(params: { participantId: string; appointmentId?: string }): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.post('/chat/conversations', params);
-      return this.handleResponse(res);
-    } catch (e) {
-      this.handleError(e);
-    }
-  }
-
-  async sendAppointmentToChat(conversationId: string, appointmentId: string): Promise<ApiResponse<any>> {
-    try {
-      await this.probeBackend();
-      const res = await this.client.post(`/chat/conversations/${conversationId}/send-appointment`, {
-        appointmentId
-      });
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);

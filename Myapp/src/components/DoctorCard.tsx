@@ -97,7 +97,7 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
           <View style={styles.verticalFooter}>
             <TouchableOpacity
               style={styles.consultButtonVertical}
-              onPress={handleConsultPress}
+              onPress={handleCardPress}
               activeOpacity={0.8}
             >
               <Text style={styles.consultButtonText}>Đặt khám</Text>
@@ -171,7 +171,7 @@ export default function DoctorCard({ doctor, onConsultPress, onCardPress, vertic
           
           <TouchableOpacity
             style={styles.consultButton}
-            onPress={handleConsultPress}
+            onPress={handleCardPress}
             activeOpacity={0.8}
           >
             <Text style={styles.consultButtonText}>Đặt khám</Text>

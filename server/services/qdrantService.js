@@ -425,7 +425,11 @@ const isAppointmentRelated = (userPrompt) => {
     'đặt lịch', 'đặt hẹn', 'khám', 'khám bệnh', 'lịch hẹn',
     'ngày mai', 'mai', 'hôm nay', 'ngày \d+', 'thứ \d+',
     'giờ', 'khung giờ', 'slot', 'l01', 'l02', 'l1', 'l2',
-    'lịch của tôi', 'lịch khám của tôi'
+    'lịch của tôi', 'lịch khám của tôi',
+    // Từ khóa về bác sĩ - cần tìm bác sĩ để đặt lịch
+    'bác sĩ', 'bác sỹ', 'doctor', 'tìm bác sĩ', 'có bác sĩ nào',
+    'bác sĩ nào', 'hiện đang có bác sĩ', 'danh sách bác sĩ',
+    'bác sĩ chuyên khoa', 'bác sĩ khám'
   ];
   
   for (const keyword of appointmentKeywords) {
@@ -604,29 +608,62 @@ const MANUAL_SPECIALTY_MAP = [
   {
     keywords: ['khám thai', 'thai sản', 'sản khoa', 'mang thai'],
     specialtyName: 'Sản khoa'
+  },
+  {
+    keywords: ['ho', 'ho khan', 'ho có đờm', 'ho nhiều', 'ho lâu ngày', 'ho dai dẳng', 'hô hấp', 'đường hô hấp', 'viêm phổi', 'viêm phế quản', 'khó thở', 'hen suyễn', 'hen phế quản'],
+    specialtyName: 'Nội Hô Hấp'
+  },
+  {
+    keywords: ['đau tim', 'tim mạch', 'huyết áp', 'tăng huyết áp', 'hạ huyết áp', 'nhồi máu cơ tim', 'suy tim', 'rối loạn nhịp tim'],
+    specialtyName: 'Nội Tim Mạch'
+  },
+  {
+    keywords: ['đau bụng', 'tiêu hóa', 'tiêu chảy', 'táo bón', 'đau dạ dày', 'viêm dạ dày', 'loét dạ dày', 'trào ngược'],
+    specialtyName: 'Nội Tiêu Hoá'
+  },
+  {
+    keywords: ['tai mũi họng', 'đau họng', 'viêm họng', 'viêm mũi', 'nghẹt mũi', 'sổ mũi', 'đau tai', 'viêm tai'],
+    specialtyName: 'Tai mũi họng'
+  },
+  {
+    keywords: ['da', 'mụn', 'ngứa da', 'viêm da', 'eczema', 'vẩy nến', 'nấm da'],
+    specialtyName: 'Da liễu'
   }
 ];
 
 const findSpecialtyMapping = async (symptomQuery) => {
   try {
-    const normalized = (symptomQuery || '').toLowerCase();
+    const normalized = (symptomQuery || '').toLowerCase().trim();
+    console.log(`[Qdrant Mapper] Đang tìm mapping cho: "${symptomQuery}" (normalized: "${normalized}")`);
+    
+    // Kiểm tra manual mapping trước
     for (const manual of MANUAL_SPECIALTY_MAP) {
-      if (manual.keywords.some(keyword => normalized.includes(keyword))) {
+      const matchedKeyword = manual.keywords.find(keyword => normalized.includes(keyword.toLowerCase()));
+      if (matchedKeyword) {
+        console.log(`[Manual Mapper] Tìm thấy keyword "${matchedKeyword}" trong query "${symptomQuery}"`);
         if (!manual._cachedId) {
-          const specialtyDoc = await Specialty.findOne({ name: manual.specialtyName }).select('_id name');
+          // Tìm chuyên khoa không phân biệt hoa/thường
+          let specialtyDoc = await Specialty.findOne({ name: manual.specialtyName }).select('_id name');
+          if (!specialtyDoc) {
+            // Thử tìm với regex không phân biệt hoa/thường
+            specialtyDoc = await Specialty.findOne({ name: { $regex: new RegExp(`^${manual.specialtyName}$`, 'i') } }).select('_id name');
+          }
           if (!specialtyDoc) {
             console.warn(`[Manual Mapper] Không tìm thấy chuyên khoa "${manual.specialtyName}" trong database`);
             continue;
           }
           manual._cachedId = specialtyDoc._id.toString();
+          console.log(`[Manual Mapper] Đã cache specialtyId: ${manual._cachedId} cho "${manual.specialtyName}" (tìm thấy: "${specialtyDoc.name}")`);
         }
-        console.log(`[Manual Mapper] "${symptomQuery}" được map thủ công -> "${manual.specialtyName}"`);
+        console.log(`[Manual Mapper] "${symptomQuery}" được map thủ công -> "${manual.specialtyName}" (ID: ${manual._cachedId})`);
         return {
           specialtyId: manual._cachedId,
           specialtyName: manual.specialtyName
         };
       }
     }
+    
+    console.log(`[Manual Mapper] Không tìm thấy manual mapping cho "${symptomQuery}", đang thử Qdrant vector search...`);
 
     const userVector = await getEmbedding(symptomQuery);
     const SIMILARITY_THRESHOLD = 0.8; // Ngưỡng an toàn

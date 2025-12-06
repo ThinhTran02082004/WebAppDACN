@@ -53,9 +53,9 @@ Trả về danh sách ngắn các hoạt chất hoặc nhóm thuốc phổ biế
 };
 
 // ========================================================================
-// 🤖 MODEL 1: Main Agent (Lễ tân AI)
+// 🤖 MODEL 1: Appointment Agent (Gemini 2.5 Flash) - Đặt lịch, hủy lịch
 // ========================================================================
-const mainModel = genAI.getGenerativeModel({
+const appointmentModel = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
     systemInstruction: SYSTEM_INSTRUCTION
 });
@@ -515,8 +515,33 @@ const availableTools = {
     }
 };
 
-const runChatWithTools = async (userPrompt, history, sessionId) => {
-    const chat = mainModel.startChat({
+const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medicalContext = null, originalPrompt = null) => {
+    // Lưu prompt gốc để kiểm tra intent (không bị ảnh hưởng bởi enhanced prompt)
+    const promptForIntentCheck = originalPrompt || userPrompt;
+    // Log history để debug
+    if (history && history.length > 0) {
+        console.log(`[Flash Model] Nhận được ${history.length} tin nhắn trong lịch sử:`);
+        history.slice(-4).forEach((msg, idx) => {
+            const role = msg.role || 'unknown';
+            const content = msg.parts?.[0]?.text || msg.content || '';
+            console.log(`  [${idx}] ${role}: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
+        });
+    } else {
+        console.log('[Flash Model] Không có lịch sử hội thoại');
+    }
+    
+    // Log medical context nếu có
+    if (medicalContext) {
+        console.log(`[Flash Model] Medical Context:`, {
+            hasSymptoms: medicalContext.symptoms?.length > 0,
+            specialty: medicalContext.specialty,
+            location: medicalContext.location,
+            date: medicalContext.date,
+            hasPrimaryQuery: !!medicalContext.primaryQuery
+        });
+    }
+    
+    const chat = appointmentModel.startChat({
         tools: toolDeclarations,
         history
     });
@@ -590,6 +615,77 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
         ].includes(call.name)) {
             args.sessionId = sessionId;
         }
+        
+        // Nếu gọi findAvailableSlots, xử lý medicalContext và extract specialty từ query nếu có
+        if (call.name === 'findAvailableSlots') {
+            // Ưu tiên 1: Extract specialty từ query hiện tại (nếu có) - thông tin mới nhất
+            if (args.query && args.query.trim().length > 0) {
+                const queryLower = args.query.toLowerCase();
+                // Kiểm tra các từ khóa chuyên khoa trong query
+                const specialtyPatterns = {
+                    'ngoại thần kinh': ['ngoại thần kinh', 'khoa ngoại thần kinh'],
+                    'nội khoa': ['nội khoa', 'khoa nội'],
+                    'ngoại khoa': ['ngoại khoa', 'khoa ngoại'],
+                    'sản khoa': ['sản khoa', 'phụ khoa'],
+                    'nhi khoa': ['nhi khoa'],
+                    'tim mạch': ['tim mạch'],
+                    'thần kinh': ['thần kinh'],
+                    'tiêu hóa': ['tiêu hóa'],
+                    'tai mũi họng': ['tai mũi họng'],
+                    'mắt': ['mắt', 'nhãn khoa'],
+                    'da liễu': ['da liễu']
+                };
+                
+                // Tìm specialty trong query (ưu tiên từ dài nhất)
+                const sortedPatterns = Object.entries(specialtyPatterns).sort((a, b) => {
+                    const maxLenA = Math.max(...a[1].map(k => k.length));
+                    const maxLenB = Math.max(...b[1].map(k => k.length));
+                    return maxLenB - maxLenA;
+                });
+                
+                for (const [specialty, patterns] of sortedPatterns) {
+                    for (const pattern of patterns) {
+                        if (queryLower.includes(pattern)) {
+                            console.log(`[Medical Context] Đã extract specialty "${specialty}" từ query: "${args.query}"`);
+                            args.specialty = specialty;
+                            break;
+                        }
+                    }
+                    if (args.specialty) break;
+                }
+            }
+            
+            // Ưu tiên 2: Sử dụng medicalContext từ lịch sử (nếu chưa có specialty từ query)
+            if (medicalContext && !args.specialty) {
+                if (!args.query || args.query.trim().length === 0) {
+                    if (medicalContext.primaryQuery) {
+                        console.log(`[Medical Context] Inject triệu chứng từ lịch sử vào findAvailableSlots: "${medicalContext.primaryQuery.substring(0, 100)}..."`);
+                        args.query = medicalContext.primaryQuery;
+                    }
+                }
+                // Nếu có chuyên khoa từ context và chưa có trong args
+                if (medicalContext.specialty) {
+                    console.log(`[Medical Context] Inject specialty "${medicalContext.specialty}" từ lịch sử vào findAvailableSlots`);
+                    args.specialty = medicalContext.specialty;
+                }
+                // Nếu có địa điểm từ context và chưa có trong args
+                if (medicalContext.location && !args.city) {
+                    args.city = medicalContext.location;
+                }
+                // Nếu có ngày từ context và chưa có trong args
+                if (medicalContext.date && !args.date) {
+                    args.date = medicalContext.date;
+                }
+            }
+            
+            // Log final args để debug
+            console.log(`[Medical Context] Final args cho findAvailableSlots:`, {
+                query: args.query?.substring(0, 50) || 'không có',
+                specialty: args.specialty || 'không có',
+                city: args.city || 'không có',
+                date: args.date || 'không có'
+            });
+        }
         // getAppointmentHistory requires patientId from sessionId
         if (call.name === 'getAppointmentHistory') {
             const userId = cache.getUserId(sessionId);
@@ -598,7 +694,8 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
             }
         }
         if (call.name === 'bookAppointment') {
-            if (isMedicationIntent(userPrompt)) {
+            // Chỉ kiểm tra intent trên prompt gốc, không phải enhanced prompt (có thể chứa context từ lịch sử)
+            if (isMedicationIntent(promptForIntentCheck)) {
                 console.warn('[AI Service] Ngăn AI đặt lịch vì người dùng đang hỏi thuốc. Yêu cầu chuyển sang tư vấn thuốc.');
                 result = await chat.sendMessage(JSON.stringify({
                     functionResponse: {
@@ -614,10 +711,34 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
             args.userPrompt = userPrompt;
         }
 
+        // Log args trước khi gọi tool để debug
+        if (call.name === 'findAvailableSlots') {
+            console.log(`[AI Service] Args trước khi gọi findAvailableSlots:`, {
+                query: args.query?.substring(0, 50) || 'không có',
+                specialty: args.specialty || 'không có',
+                city: args.city || 'không có',
+                date: args.date || 'không có',
+                sessionId: args.sessionId || 'không có',
+                hasSpecialty: !!args.specialty,
+                specialtyType: typeof args.specialty
+            });
+            
+            // Đảm bảo specialty được truyền đúng (nếu có)
+            if (!args.specialty && medicalContext && medicalContext.specialty) {
+                console.log(`[AI Service] ⚠️ WARNING: specialty bị mất, đang restore từ medicalContext: "${medicalContext.specialty}"`);
+                args.specialty = medicalContext.specialty;
+            }
+        }
+        
         let toolResult;
         try {
             toolCalled = true;
-            toolResult = await toolImpl(args);
+            // Tạo một object mới để đảm bảo args được truyền đúng
+            const finalArgs = { ...args };
+            if (call.name === 'findAvailableSlots' && finalArgs.specialty) {
+                console.log(`[AI Service] ✅ Đảm bảo specialty "${finalArgs.specialty}" được truyền vào tool`);
+            }
+            toolResult = await toolImpl(finalArgs);
         } catch (error) {
             console.error(`Lỗi khi thực thi tool ${call.name}:`, error);
             toolResult = { error: error.message };
@@ -635,5 +756,6 @@ const runChatWithTools = async (userPrompt, history, sessionId) => {
 };
 
 module.exports = {
-    runChatWithTools
+    runAppointmentChatWithTools,
+    runChatWithTools: runAppointmentChatWithTools // Backward compatibility
 };

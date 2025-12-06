@@ -1,8 +1,11 @@
-const aiService = require('../services/aiService'); // Lớp 3 (Bộ não)
+const aiService = require('../services/aiService'); // Appointment Agent (Gemini 2.5 Flash)
+const aiServicePro = require('../services/aiServicePro'); // Information Agent (Gemini 2.5 Pro)
+const intentRouter = require('../services/intentRouter'); // Intent Router
 const qdrantService = require('../services/qdrantService'); // Lớp 1 & 2 (Gác cổng & Bộ đệm)
 const ChatHistory = require('../models/ChatHistory');
 const { v4: uuidv4 } = require('uuid'); // Import UUID
 const cache = require('../services/cacheService'); // Import cache
+const { extractMedicalContext } = require('../utils/chatHelpers'); // Helper để extract triệu chứng từ lịch sử
 
 exports.geminiChat = async (req, res) => {
     try {
@@ -44,7 +47,7 @@ exports.geminiChat = async (req, res) => {
             
             // (Vẫn lưu nếu user đã đăng nhập)
             if (realUserId) {
-                await saveChat(realUserId, userPrompt, cannedResponse, false);
+                await saveChat(realUserId, userPrompt, cannedResponse, false, newSessionId);
             }
             
             // Trả về cả 'newSessionId' để client lưu lại
@@ -62,7 +65,7 @@ exports.geminiChat = async (req, res) => {
         if (cachedAnswer) {
             // (Vẫn lưu nếu user đã đăng nhập)
             if (realUserId) {
-                await saveChat(realUserId, userPrompt, cachedAnswer, true); // (Cache là nghiệp vụ)
+                await saveChat(realUserId, userPrompt, cachedAnswer, true, newSessionId); // (Cache là nghiệp vụ)
             }
             
             return res.json({ 
@@ -73,8 +76,11 @@ exports.geminiChat = async (req, res) => {
         }
 
         // -------------------------------------
-        // ⭐ LỚP 3: GỌI AI (BỘ NÃO - TỐN TIỀN)
+        // ⭐ LỚP 3: PHÂN LOẠI INTENT VÀ ROUTE ĐẾN ĐÚNG MODEL
         // -------------------------------------
+        const intent = await intentRouter.classifyIntent(userPrompt);
+        console.log(`[Intent Router] Intent: ${intent} cho prompt: "${userPrompt.substring(0, 50)}..."`);
+        
         let history = messages.slice(0, -1);
         
         // ... (Code dọn dẹp 'role' và 'parts' của bạn) ...
@@ -82,21 +88,94 @@ exports.geminiChat = async (req, res) => {
         if (firstUserIndex > 0) history = history.slice(firstUserIndex);
         else if (firstUserIndex === -1 && history.length > 0) history = [];
         
+        // QUAN TRỌNG: Giới hạn số lượng messages để tránh nhầm lẫn giữa các cuộc hội thoại
+        // Chỉ đọc tối đa 30 messages gần nhất (15 cặp user-assistant)
+        // Điều này đảm bảo chỉ đọc lịch sử trong cùng một session/hộp thoại hiện tại
+        const MAX_HISTORY_MESSAGES = 30;
+        if (history.length > MAX_HISTORY_MESSAGES) {
+            console.log(`[History] Giới hạn lịch sử từ ${history.length} xuống ${MAX_HISTORY_MESSAGES} messages để tránh nhầm lẫn giữa các cuộc hội thoại`);
+            history = history.slice(-MAX_HISTORY_MESSAGES); // Lấy 30 messages gần nhất
+        }
+        
         const formattedHistory = history.map(msg => ({
             role: msg.role === 'assistant' ? 'model' : msg.role, 
             parts: [{ text: msg.content || "" }] 
         }));
         
-        // ⭐ SỬA LỖI: Truyền 'newSessionId' (ID tạm thời) vào
-        const { text: aiResponseText, usedTool } = await aiService.runChatWithTools(
-            userPrompt, 
-            formattedHistory,
-            newSessionId // <-- Truyền ID tạm thời
-        );
+        console.log(`[History] Sử dụng ${formattedHistory.length} messages trong lịch sử (sessionId: ${newSessionId?.substring(0, 8)}...)`);
+        
+        // Route đến đúng model dựa trên intent
+        let aiResponseText, usedTool;
+        
+        if (intent === 'APPOINTMENT') {
+            // Gemini 2.5 Flash - Đặt lịch, hủy lịch, đổi lịch
+            console.log('[Model Router] → Gemini 2.5 Flash (Appointment)');
+            
+            // Extract triệu chứng và thông tin y tế từ lịch sử hội thoại
+            const medicalContext = extractMedicalContext(formattedHistory);
+            
+            // Kiểm tra nếu user muốn hủy/đổi lịch - không tạo enhanced prompt cho các trường hợp này
+            const isCancelOrRescheduleIntent = /hủy|làm lại|đổi|thay đổi|hoãn/i.test(userPrompt);
+            
+            if (medicalContext && medicalContext.primaryQuery && !isCancelOrRescheduleIntent) {
+                console.log(`[Medical Context] Đã tìm thấy triệu chứng từ lịch sử: "${medicalContext.primaryQuery.substring(0, 100)}..."`);
+                console.log(`[Medical Context] Chuyên khoa: ${medicalContext.specialty || 'không xác định'}`);
+                console.log(`[Medical Context] Địa điểm: ${medicalContext.location || 'không xác định'}`);
+                
+                // Nếu user chỉ nói "đặt lịch" hoặc câu ngắn, thêm context vào prompt
+                if (userPrompt.length < 50 && medicalContext.primaryQuery) {
+                    // Tạo enhanced prompt với context từ lịch sử
+                    const enhancedPrompt = `${userPrompt}\n\n[Lưu ý: Trong lịch sử hội thoại trước đó, người dùng đã mô tả triệu chứng: "${medicalContext.primaryQuery}". Hãy sử dụng thông tin này để tìm lịch khám phù hợp.]`;
+                    console.log(`[Enhanced Prompt] Đã thêm context từ lịch sử vào prompt`);
+                    
+                    const result = await aiService.runAppointmentChatWithTools(
+                        enhancedPrompt, 
+                        formattedHistory,
+                        newSessionId,
+                        medicalContext, // Truyền medical context vào service
+                        userPrompt // Truyền prompt gốc để kiểm tra intent
+                    );
+                    aiResponseText = result.text;
+                    usedTool = result.usedTool;
+                } else {
+                    // Nếu user đã cung cấp đủ thông tin, chỉ truyền medical context
+                    const result = await aiService.runAppointmentChatWithTools(
+                        userPrompt, 
+                        formattedHistory,
+                        newSessionId,
+                        medicalContext, // Truyền medical context vào service
+                        userPrompt // Truyền prompt gốc (giống nhau trong trường hợp này)
+                    );
+                    aiResponseText = result.text;
+                    usedTool = result.usedTool;
+                }
+            } else {
+                // Không tìm thấy triệu chứng trong lịch sử hoặc user muốn hủy/đổi lịch, xử lý bình thường
+                const result = await aiService.runAppointmentChatWithTools(
+                    userPrompt, 
+                    formattedHistory,
+                    newSessionId,
+                    medicalContext, // Vẫn truyền medicalContext nếu có (có thể hữu ích cho cancel/reschedule)
+                    userPrompt // Truyền prompt gốc
+                );
+                aiResponseText = result.text;
+                usedTool = result.usedTool;
+            }
+        } else {
+            // Gemini 2.5 Pro - Thông tin, tư vấn, tìm bác sĩ
+            console.log('[Model Router] → Gemini 2.5 Pro (Information)');
+            const result = await aiServicePro.runProChatWithTools(
+                userPrompt, 
+                formattedHistory,
+                newSessionId
+            );
+            aiResponseText = result.text;
+            usedTool = result.usedTool;
+        }
 
         // Lưu lịch sử (hợp lệ)
         if (realUserId) { // Vẫn dùng 'realUserId' để lưu CSDL
-            await saveChat(realUserId, userPrompt, aiResponseText, usedTool);
+            await saveChat(realUserId, userPrompt, aiResponseText, usedTool, newSessionId);
         }
         
         // Lưu vào cache (cho lần sau) nếu là câu hỏi nghiệp vụ
@@ -140,13 +219,22 @@ exports.getChatHistory = async (req, res) => {
     // Lấy số lượng tin nhắn (mặc định 50, tối đa 100)
     const limit = Math.min(parseInt(req.query.limit || '50', 10), 100);
 
+    // Lấy sessionId từ query parameter (nếu có)
+    const sessionId = req.query.sessionId || null;
+
+    // Xây dựng filter: luôn filter theo userId, và filter theo sessionId nếu có
+    const filter = { userId };
+    if (sessionId) {
+      filter.sessionId = sessionId; // Chỉ lấy lịch sử của session cụ thể
+    }
+
     // Lấy lịch sử chat của user:
     // - Sắp xếp mới nhất trước để đảm bảo 'limit' lấy đúng các tin mới nhất
     // - Sau đó đảo ngược trên server để trả về theo thứ tự thời gian (cũ -> mới)
-    const newestFirst = await ChatHistory.find({ userId })
+    const newestFirst = await ChatHistory.find(filter)
       .sort({ createdAt: -1 }) // Mới nhất trước
       .limit(limit)
-      .select('userPrompt aiResponse createdAt')
+      .select('userPrompt aiResponse createdAt sessionId')
       .lean();
     const chatHistory = newestFirst.reverse(); // Trả về theo thứ tự cũ -> mới
 
@@ -193,7 +281,7 @@ exports.getChatHistory = async (req, res) => {
 /**
  * Hàm trợ giúp (helper) để lưu chat, tránh lặp code
  */
-const saveChat = async (userId, userPrompt, aiResponse, usedTool) => {
+const saveChat = async (userId, userPrompt, aiResponse, usedTool, sessionId = null) => {
   try {
     // Kiểm tra aiResponse không được rỗng hoặc undefined
     // Nếu rỗng, không lưu để tránh lỗi validation
@@ -204,6 +292,7 @@ const saveChat = async (userId, userPrompt, aiResponse, usedTool) => {
 
     const newChat = new ChatHistory({
         userId: userId,
+        sessionId: sessionId, // Lưu sessionId để phân biệt các session
         userPrompt: userPrompt,
         aiResponse: aiResponse,
         usedTool: usedTool

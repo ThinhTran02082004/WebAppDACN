@@ -2,7 +2,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 export const configureGoogleSignIn = () => {
   GoogleSignin.configure({
-    webClientId: '268729645043-lk8nqhbiah46aqmqca9154j6gilc0nkb.apps.googleusercontent.com', // Web Client ID (client_type 3)
+    webClientId: '1046290597450-hea7uomj629tv6arefmvpnjutc87jfbe.apps.googleusercontent.com', // From Google Console
     offlineAccess: true,
     hostedDomain: '',
     forceCodeForRefreshToken: true,
@@ -15,6 +15,7 @@ export const signInWithGoogle = async () => {
     const userInfo = await GoogleSignin.signIn();
     return userInfo;
   } catch (error) {
+    console.error('Google Sign-In Error:', error);
     throw error;
   }
 };

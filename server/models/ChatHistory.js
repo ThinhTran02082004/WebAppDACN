@@ -6,6 +6,10 @@ const chatHistorySchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  sessionId: {
+    type: String,
+    index: true // Index để tìm kiếm nhanh theo sessionId
+  },
   userPrompt: {
     type: String,
     required: true
@@ -30,6 +34,7 @@ const chatHistorySchema = new mongoose.Schema({
 });
 
 chatHistorySchema.index({ createdAt: -1 });
+chatHistorySchema.index({ userId: 1, sessionId: 1 }); // Index kết hợp để query nhanh hơn
 
 const ChatHistory = mongoose.model('ChatHistory', chatHistorySchema);
 module.exports = ChatHistory;

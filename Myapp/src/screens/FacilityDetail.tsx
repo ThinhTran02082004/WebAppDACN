@@ -15,7 +15,6 @@ import {
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { apiService, Hospital } from '../services/api';
 import { AppIcons, IconColors, IconSizes } from '../config/icons';
-import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -30,14 +29,10 @@ interface FacilityDetailProps {
 
 export default function FacilityDetail({ route, navigation }: FacilityDetailProps) {
   const { id } = route.params;
-  const { user } = useAuth();
   const [hospital, setHospital] = useState<Hospital | null>(null);
   const [loading, setLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
   const [activeTab, setActiveTab] = useState<'info' | 'specialties' | 'services'>('info');
-  const [specialties, setSpecialties] = useState<any[]>([]);
-  const [services, setServices] = useState<any[]>([]);
-  const [loadingTabs, setLoadingTabs] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -59,28 +54,6 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
       }
     };
     load();
-  }, [id]);
-
-  useEffect(() => {
-    const loadHospitalTabs = async () => {
-      if (!id) return;
-      setLoadingTabs(true);
-      try {
-        const [spRes, svRes] = await Promise.all([
-          apiService.getHospitalSpecialties(id),
-          apiService.getHospitalServices(id),
-        ]);
-        const spList = Array.isArray((spRes as any)?.data?.data) ? (spRes as any).data.data : (Array.isArray(spRes?.data) ? (spRes as any).data : []);
-        const svList = Array.isArray((svRes as any)?.data?.data) ? (svRes as any).data.data : (Array.isArray(svRes?.data) ? (svRes as any).data : []);
-        setSpecialties(spList);
-        setServices(svList);
-      } catch (e) {
-        console.error('Error loading hospital tabs:', e);
-      } finally {
-        setLoadingTabs(false);
-      }
-    };
-    loadHospitalTabs();
   }, [id]);
 
   const handleCall = () => {
@@ -115,12 +88,8 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
   };
 
   const handleBookAppointment = () => {
+    // TODO: Navigate to booking screen
     console.log('Book appointment at hospital:', hospital?._id);
-    if (!user) {
-      navigation.navigate('Login');
-    } else {
-      navigation.navigate('Booking');
-    }
   };
 
   if (loading) {
@@ -422,14 +391,9 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
         ) : activeTab === 'specialties' ? (
           <View style={styles.tabContent}>
             {/* Specialties Tab Content */}
-            {loadingTabs ? (
-              <View style={styles.noServices}>
-                <ActivityIndicator size="large" color="#0a84ff" />
-                <Text style={styles.noServicesText}>Đang tải chuyên khoa...</Text>
-              </View>
-            ) : specialties && specialties.length > 0 ? (
+            {hospital.specialties && hospital.specialties.length > 0 ? (
               <>
-                {specialties.map((specialty) => (
+                {hospital.specialties.map((specialty) => (
                   <TouchableOpacity 
                     key={specialty._id} 
                     style={styles.specialtyCard}
@@ -460,14 +424,9 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
         ) : (
           <View style={styles.tabContent}>
             {/* Services Tab Content */}
-            {loadingTabs ? (
-              <View style={styles.noServices}>
-                <ActivityIndicator size="large" color="#0a84ff" />
-                <Text style={styles.noServicesText}>Đang tải dịch vụ...</Text>
-              </View>
-            ) : services && services.length > 0 ? (
+            {hospital.services && hospital.services.length > 0 ? (
               <>
-                {services.map((service) => (
+                {hospital.services.map((service) => (
                   <TouchableOpacity 
                     key={service._id} 
                     style={styles.serviceCard}

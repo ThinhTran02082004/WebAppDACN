@@ -25,10 +25,9 @@ type Facility = {
 type Props = {
   facilities: Facility[];
   onFacilityPress?: (facility: Facility) => void;
-  onBookingPress?: (facility: Facility) => void;
 };
 
-export default function FacilityList({ facilities, onFacilityPress, onBookingPress }: Props) {
+export default function FacilityList({ facilities, onFacilityPress }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -89,13 +88,7 @@ export default function FacilityList({ facilities, onFacilityPress, onBookingPre
                   {facility.address}
                 </Text>
               </View>
-              <TouchableOpacity 
-                style={styles.bookingButton} 
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onBookingPress ? onBookingPress(facility) : onFacilityPress?.(facility);
-                }}
-              >
+              <TouchableOpacity style={styles.bookingButton} onPress={() => onFacilityPress?.(facility)}>
                 <Text style={styles.bookingButtonText}>Đặt khám ngay</Text>
               </TouchableOpacity>
             </View>

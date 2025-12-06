@@ -18,7 +18,25 @@ const searchTools = {
             if (name) filter.name = { $regex: name, $options: 'i' };
 
             if (specialty) {
-                const specialtyDoc = await Specialty.findOne({ name: { $regex: specialty, $options: 'i' } });
+                let specialtyDoc = null;
+                
+                // ƯU TIÊN 1: Dùng Qdrant Mapper trước (chính xác hơn, tránh false positive)
+                const mapping = await findSpecialtyMapping(specialty);
+                if (mapping) {
+                    specialtyDoc = await Specialty.findById(mapping.specialtyId);
+                }
+                
+                // FALLBACK: Nếu Qdrant không tìm thấy, thử tìm bằng tên chính xác với word boundaries
+                if (!specialtyDoc) {
+                    let regexPattern = specialty;
+                    if (specialty.length <= 3) {
+                        regexPattern = `\\b${specialty.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`;
+                    } else {
+                        regexPattern = specialty.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    }
+                    specialtyDoc = await Specialty.findOne({ name: { $regex: regexPattern, $options: 'i' } });
+                }
+                
                 if (specialtyDoc) {
                     filter.specialties = { $in: [specialtyDoc._id] };
                 } else {
@@ -37,20 +55,83 @@ const searchTools = {
     "findDoctors": async ({ specialty, name }) => {
         try {
             let filter = {};
+            
+            // Xử lý filter theo tên bác sĩ (nếu có)
+            if (name) {
+                console.log(`[Tool] Đang tìm bác sĩ với tên: "${name}"`);
+                // Tìm bác sĩ theo tên - cần populate user trước để filter
+                // Tạm thời để filter rỗng, sẽ filter sau khi populate
+            }
+            
+            // Xử lý filter theo chuyên khoa (nếu có)
             if (specialty) {
-                const specialtyDoc = await Specialty.findOne({ name: { $regex: specialty, $options: 'i' } });
-                if (specialtyDoc) {
-                    filter.specialtyId = specialtyDoc._id; 
-                } else {
+                let specialtyDoc = null;
+                
+                // ƯU TIÊN 1: Dùng Qdrant Mapper trước (chính xác hơn, tránh false positive)
+                console.log(`[Tool] Đang dùng Qdrant Mapper để tìm chuyên khoa cho "${specialty}"...`);
+                const mapping = await findSpecialtyMapping(specialty);
+                if (mapping) {
+                    specialtyDoc = await Specialty.findById(mapping.specialtyId);
+                    if (specialtyDoc) {
+                        console.log(`[Tool] Đã map thành công (Qdrant): "${specialty}" -> Chuyên khoa: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
+                    }
+                }
+                
+                // FALLBACK: Nếu Qdrant không tìm thấy, thử tìm bằng tên chính xác với word boundaries
+                // (tránh trường hợp "ho" match với "Khoa" trong "Nam Khoa")
+                if (!specialtyDoc) {
+                    console.log(`[Tool] Qdrant không tìm thấy, đang thử tìm chuyên khoa bằng tên chính xác...`);
+                    
+                    // Với query ngắn (<= 3 ký tự), dùng word boundaries để tránh false positive
+                    let regexPattern = specialty;
+                    if (specialty.length <= 3) {
+                        // Thêm word boundaries để chỉ match từ hoàn chỉnh
+                        regexPattern = `\\b${specialty.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`;
+                    } else {
+                        // Với query dài hơn, escape special characters
+                        regexPattern = specialty.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    }
+                    
+                    specialtyDoc = await Specialty.findOne({ name: { $regex: regexPattern, $options: 'i' } });
+                    
+                    if (specialtyDoc) {
+                        console.log(`[Tool] Tìm thấy chuyên khoa trực tiếp: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
+                    }
+                }
+                
+                if (!specialtyDoc) {
+                    console.log(`[Tool] ERROR: Không tìm thấy chuyên khoa cho "${specialty}"`);
                     return { doctors: [] };
                 }
+                
+                filter.specialtyId = specialtyDoc._id;
             }
-            // Lọc kết quả trả về cho gọn
-            const doctors = await Doctor.find(filter)
+            
+            // Lọc kết quả trả về
+            // Nếu không có specialty (lấy tất cả), tăng limit lên 20
+            // Nếu có specialty, giới hạn 10 để không quá nhiều
+            const limit = specialty ? 10 : 20;
+            
+            let doctors = await Doctor.find(filter)
                 .populate('user', 'fullName')
-                .limit(3)
-                .select('user consultationFee')
+                .limit(limit * 2) // Lấy nhiều hơn để filter theo tên sau
+                .select('user consultationFee specialtyId')
                 .exec();
+            
+            // Filter theo tên bác sĩ sau khi populate (nếu có)
+            if (name) {
+                const nameLower = name.toLowerCase().trim();
+                doctors = doctors.filter(doctor => {
+                    const doctorName = doctor.user?.fullName || '';
+                    return doctorName.toLowerCase().includes(nameLower);
+                });
+                console.log(`[Tool] Sau khi filter theo tên "${name}": còn ${doctors.length} bác sĩ`);
+            }
+            
+            // Giới hạn lại sau khi filter
+            doctors = doctors.slice(0, limit);
+            
+            console.log(`[Tool] Tìm thấy ${doctors.length} bác sĩ cho specialty: ${specialty || 'all'}, name: ${name || 'all'} (limit: ${limit})`);
             return { doctors };
         } catch (e) { 
             console.error("Lỗi findDoctors:", e);
@@ -58,36 +139,93 @@ const searchTools = {
         }   
     },
 
-    "findAvailableSlots": async ({ query, city, date, sessionId }) => {
+    "findAvailableSlots": async ({ query, city, date, sessionId, specialty }) => {
         try {
-            console.log(`[Tool] Đang tìm lịch trống: Query "${query}", Ngày ${date || 'không chỉ định'}, Khu vực ${city || 'không chỉ định'}, Session: ${sessionId}`);
+            console.log(`[Tool] Đang tìm lịch trống: Query "${query || 'không có'}", Specialty "${specialty || 'không có'}", Ngày ${date || 'không chỉ định'}, Khu vực ${city || 'không chỉ định'}, Session: ${sessionId}`);
 
             // 1. ÁNH XẠ QUERY -> CHUYÊN KHOA
             let specialtyDoc = null;
             
-            // Thử tìm chuyên khoa bằng tên chính xác trước
-            specialtyDoc = await Specialty.findOne({ name: { $regex: query, $options: 'i' } });
-            
-            if (!specialtyDoc) {
-                // Nếu không, dùng Qdrant Mapper để tìm
-                console.log(`[Tool] Không tìm thấy chuyên khoa trực tiếp, đang dùng Qdrant Mapper...`);
-                const mapping = await findSpecialtyMapping(query);
-                console.log(`[Tool] Qdrant mapping result:`, mapping ? `Found specialtyId: ${mapping.specialtyId}` : 'No mapping found');
+            // ƯU TIÊN 0: Nếu có specialty từ medicalContext, sử dụng trực tiếp (chính xác nhất)
+            if (specialty) {
+                console.log(`[Tool] 🎯 Ưu tiên sử dụng specialty từ medicalContext: "${specialty}"`);
+                
+                // Thử tìm bằng Qdrant Mapper trước
+                const mapping = await findSpecialtyMapping(specialty);
                 if (mapping) {
                     specialtyDoc = await Specialty.findById(mapping.specialtyId);
                     if (specialtyDoc) {
-                        console.log(`[Tool] Đã map thành công: "${query}" -> Chuyên khoa: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
-                    } else {
-                        console.log(`[Tool] WARNING: Mapping trả về specialtyId ${mapping.specialtyId} nhưng không tìm thấy trong database`);
+                        console.log(`[Tool] ✅ Đã map thành công (Qdrant từ specialty): "${specialty}" -> Chuyên khoa: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
                     }
                 }
-            } else {
-                console.log(`[Tool] Tìm thấy chuyên khoa trực tiếp: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
+                
+                // FALLBACK: Nếu Qdrant không tìm thấy, thử tìm bằng tên chính xác
+                if (!specialtyDoc) {
+                    let regexPattern = specialty;
+                    if (specialty.length <= 3) {
+                        regexPattern = `\\b${specialty.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`;
+                    } else {
+                        regexPattern = specialty.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    }
+                    specialtyDoc = await Specialty.findOne({ name: { $regex: regexPattern, $options: 'i' } });
+                    if (specialtyDoc) {
+                        console.log(`[Tool] ✅ Tìm thấy chuyên khoa trực tiếp từ specialty: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
+                    }
+                }
+            }
+            
+            // ƯU TIÊN 1: Nếu chưa có specialtyDoc và có query, dùng Qdrant Mapper với query
+            if (!specialtyDoc && query) {
+                console.log(`[Tool] Đang dùng Qdrant Mapper để tìm chuyên khoa cho query "${query}"...`);
+                try {
+                    const mapping = await findSpecialtyMapping(query);
+                    console.log(`[Tool] Qdrant mapping result:`, mapping ? `Found specialtyId: ${mapping.specialtyId}, specialtyName: ${mapping.specialtyName}` : 'No mapping found');
+                    if (mapping) {
+                        specialtyDoc = await Specialty.findById(mapping.specialtyId);
+                        if (specialtyDoc) {
+                            console.log(`[Tool] ✅ Đã map thành công (Qdrant từ query): "${query}" -> Chuyên khoa: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
+                        } else {
+                            console.log(`[Tool] ⚠️ WARNING: Mapping trả về specialtyId ${mapping.specialtyId} nhưng không tìm thấy trong database`);
+                        }
+                    } else {
+                        console.log(`[Tool] ⚠️ Qdrant mapping không tìm thấy cho "${query}"`);
+                    }
+                } catch (error) {
+                    console.error(`[Tool] ❌ Lỗi khi gọi Qdrant mapping:`, error);
+                }
+            }
+            
+            // FALLBACK: Nếu Qdrant không tìm thấy và có query, thử tìm bằng tên chính xác với word boundaries
+            // (tránh trường hợp "ho" match với "Khoa" trong "Nam Khoa")
+            if (!specialtyDoc && query) {
+                console.log(`[Tool] ⚠️ Qdrant không tìm thấy, đang thử tìm chuyên khoa bằng tên chính xác (FALLBACK)...`);
+                
+                // Với query ngắn (<= 3 ký tự), dùng exact match hoặc word boundaries
+                // Ví dụ: "ho" không nên match "Khoa" trong "Nam Khoa"
+                let regexPattern = query;
+                if (query.length <= 3) {
+                    // Với query ngắn, chỉ match từ hoàn chỉnh (word boundary)
+                    // MongoDB regex word boundary: \b không hoạt động tốt, dùng ^ hoặc \s
+                    regexPattern = `(^|\\s)${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`;
+                } else {
+                    // Với query dài hơn, escape special characters
+                    regexPattern = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                }
+                
+                console.log(`[Tool] Đang tìm với regex pattern: "${regexPattern}"`);
+                specialtyDoc = await Specialty.findOne({ name: { $regex: regexPattern, $options: 'i' } });
+                
+                if (specialtyDoc) {
+                    console.log(`[Tool] ⚠️ Tìm thấy chuyên khoa trực tiếp (FALLBACK - có thể không chính xác): ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);
+                } else {
+                    console.log(`[Tool] Không tìm thấy chuyên khoa với regex pattern "${regexPattern}"`);
+                }
             }
 
             if (!specialtyDoc) {
-                console.log(`[Tool] ERROR: Không tìm thấy chuyên khoa cho query "${query}"`);
-                return { error: `Xin lỗi, hệ thống không thể xác định chuyên khoa cho "${query}". Vui lòng thử lại với từ khóa khác hoặc chỉ định rõ chuyên khoa bạn muốn khám.` };
+                const searchTerm = specialty || query || 'không xác định';
+                console.log(`[Tool] ERROR: Không tìm thấy chuyên khoa cho "${searchTerm}"`);
+                return { error: `Xin lỗi, hệ thống không thể xác định chuyên khoa cho "${searchTerm}". Vui lòng thử lại với từ khóa khác hoặc chỉ định rõ chuyên khoa bạn muốn khám.` };
             }
 
             console.log(`[Tool] Đã xác định chuyên khoa: ${specialtyDoc.name} (ID: ${specialtyDoc._id})`);

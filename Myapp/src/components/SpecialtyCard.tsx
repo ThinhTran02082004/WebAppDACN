@@ -8,10 +8,9 @@ interface SpecialtyCardProps {
   specialty: Specialty;
   size?: 'small' | 'medium' | 'large';
   onPress?: (specialty: Specialty) => void;
-  onBookingPress?: (specialty: Specialty) => void;
 }
 
-export const SpecialtyCard = ({ specialty, size = 'medium', onPress, onBookingPress }: SpecialtyCardProps) => {
+export const SpecialtyCard = ({ specialty, size = 'medium', onPress }: SpecialtyCardProps) => {
   const cardStyle = [
     styles.card,
     size === 'small' && styles.smallCard,
@@ -25,7 +24,7 @@ export const SpecialtyCard = ({ specialty, size = 'medium', onPress, onBookingPr
       activeOpacity={0.7}
     >
       <Image
-        source={{ uri: (specialty as any).imageUrl || (specialty as any).image?.secureUrl || (specialty as any).image || 'https://placehold.co/160x120' }}
+        source={{ uri: specialty.image || 'https://placehold.co/160x120' }}
         style={styles.specialtyImage}
         defaultSource={{ uri: 'https://placehold.co/160x120' }}
       />
@@ -48,13 +47,7 @@ export const SpecialtyCard = ({ specialty, size = 'medium', onPress, onBookingPr
             <Text style={styles.statsText}>{specialty.serviceCount || 0} </Text>
           </View>
         </View>
-        <TouchableOpacity 
-          style={styles.bookingButton} 
-          onPress={(e) => {
-            e.stopPropagation();
-            onBookingPress ? onBookingPress(specialty) : onPress?.(specialty);
-          }}
-        >
+        <TouchableOpacity style={styles.bookingButton} onPress={() => onPress?.(specialty)}>
           <Text style={styles.bookingButtonText}>Đặt khám ngay</Text>
         </TouchableOpacity>
       </View>

@@ -45,41 +45,35 @@ export default function QuickAccess({ items, onItemPress }: Props) {
           const page = Math.round(ev.nativeEvent.contentOffset.x / width);
           setActivePage(page);
         }}
-         renderItem={({ item: pageItems }) => {
-           // Filter out undefined items and calculate rows
-           const validItems = pageItems.filter(it => it);
-           const rows = Math.ceil(validItems.length / COLS);
-           
-           return (
-             <View style={styles.page}>
-               {Array.from({ length: rows }).map((_, rowIdx) => {
-                 const startIdx = rowIdx * COLS;
-                 const rowItems = validItems.slice(startIdx, startIdx + COLS);
-                 const itemsToRender = rowItems.length;
-                 
+         renderItem={({ item: pageItems }) => (
+           <View style={styles.page}>
+             {/* first row - 4 items */}
+             <View style={styles.row}>
+               {Array.from({ length: COLS }).map((_, colIdx) => {
+                 const it = pageItems[colIdx];
                  return (
-                   <View key={`row-${rowIdx}`} style={styles.row}>
-                     {rowItems.map((it, colIdx) => (
-                       <TouchableOpacity 
-                         key={`${rowIdx}-${colIdx}`} 
-                         style={styles.item} 
-                         onPress={() => onItemPress?.(it)} 
-                         activeOpacity={0.8}
-                       >
-                         <Ionicons name={it.icon as any} size={IconSizes.lg} color={IconColors.primary} />
-                         <Text style={styles.title} numberOfLines={2}>{it.title || ''}</Text>
-                       </TouchableOpacity>
-                     ))}
-                     {/* Add spacer views to center items if row is not full */}
-                     {itemsToRender < COLS && Array.from({ length: COLS - itemsToRender }).map((_, idx) => (
-                       <View key={`spacer-${idx}`} style={styles.item} />
-                     ))}
-                   </View>
+                   <TouchableOpacity key={`f-${colIdx}`} style={styles.item} onPress={() => it && onItemPress?.(it)} activeOpacity={0.8}>
+                     <Ionicons name={it?.icon as any || 'help'} size={IconSizes.lg} color={IconColors.primary} />
+                     <Text style={styles.title} numberOfLines={2}>{it?.title || ''}</Text>
+                   </TouchableOpacity>
                  );
                })}
              </View>
-           );
-         }}
+
+             {/* second row - remaining items */}
+             <View style={styles.row}>
+               {Array.from({ length: COLS }).map((_, colIdx) => {
+                 const it = pageItems[COLS + colIdx];
+                 return (
+                   <TouchableOpacity key={`s-${colIdx}`} style={styles.item} onPress={() => it && onItemPress?.(it)} activeOpacity={0.8}>
+                     <Ionicons name={it?.icon as any || 'help'} size={IconSizes.lg} color={IconColors.primary} />
+                     <Text style={styles.title} numberOfLines={2}>{it?.title || ''}</Text>
+                   </TouchableOpacity>
+                 );
+               })}
+             </View>
+           </View>
+         )}
       />
 
       <View style={styles.dots}>
@@ -94,10 +88,10 @@ export default function QuickAccess({ items, onItemPress }: Props) {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#fff',
-    borderRadius: 18,
-    marginTop: 32,
+    borderRadius: 12,
+    marginTop: 30,
     padding: 0,
-    paddingTop: 16, 
+    paddingTop: 16, // Increased padding top
     marginHorizontal: 16,
     marginBottom: 16,
     elevation: 3,

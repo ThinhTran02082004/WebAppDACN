@@ -15,12 +15,12 @@ const tools = {
         },
         {
             name: "findDoctors",
-            description: "Tìm kiếm bác sĩ dựa trên chuyên khoa hoặc tên.",
+            description: "Tìm kiếm bác sĩ dựa trên chuyên khoa hoặc tên. BẠN PHẢI gọi tool này NGAY LẬP TỨC khi người dùng hỏi về: (1) 'có bác sĩ nào', 'danh sách bác sĩ', 'bác sĩ hiện có', 'bác sĩ nào khám', 'tìm bác sĩ', (2) hỏi về bác sĩ của một chuyên khoa cụ thể (ví dụ: 'khoa nội có bác sĩ nào', 'bác sĩ tim mạch'), (3) hỏi về bác sĩ khám một bệnh/triệu chứng (ví dụ: 'bác sĩ khám bệnh tim', 'bác sĩ khám đau đầu'), (4) hỏi về thông tin của một bác sĩ cụ thể (ví dụ: 'bác sĩ A chuyên khoa gì', 'bác sĩ Nguyễn Văn B', 'thông tin bác sĩ X'). QUAN TRỌNG: Nếu người dùng hỏi 'có bác sĩ nào' hoặc 'danh sách bác sĩ' mà không chỉ định chuyên khoa, bạn vẫn PHẢI gọi tool này với specialty=null để lấy danh sách tất cả bác sĩ. KHÔNG trả lời mà không gọi tool - bạn không thể biết có bác sĩ nào nếu không gọi tool.",
             parameters: { 
                 type: "OBJECT",
                 properties: {
-                    specialty: { type: "STRING", description: "Chuyên khoa người dùng muốn khám (ví dụ: 'tim mạch', 'tai mũi họng')" },
-                    name: { type: "STRING", description: "Tên bác sĩ" }
+                    specialty: { type: "STRING", description: "Chuyên khoa hoặc triệu chứng/bệnh người dùng muốn khám. Có thể là tên chuyên khoa (ví dụ: 'tim mạch', 'nội khoa', 'tai mũi họng') hoặc triệu chứng/bệnh (ví dụ: 'bệnh tim', 'đau tim', 'đau đầu'). Nếu người dùng chỉ hỏi 'có bác sĩ nào' mà không chỉ định chuyên khoa, để trống hoặc null để lấy tất cả bác sĩ. Tool sẽ tự động map từ triệu chứng sang chuyên khoa phù hợp. Nếu người dùng hỏi về thông tin của một bác sĩ cụ thể (ví dụ: 'bác sĩ A chuyên khoa gì'), để trống vì bạn sẽ dùng parameter 'name' để tìm." },
+                    name: { type: "STRING", description: "Tên bác sĩ cần tìm. BẠN PHẢI extract tên này khi người dùng hỏi về một bác sĩ cụ thể. Ví dụ: 'bác sĩ A chuyên khoa gì' -> name='A', 'bác sĩ Nguyễn Văn B' -> name='Nguyễn Văn B', 'thông tin bác sĩ X' -> name='X'. Chỉ lấy phần tên, bỏ các từ như 'bác sĩ', 'bs', 'doctor'." }
                 },
             }
         },
