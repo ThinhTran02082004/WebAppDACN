@@ -23,6 +23,14 @@ const RescheduleAppointment = () => {
   
   // Add state for current month for calendar view
   const [currentMonth, setCurrentMonth] = useState(new Date());
+
+  // Theo dõi giới hạn 3 lịch hẹn/ngày cho bệnh nhân
+  const [dailyLimitInfo, setDailyLimitInfo] = useState({
+    status: 'idle',
+    count: 0,
+    limit: 3,
+    date: ''
+  });
   
   // State for form data
   const [formData, setFormData] = useState({
@@ -49,9 +57,16 @@ const RescheduleAppointment = () => {
 
       console.log("Connecting to socket server at:", socketUrl);
 
-      // Get JWT token from localStorage
-      const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
-      const token = userInfo.token;
+      // Get JWT token from storage or context
+      const storedUser = JSON.parse(localStorage.getItem('userInfo')) ||
+                         JSON.parse(sessionStorage.getItem('userInfo')) || {};
+      const token = user?.token || storedUser.token;
+
+      if (!token) {
+        console.error('Socket connection error: missing auth token');
+        toast.error('Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại để đổi lịch.');
+        return;
+      }
 
       // Create socket instance with improved configuration
       const socketInstance = io(socketUrl, {
@@ -248,6 +263,20 @@ const RescheduleAppointment = () => {
       setCurrentMonth(new Date(firstAvailableDate.getFullYear(), firstAvailableDate.getMonth(), 1));
     }
   }, [availableDates]);
+
+  // Kiểm tra giới hạn 3 lịch/ngày khi chọn ngày mới
+  useEffect(() => {
+    if (formData.appointmentDate) {
+      checkDailyAppointmentLimit(formData.appointmentDate);
+    } else {
+      setDailyLimitInfo({
+        status: 'idle',
+        count: 0,
+        limit: 3,
+        date: ''
+      });
+    }
+  }, [formData.appointmentDate, isAuthenticated]);
 
   // Fetch original appointment details
   const fetchAppointmentDetails = async () => {
@@ -581,10 +610,100 @@ const RescheduleAppointment = () => {
     findTimeSlots(date);
   };
 
+  const normalizeDateOnly = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const utcDate = new Date(Date.UTC(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      12, 0, 0
+    ));
+    return utcDate.toISOString().split('T')[0];
+  };
+
+  const checkDailyAppointmentLimit = async (dateString) => {
+    if (!dateString || !isAuthenticated) {
+      setDailyLimitInfo({
+        status: 'idle',
+        count: 0,
+        limit: 3,
+        date: ''
+      });
+      return;
+    }
+
+    setDailyLimitInfo(prev => ({
+      ...prev,
+      status: 'loading',
+      date: dateString
+    }));
+
+    try {
+      const response = await api.get('/appointments/user/patient/daily-count', {
+        params: { date: dateString }
+      });
+
+      if (formData.appointmentDate !== dateString) return;
+
+      const count = response.data?.data?.count ?? 0;
+      const limit = response.data?.data?.limit ?? 3;
+
+      setDailyLimitInfo({
+        status: 'loaded',
+        count,
+        limit,
+        date: dateString
+      });
+
+      // Show warning only when changing to another day that exceeds the limit
+      const originalDate = normalizeDateOnly(originalAppointment?.appointmentDate);
+      if (count >= limit &&
+        normalizeDateOnly(dateString) !== originalDate) {
+        toast.warning(`Bạn đã có ${count}/${limit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`);
+      }
+    } catch (err) {
+      console.error('Error checking daily appointment limit:', err);
+      if (formData.appointmentDate === dateString) {
+        setDailyLimitInfo(prev => ({
+          ...prev,
+          status: 'error'
+        }));
+      }
+    }
+  };
+
+  const isLimitReachedOnSelectedDate = () => {
+    return dailyLimitInfo.status === 'loaded' &&
+      dailyLimitInfo.date === formData.appointmentDate &&
+      dailyLimitInfo.count >= (dailyLimitInfo.limit || 3);
+  };
+
+  const shouldBlockBecauseOfDailyLimit = () => {
+    if (!isLimitReachedOnSelectedDate()) return false;
+
+    // Cho phép đổi giờ nếu vẫn ở cùng ngày với lịch cũ
+    const originalDate = normalizeDateOnly(originalAppointment?.appointmentDate);
+    if (formData.appointmentDate &&
+      originalDate &&
+      normalizeDateOnly(formData.appointmentDate) === originalDate) {
+      return false;
+    }
+
+    return true;
+  };
+
   // Handle time slot selection
   const handleTimeSlotSelect = (scheduleId, slot) => {
     // Don't allow selecting booked slots
     if (slot.isBooked) return;
+
+    if (shouldBlockBecauseOfDailyLimit()) {
+      const limit = dailyLimitInfo.limit || 3;
+      toast.warning(`Bạn đã có ${dailyLimitInfo.count}/${limit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`);
+      return;
+    }
     
     // Check if slot is locked by another user
     const slotKey = `${scheduleId}_${slot.startTime}`;
@@ -641,6 +760,12 @@ const RescheduleAppointment = () => {
     
     if (!formData.appointmentDate || !formData.scheduleId || !formData.timeSlot.startTime) {
       toast.error('Vui lòng chọn ngày và giờ khám');
+      return;
+    }
+
+    if (shouldBlockBecauseOfDailyLimit()) {
+      const limit = dailyLimitInfo.limit || 3;
+      toast.error(`Bạn đã có ${dailyLimitInfo.count}/${limit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`);
       return;
     }
     
@@ -907,6 +1032,39 @@ const RescheduleAppointment = () => {
                   <FaCalendarAlt className="mr-2 text-primary" />
                   Chọn ngày khám
                 </label>
+
+                {dailyLimitInfo.status === 'loading' && (
+                  <div className="mb-3 px-3 py-2 rounded-lg border border-blue-100 bg-blue-50 text-blue-700 text-sm flex items-center">
+                    <FaInfoCircle className="mr-2 flex-shrink-0" />
+                    <span>Đang kiểm tra số lịch hẹn của bạn trong ngày đã chọn...</span>
+                  </div>
+                )}
+
+                {isLimitReachedOnSelectedDate() && (
+                  <div className={`mb-3 px-3 py-2 rounded-lg border text-sm flex items-start ${shouldBlockBecauseOfDailyLimit()
+                    ? 'border-red-200 bg-red-50 text-red-700'
+                    : 'border-yellow-200 bg-yellow-50 text-yellow-700'
+                    }`}>
+                    <FaExclamationTriangle className="mr-2 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold">
+                        Bạn đã có {dailyLimitInfo.count}/{dailyLimitInfo.limit || 3} lịch hẹn trong ngày này.
+                      </p>
+                      {shouldBlockBecauseOfDailyLimit() ? (
+                        <p className="text-xs text-red-600/80 mt-1">Giới hạn 3 lịch/ngày đã đủ. Vui lòng chọn ngày khác trước khi chọn giờ.</p>
+                      ) : (
+                        <p className="text-xs text-yellow-600/80 mt-1">Bạn đang đổi giờ trong cùng ngày nên vẫn có thể tiếp tục.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {dailyLimitInfo.status === 'error' && (
+                  <div className="mb-3 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 text-sm flex items-center">
+                    <FaInfoCircle className="mr-2 flex-shrink-0" />
+                    <span>Không kiểm tra được giới hạn lịch hẹn. Bạn vẫn có thể tiếp tục chọn ngày và giờ.</span>
+                  </div>
+                )}
                 
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 max-w-md mx-auto">
                   <div className="p-3 flex items-center justify-between border-b border-gray-100">
@@ -956,14 +1114,19 @@ const RescheduleAppointment = () => {
                       
                       // Check if this day is selected
                       const isSelected = formData.appointmentDate === day.dateString;
-                      
+                     
+                      const isLimitSelected = isSelected && isLimitReachedOnSelectedDate();
+                      const isBlocked = isLimitSelected && shouldBlockBecauseOfDailyLimit();
+
                       return (
                         <div 
                           key={day.dateString}
                           className={`w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full text-xs font-medium
                             ${!day.isCurrentMonth ? 'text-gray-300' : 'text-gray-800'}
                             ${isToday ? 'ring-1 ring-gray-300' : ''}
-                            ${isSelected ? 'bg-primary text-white' : ''}
+                            ${isLimitSelected
+                              ? (isBlocked ? 'bg-red-100 border border-red-300 text-red-700' : 'bg-yellow-100 border border-yellow-300 text-yellow-700')
+                              : isSelected ? 'bg-primary text-white' : ''}
                             ${day.isAvailable && !isSelected ? 'bg-primary/10 text-primary cursor-pointer hover:bg-primary/20' : ''}
                             ${!day.isAvailable || !day.isCurrentMonth ? 'cursor-default' : 'cursor-pointer'}
                           `}
@@ -984,78 +1147,89 @@ const RescheduleAppointment = () => {
                     <FaClock className="mr-2 text-primary" />
                     Chọn giờ khám
                   </label>
-                  
-                  {availableTimeSlots.length === 0 && (
+
+                  {shouldBlockBecauseOfDailyLimit() ? (
+                    <div className="bg-red-50 text-red-700 p-4 rounded-lg flex items-start border border-red-200">
+                      <FaExclamationTriangle className="text-red-500 mr-2 mt-0.5" />
+                      <div>
+                        <p className="font-semibold">Bạn đã đạt giới hạn 3 lịch hẹn trong ngày này.</p>
+                        <p className="text-sm">Vui lòng chọn ngày khác để đổi lịch.</p>
+                      </div>
+                    </div>
+                  ) : availableTimeSlots.length === 0 ? (
                     <div className="bg-yellow-50 text-yellow-800 p-4 rounded-lg flex items-center">
                       <FaExclamationTriangle className="text-yellow-500 mr-2" />
                       <p>Không có khung giờ khả dụng cho ngày này. Vui lòng chọn ngày khác.</p>
                     </div>
-                  )}
+                  ) : null}
                   
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                    {availableTimeSlots.map(schedule => 
-                      schedule.timeSlots && schedule.timeSlots.map((slot, index) => {
-                        const slotKey = `${schedule.scheduleId}_${slot.startTime}`;
-                        const isLockedByOther = lockedSlots.has(slotKey) && lockedSlots.get(slotKey) !== user?.id;
-                        const isLockedByMe = lockedSlots.has(slotKey) && lockedSlots.get(slotKey) === user?.id;
-                        
-                        return (
-                          <div 
-                            key={`${schedule.scheduleId}-${index}`}
-                            className={`
-                              rounded-lg border p-2 text-center cursor-pointer transition-all relative
-                              ${slot.isBooked 
-                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' 
-                                : isLockedByOther
-                                  ? 'bg-yellow-50 border-yellow-300 text-yellow-700 cursor-not-allowed animate-pulse'
-                                  : formData.scheduleId === schedule.scheduleId && formData.timeSlot.startTime === slot.startTime
-                                    ? 'bg-primary/10 border-primary text-primary shadow-sm'
-                                    : slot.bookedCount > 0 
-                                      ? 'bg-yellow-50 border-yellow-200 hover:border-primary hover:bg-primary/5 text-gray-700'
-                                      : 'bg-white border-gray-200 hover:border-primary hover:bg-primary/5 text-gray-700'
-                              }
-                            `}
-                            onClick={() => !slot.isBooked && !isLockedByOther && handleTimeSlotSelect(schedule.scheduleId, slot)}
-                          >
-                            <div className="text-xs font-medium">{slot.startTime} - {slot.endTime}</div>
-                            <div className={`text-xs ${
-                              slot.isBooked 
-                                ? 'text-red-400' 
-                                : isLockedByOther 
-                                  ? 'text-yellow-600 font-semibold' 
-                                  : 'text-green-500'
-                            }`}>
-                              {slot.isBooked 
-                                ? 'Đã đầy' 
-                                : isLockedByOther 
-                                  ? 'Đang có người chọn' 
-                                  : `Còn ${(slot.maxBookings || 3) - (slot.bookedCount || 0)}/${slot.maxBookings || 3}`}
-                            </div>
+                  {!shouldBlockBecauseOfDailyLimit() && (
+                    <>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                        {availableTimeSlots.map(schedule => 
+                          schedule.timeSlots && schedule.timeSlots.map((slot, index) => {
+                            const slotKey = `${schedule.scheduleId}_${slot.startTime}`;
+                            const isLockedByOther = lockedSlots.has(slotKey) && lockedSlots.get(slotKey) !== user?.id;
+                            const isLockedByMe = lockedSlots.has(slotKey) && lockedSlots.get(slotKey) === user?.id;
                             
-                            {(isLockedByOther || isLockedByMe) && (
-                              <div className="absolute top-1 right-1 text-xs">
-                                <FaLock className={isLockedByOther ? 'text-yellow-500' : 'text-blue-500'} />
+                            return (
+                              <div 
+                                key={`${schedule.scheduleId}-${index}`}
+                                className={`
+                                  rounded-lg border p-2 text-center cursor-pointer transition-all relative
+                                  ${slot.isBooked 
+                                    ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' 
+                                    : isLockedByOther
+                                      ? 'bg-yellow-50 border-yellow-300 text-yellow-700 cursor-not-allowed animate-pulse'
+                                      : formData.scheduleId === schedule.scheduleId && formData.timeSlot.startTime === slot.startTime
+                                        ? 'bg-primary/10 border-primary text-primary shadow-sm'
+                                  : slot.bookedCount > 0 
+                                      ? 'bg-white border-gray-200 hover:border-primary hover:bg-primary/5 text-gray-700'
+                                      : 'bg-white border-gray-200 hover:border-primary hover:bg-primary/5 text-gray-700'
+                                  }
+                                `}
+                                onClick={() => !slot.isBooked && !isLockedByOther && handleTimeSlotSelect(schedule.scheduleId, slot)}
+                              >
+                                <div className="text-xs font-medium">{slot.startTime} - {slot.endTime}</div>
+                                <div className={`text-xs ${
+                                  slot.isBooked 
+                                    ? 'text-red-400' 
+                                    : isLockedByOther 
+                                      ? 'text-yellow-600 font-semibold' 
+                                      : 'text-green-500'
+                                }`}>
+                                  {slot.isBooked 
+                                    ? 'Đã đầy' 
+                                    : isLockedByOther 
+                                      ? 'Đang có người chọn' 
+                                      : `Còn ${(slot.maxBookings || 3) - (slot.bookedCount || 0)}/${slot.maxBookings || 3}`}
+                                </div>
+                                
+                                {(isLockedByOther || isLockedByMe) && (
+                                  <div className="absolute top-1 right-1 text-xs">
+                                    <FaLock className={isLockedByOther ? 'text-yellow-500' : 'text-blue-500'} />
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                  
-                  {/* Update the legend to include locked slot information */}
-                  <div className="mt-4 bg-blue-50 rounded-lg p-3 text-sm text-blue-700 flex items-start">
-                    <FaInfoCircle className="text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium mb-1">Chú thích trạng thái khung giờ:</p>
-                      <ul className="list-disc pl-5 space-y-1">
-                        <li><span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span> <span className="font-medium">Còn trống:</span> Khung giờ có thể đặt lịch</li>
-                        <li><span className="inline-block w-3 h-3 bg-yellow-400 rounded-full mr-1"></span> <span className="font-medium">Còn X/3:</span> Khung giờ đã có người đặt nhưng vẫn còn chỗ trống</li>
-                        <li><span className="inline-block w-3 h-3 bg-red-400 rounded-full mr-1"></span> <span className="font-medium">Đã đầy:</span> Khung giờ đã đạt giới hạn tối đa (3 lịch hẹn)</li>
-                        <li><span className="inline-block w-3 h-3 bg-yellow-500 rounded-full mr-1"></span> <span className="font-medium">Đang có người chọn:</span> Khung giờ đang được người khác xử lý</li>
-                      </ul>
-                    </div>
-                  </div>
+                            );
+                          })
+                        )}
+                      </div>
+                      
+                      {/* Update the legend to include locked slot information */}
+                      <div className="mt-4 bg-blue-50 rounded-lg p-3 text-sm text-blue-700 flex items-start">
+                        <FaInfoCircle className="text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+                        <div>
+                          <p className="font-medium mb-1">Chú thích trạng thái khung giờ:</p>
+                          <ul className="list-disc pl-5 space-y-1">
+                            <li><span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span> <span className="font-medium">Còn trống:</span> Khung giờ có thể đặt lịch</li>
+                            <li><span className="inline-block w-3 h-3 bg-red-400 rounded-full mr-1"></span> <span className="font-medium">Đã đầy:</span> Khung giờ đã đạt giới hạn tối đa (3 lịch hẹn)</li>
+                            <li><span className="inline-block w-3 h-3 bg-yellow-500 rounded-full mr-1"></span> <span className="font-medium">Đang có người chọn:</span> Khung giờ đang được người khác xử lý</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
               
@@ -1072,11 +1246,11 @@ const RescheduleAppointment = () => {
                 <button
                   type="submit"
                   className={`px-6 py-2 rounded-lg font-medium ${
-                    submitting || !formData.appointmentDate || !formData.scheduleId || !formData.timeSlot.startTime
+                    submitting || !formData.appointmentDate || !formData.scheduleId || !formData.timeSlot.startTime || shouldBlockBecauseOfDailyLimit()
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-primary text-white hover:bg-primary-dark transition-colors'
                   }`}
-                  disabled={submitting || !formData.appointmentDate || !formData.scheduleId || !formData.timeSlot.startTime}
+                  disabled={submitting || !formData.appointmentDate || !formData.scheduleId || !formData.timeSlot.startTime || shouldBlockBecauseOfDailyLimit()}
                 >
                   {submitting ? (
                     <span className="flex items-center">
