@@ -425,6 +425,9 @@ const AppointmentDetail = () => {
   const roomInfo = getRoomInfo(appointment);
   const serviceName = getServiceName(appointment);
   const statusInfo = getStatusInfo(appointment.status);
+  const isRescheduled = appointment.status === 'rescheduled' ||
+    (appointment.rescheduleCount && appointment.rescheduleCount > 0) ||
+    (appointment.rescheduleHistory && appointment.rescheduleHistory.length > 0);
 
   return (
     <div className="bg-gray-50 min-h-screen py-8">
@@ -648,13 +651,18 @@ const AppointmentDetail = () => {
           <div className="p-6 border-b border-gray-100">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
-                <div className="flex items-center mb-2">
+                <div className="flex flex-wrap items-center mb-2 gap-2">
                   <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
                     {statusInfo.icon && <span className="mr-1">{statusInfo.icon}</span>}
                     {statusInfo.label}
                   </span>
+                  {isRescheduled && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800 border border-indigo-200">
+                      <FaCalendarAlt className="mr-1" /> Lịch đã đổi
+                    </span>
+                  )}
                   {appointment.bookingCode && (
-                    <span className="ml-3 text-sm text-gray-500">
+                    <span className="text-sm text-gray-500">
                       Mã đặt lịch: <span className="font-medium">{appointment.bookingCode}</span>
                     </span>
                   )}
@@ -682,8 +690,8 @@ const AppointmentDetail = () => {
               
               {/* Actions */}
               <div className="flex flex-wrap gap-2">
-                {/* Chat Button - Show for pending, confirmed, or completed appointments */}
-                {(appointment.status === 'pending' || appointment.status === 'confirmed' || appointment.status === 'completed') && (
+                {/* Chat Button - Show for pending, rescheduled, confirmed, or completed appointments */}
+                {(appointment.status === 'pending' || appointment.status === 'rescheduled' || appointment.status === 'confirmed' || appointment.status === 'completed') && (
                   <>
                     <button 
                       className="inline-flex items-center bg-green-100 text-green-800 hover:bg-green-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -700,7 +708,7 @@ const AppointmentDetail = () => {
                   </>
                 )}
                 {/* Video Call Button */}
-                {(appointment.status === 'confirmed') && (
+                {(appointment.status === 'confirmed' || appointment.status === 'rescheduled' || appointment.paymentStatus === 'completed') && (
                   <VideoCallButton 
                     appointmentId={appointment._id}
                     userRole="patient"

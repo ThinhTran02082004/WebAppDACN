@@ -1,9 +1,11 @@
 const Prescription = require('../models/Prescription');
+const PrescriptionDraft = require('../models/PrescriptionDraft');
 const PrescriptionTemplate = require('../models/PrescriptionTemplate');
 const Medication = require('../models/Medication');
 const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
 const MedicalRecord = require('../models/MedicalRecord');
+const User = require('../models/User');
 const asyncHandler = require('../middlewares/async');
 const mongoose = require('mongoose');
 
@@ -310,6 +312,132 @@ exports.getPrescriptionsByAppointment = asyncHandler(async (req, res) => {
   });
 });
 
+// Doctor view: pending prescription summary grouped by specialty and doctor
+exports.getDoctorApprovalSummary = asyncHandler(async (req, res) => {
+  const doctorUserId = req.user.id;
+  const doctor = await Doctor.findOne({ user: doctorUserId }).populate('hospitalId');
+
+  if (!doctor) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy thông tin bác sĩ'
+    });
+  }
+
+  if (!doctor.hospitalId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Bác sĩ chưa được gán vào chi nhánh'
+    });
+  }
+
+  const query = {
+    hospitalId: doctor.hospitalId,
+    status: { $in: ['approved', 'verified'] }
+  };
+
+  const prescriptions = await Prescription.find(query)
+    .populate({
+      path: 'doctorId',
+      select: 'user specialtyId',
+      populate: [
+        { path: 'user', select: 'fullName' },
+        { path: 'specialtyId', select: 'name' }
+      ]
+    })
+    .populate('patientId', 'fullName')
+    .sort({ createdAt: -1 })
+    .limit(200);
+
+  const summary = {
+    totalPending: prescriptions.length,
+    bySpecialty: [],
+    byDoctor: [],
+    recent: []
+  };
+
+  const specialtyMap = new Map();
+  const doctorMap = new Map();
+
+  prescriptions.forEach((prescription) => {
+    const doctorInfo = prescription.doctorId;
+    const specialtyInfo = doctorInfo?.specialtyId;
+    const specialtyId = specialtyInfo?._id?.toString() || doctorInfo?.specialtyId?.toString();
+    const doctorId = doctorInfo?._id?.toString();
+
+    if (specialtyId) {
+      const current = specialtyMap.get(specialtyId) || {
+        specialtyId,
+        specialtyName: specialtyInfo?.name || 'Chưa xác định',
+        total: 0
+      };
+      current.total += 1;
+      specialtyMap.set(specialtyId, current);
+    }
+
+    if (doctorId) {
+      const current = doctorMap.get(doctorId) || {
+        doctorId,
+        doctorName: doctorInfo?.user?.fullName || 'Bác sĩ',
+        specialtyName: specialtyInfo?.name || 'Chưa xác định',
+        total: 0
+      };
+      current.total += 1;
+      doctorMap.set(doctorId, current);
+    }
+  });
+
+  summary.bySpecialty = Array.from(specialtyMap.values()).sort((a, b) => b.total - a.total);
+  summary.byDoctor = Array.from(doctorMap.values()).sort((a, b) => b.total - a.total);
+  summary.recent = prescriptions.slice(0, 5).map((item) => ({
+    id: item._id,
+    patientName: item.patientId?.fullName || 'Bệnh nhân',
+    doctorName: item.doctorId?.user?.fullName || 'Bác sĩ',
+    specialtyName: item.doctorId?.specialtyId?.name || 'Chuyên khoa',
+    status: item.status,
+    createdAt: item.createdAt
+  }));
+
+  res.json({
+    success: true,
+    data: summary
+  });
+});
+
+// Admin filter metadata for prescriptions
+exports.getAdminPrescriptionFilters = asyncHandler(async (req, res) => {
+  const doctors = await Doctor.find()
+    .populate('user', 'fullName email')
+    .populate('specialtyId', 'name');
+
+  const specialtyMap = new Map();
+
+  const doctorOptions = doctors.map((doctor) => {
+    if (doctor.specialtyId) {
+      const specialtyKey = doctor.specialtyId._id.toString();
+      specialtyMap.set(specialtyKey, {
+        id: specialtyKey,
+        name: doctor.specialtyId.name
+      });
+    }
+
+    return {
+      id: doctor._id.toString(),
+      name: doctor.user?.fullName || 'Bác sĩ',
+      specialtyId: doctor.specialtyId ? doctor.specialtyId._id.toString() : null,
+      specialtyName: doctor.specialtyId?.name || 'Chưa xác định'
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      specialties: Array.from(specialtyMap.values()),
+      doctors: doctorOptions
+    }
+  });
+});
+
 // Get prescription by ID
 exports.getPrescriptionById = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -593,20 +721,25 @@ exports.cancelPrescription = asyncHandler(async (req, res) => {
   });
 });
 
-// Get user prescription history (for MedicalHistory page)
+// Get user prescription history (for MedicalHistory page) - include drafts
 exports.getUserPrescriptionHistory = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { page = 1, limit = 10, status } = req.query;
 
-  const query = { patientId: userId };
-  
+  const pageNumber = Math.max(1, parseInt(page, 10) || 1);
+  const limitNumber = Math.max(1, parseInt(limit, 10) || 10);
+  const startIndex = (pageNumber - 1) * limitNumber;
+  const endIndex = startIndex + limitNumber;
+
+  const prescriptionQuery = { patientId: userId };
+  const draftQuery = { patientId: userId };
+
   if (status) {
-    query.status = status;
+    prescriptionQuery.status = status;
+    draftQuery.status = status;
   }
 
-  const skip = (page - 1) * limit;
-
-  const prescriptions = await Prescription.find(query)
+  const prescriptions = await Prescription.find(prescriptionQuery)
     .populate('medications.medicationId', 'name unitTypeDisplay')
     .populate('appointmentId', 'appointmentDate bookingCode specialtyId')
     .populate({
@@ -632,25 +765,30 @@ exports.getUserPrescriptionHistory = asyncHandler(async (req, res) => {
       }
     })
     .sort({ createdAt: -1 })
-    .limit(limit * 1)
-    .skip(skip);
+    .lean();
 
-  const total = await Prescription.countDocuments(query);
+  const drafts = await PrescriptionDraft.find(draftQuery)
+    .sort({ createdAt: -1 })
+    .lean();
 
-  // Group by appointment for display
+  // Group official prescriptions by appointment
   const groupedByAppointment = {};
   prescriptions.forEach(prescription => {
     const appointmentId = prescription.appointmentId?._id?.toString() || 'unknown';
     if (!groupedByAppointment[appointmentId]) {
       groupedByAppointment[appointmentId] = {
+        isDraft: false,
+        type: 'official',
         appointmentId: prescription.appointmentId?._id,
         appointmentDate: prescription.appointmentId?.appointmentDate,
         bookingCode: prescription.appointmentId?.bookingCode,
         specialty: prescription.appointmentId?.specialtyId?.name || prescription.doctorId?.specialtyId?.name,
         doctor: prescription.doctorId?.user?.fullName || 'Không xác định',
-        prescriptions: []
+        prescriptions: [],
+        createdAt: prescription.appointmentId?.appointmentDate || prescription.createdAt || new Date()
       };
     }
+
     groupedByAppointment[appointmentId].prescriptions.push({
       _id: prescription._id,
       diagnosis: prescription.diagnosis,
@@ -661,15 +799,54 @@ exports.getUserPrescriptionHistory = asyncHandler(async (req, res) => {
       createdAt: prescription.createdAt,
       medicationsCount: prescription.medications.length
     });
+
+    const currentCreatedAt = prescription.createdAt || prescription.appointmentId?.appointmentDate;
+    if (currentCreatedAt && groupedByAppointment[appointmentId].createdAt < currentCreatedAt) {
+      groupedByAppointment[appointmentId].createdAt = currentCreatedAt;
+    }
   });
+
+  const officialRecords = Object.values(groupedByAppointment);
+
+  const draftRecords = drafts.map(draft => ({
+    isDraft: true,
+    type: 'draft',
+    prescriptionCode: draft.prescriptionCode,
+    symptom: draft.symptom,
+    diagnosis: draft.diagnosis,
+    status: draft.status,
+    note: draft.note,
+    keywords: draft.keywords || [],
+    medicationsCount: draft.medications?.length || 0,
+    medications: (draft.medications || []).map(med => ({
+      name: med.name,
+      quantity: med.quantity,
+      price: med.price
+    })),
+    createdAt: draft.createdAt,
+    updatedAt: draft.updatedAt
+  }));
+
+  const combinedRecords = [...officialRecords, ...draftRecords].sort((a, b) => {
+    const dateA = new Date(a.createdAt || 0);
+    const dateB = new Date(b.createdAt || 0);
+    return dateB - dateA;
+  });
+
+  const totalCombined = combinedRecords.length;
+  const paginatedRecords = combinedRecords.slice(startIndex, endIndex);
 
   res.json({
     success: true,
-    records: Object.values(groupedByAppointment),
+    records: paginatedRecords,
     pagination: {
-      total,
-      page: parseInt(page),
-      totalPages: Math.ceil(total / limit)
+      total: totalCombined,
+      page: pageNumber,
+      totalPages: Math.ceil(totalCombined / limitNumber)
+    },
+    stats: {
+      officialTotal: officialRecords.length,
+      draftTotal: draftRecords.length
     }
   });
 });
@@ -720,8 +897,6 @@ exports.getPrescriptionsForPharmacy = asyncHandler(async (req, res) => {
   const { page = 1, limit = 20, status } = req.query;
   const userId = req.user.id;
 
-  // Get pharmacist's hospitalId
-  const User = require('../models/User');
   const pharmacist = await User.findById(userId);
   if (!pharmacist || !pharmacist.hospitalId) {
     return res.status(400).json({
@@ -770,6 +945,162 @@ exports.getPrescriptionsForPharmacy = asyncHandler(async (req, res) => {
   });
 });
 
+// Get prescriptions overview for admin
+exports.getPrescriptionsForAdmin = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20, status, hospitalId, specialtyId, doctorId } = req.query;
+
+  const query = {};
+
+  if (status && status !== 'all') {
+    query.status = status;
+  }
+
+  if (hospitalId) {
+    query.hospitalId = hospitalId;
+  }
+
+  let specialtyDoctorIds = null;
+  if (specialtyId) {
+    const doctorsInSpecialty = await Doctor.find({ specialtyId }).select('_id');
+    specialtyDoctorIds = doctorsInSpecialty.map(doc => doc._id);
+
+    if (specialtyDoctorIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: {
+          total: 0,
+          page: parseInt(page),
+          pages: 0
+        }
+      });
+    }
+  }
+
+  if (doctorId && specialtyDoctorIds) {
+    const isDoctorInSpecialty = specialtyDoctorIds.some(id => id.toString() === doctorId);
+    if (!isDoctorInSpecialty) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: {
+          total: 0,
+          page: parseInt(page),
+          pages: 0
+        }
+      });
+    }
+    query.doctorId = doctorId;
+  } else if (doctorId) {
+    query.doctorId = doctorId;
+  } else if (specialtyDoctorIds) {
+    query.doctorId = { $in: specialtyDoctorIds };
+  }
+
+  const numericLimit = parseInt(limit);
+  const skip = (parseInt(page) - 1) * numericLimit;
+
+  const prescriptions = await Prescription.find(query)
+    .populate('medications.medicationId', 'name unitTypeDisplay')
+    .populate('appointmentId', 'appointmentDate bookingCode')
+    .populate('patientId', 'fullName email phoneNumber')
+    .populate('doctorId', 'title specialtyId')
+    .populate({
+      path: 'doctorId',
+      populate: {
+        path: 'user',
+        select: 'fullName'
+      }
+    })
+    .populate('verifiedBy', 'fullName')
+    .populate('hospitalId', 'name address')
+    .sort({ createdAt: -1 })
+    .limit(numericLimit)
+    .skip(skip);
+
+  // Lấy cả PrescriptionDraft (đơn thuốc nháp từ AI)
+  const draftQuery = {};
+  if (status && status !== 'all') {
+    // Map status: 'pending_approval' cho drafts
+    if (status === 'pending_approval') {
+      draftQuery.status = 'pending_approval';
+    } else if (status === 'approved') {
+      draftQuery.status = { $in: ['approved', 'rejected'] };
+    }
+  }
+  if (hospitalId) {
+    draftQuery.hospitalId = hospitalId;
+  }
+  if (specialtyId) {
+    draftQuery.specialtyId = specialtyId;
+  }
+  if (doctorId) {
+    draftQuery.doctorId = doctorId;
+  } else if (specialtyDoctorIds) {
+    draftQuery.doctorId = { $in: specialtyDoctorIds };
+  }
+
+  const drafts = await PrescriptionDraft.find(draftQuery)
+    .populate('patientId', 'fullName email phoneNumber')
+    .populate('hospitalId', 'name address')
+    .populate('specialtyId', 'name')
+    .populate({
+      path: 'doctorId',
+      select: 'title user',
+      populate: {
+        path: 'user',
+        select: 'fullName'
+      }
+    })
+    .sort({ createdAt: -1 })
+    .limit(numericLimit)
+    .skip(skip)
+    .lean();
+
+  // Kết hợp prescriptions và drafts, đánh dấu loại
+  const allPrescriptions = prescriptions.map(p => ({
+    ...p.toObject(),
+    isDraft: false,
+    type: 'prescription'
+  }));
+
+  const allDrafts = drafts.map(d => ({
+    ...d,
+    isDraft: true,
+    type: 'draft',
+    _id: d._id,
+    prescriptionCode: d.prescriptionCode,
+    // Map fields để tương thích với Prescription format
+    appointmentId: null, // Draft không có appointment
+    medications: d.medications || [],
+    totalAmount: (d.medications || []).reduce((sum, m) => sum + ((m.price || 0) * (m.quantity || 1)), 0),
+    diagnosis: d.diagnosis || d.symptom,
+    notes: d.note
+  }));
+
+  // Sắp xếp theo createdAt (mới nhất trước)
+  const combined = [...allPrescriptions, ...allDrafts].sort((a, b) => {
+    const dateA = new Date(a.createdAt || 0);
+    const dateB = new Date(b.createdAt || 0);
+    return dateB - dateA;
+  });
+
+  // Tính tổng số (cả prescriptions và drafts)
+  const totalPrescriptions = await Prescription.countDocuments(query);
+  const totalDrafts = await PrescriptionDraft.countDocuments(draftQuery);
+  const total = totalPrescriptions + totalDrafts;
+
+  res.json({
+    success: true,
+    data: combined,
+    pagination: {
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / numericLimit)
+    }
+  });
+});
+
 // Verify prescription (pharmacist approval)
 exports.verifyPrescription = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -777,10 +1108,17 @@ exports.verifyPrescription = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const mongoose = require('mongoose');
 
-  // Get pharmacist's hospitalId
-  const User = require('../models/User');
-  const pharmacist = await User.findById(userId);
-  if (!pharmacist || !pharmacist.hospitalId) {
+  const staffUser = await User.findById(userId);
+  if (!staffUser) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy người dùng'
+    });
+  }
+
+  const isAdminActor = staffUser.roleType === 'admin' || staffUser.role === 'admin';
+
+  if (!isAdminActor && !staffUser.hospitalId) {
     return res.status(400).json({
       success: false,
       message: 'Dược sĩ chưa được gán vào chi nhánh'
@@ -799,7 +1137,7 @@ exports.verifyPrescription = asyncHandler(async (req, res) => {
     }
 
     // Validate pharmacist's hospitalId matches prescription's hospitalId
-    if (prescription.hospitalId.toString() !== pharmacist.hospitalId.toString()) {
+    if (!isAdminActor && prescription.hospitalId.toString() !== staffUser.hospitalId.toString()) {
       throw new Error('Bạn chỉ có thể phê duyệt đơn thuốc của chi nhánh mình');
     }
 
@@ -865,10 +1203,17 @@ exports.rejectPrescription = asyncHandler(async (req, res) => {
     });
   }
 
-  // Get pharmacist's hospitalId
-  const User = require('../models/User');
-  const pharmacist = await User.findById(userId);
-  if (!pharmacist || !pharmacist.hospitalId) {
+  const staffUser = await User.findById(userId);
+  if (!staffUser) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy người dùng'
+    });
+  }
+
+  const isAdminActor = staffUser.roleType === 'admin' || staffUser.role === 'admin';
+
+  if (!isAdminActor && !staffUser.hospitalId) {
     return res.status(400).json({
       success: false,
       message: 'Dược sĩ chưa được gán vào chi nhánh'
@@ -887,7 +1232,7 @@ exports.rejectPrescription = asyncHandler(async (req, res) => {
     }
 
     // Validate pharmacist's hospitalId matches prescription's hospitalId
-    if (prescription.hospitalId.toString() !== pharmacist.hospitalId.toString()) {
+    if (!isAdminActor && prescription.hospitalId.toString() !== staffUser.hospitalId.toString()) {
       throw new Error('Bạn chỉ có thể từ chối đơn thuốc của chi nhánh mình');
     }
 
@@ -937,7 +1282,6 @@ exports.dispensePrescription = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // Get pharmacist's hospitalId
-  const User = require('../models/User');
   const MedicationInventory = require('../models/MedicationInventory');
   const mongoose = require('mongoose');
   
@@ -1096,5 +1440,495 @@ exports.dispensePrescription = asyncHandler(async (req, res) => {
   } finally {
     session.endSession();
   }
+});
+
+// ============================================
+// PRESCRIPTION DRAFT - DOCTOR APPROVAL APIs
+// ============================================
+
+// Get prescription drafts pending approval for doctor
+exports.getPrescriptionDraftsForDoctor = asyncHandler(async (req, res) => {
+  const doctorUserId = req.user.id;
+  const doctor = await Doctor.findOne({ user: doctorUserId })
+    .populate('hospitalId', '_id name')
+    .populate('specialtyId', '_id name')
+    .populate('user', 'fullName');
+
+  if (!doctor) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy thông tin bác sĩ'
+    });
+  }
+
+  if (!doctor.hospitalId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Bác sĩ chưa được gán vào chi nhánh'
+    });
+  }
+
+  // Lấy các đơn thuốc nháp được gán cho bác sĩ này hoặc thuộc bệnh viện và chuyên khoa của bác sĩ
+  // Xử lý hospitalId và specialtyId có thể là ObjectId hoặc populated object
+  const doctorHospitalId = doctor.hospitalId?._id || doctor.hospitalId;
+  const doctorSpecialtyId = doctor.specialtyId?._id || doctor.specialtyId;
+  
+  // Debug: Đếm tổng số PrescriptionDraft pending_approval
+  const totalPending = await PrescriptionDraft.countDocuments({ status: 'pending_approval' });
+  console.log('[getPrescriptionDraftsForDoctor] Total pending drafts in DB:', totalPending);
+  
+  const queryConditions = [];
+  
+  // Điều kiện 1: Được gán trực tiếp cho bác sĩ này
+  if (doctor._id) {
+    queryConditions.push({ doctorId: doctor._id });
+  }
+  
+  // Điều kiện 2: Thuộc cùng bệnh viện và chuyên khoa (kể cả khi chưa gán doctorId)
+  if (doctorHospitalId && doctorSpecialtyId) {
+    // Match đơn thuốc có cùng hospitalId và specialtyId, và doctorId là null/undefined hoặc chính bác sĩ này
+    queryConditions.push({
+      hospitalId: doctorHospitalId,
+      specialtyId: doctorSpecialtyId,
+      $or: [
+        { doctorId: null },
+        { doctorId: { $exists: false } },
+        { doctorId: doctor._id }
+      ]
+    });
+  } else if (doctorHospitalId) {
+    // Nếu chỉ có hospitalId, lấy tất cả đơn thuốc của bệnh viện này
+    queryConditions.push({
+      hospitalId: doctorHospitalId,
+      $or: [
+        { doctorId: null },
+        { doctorId: { $exists: false } },
+        { doctorId: doctor._id }
+      ]
+    });
+  }
+
+  const query = {
+    status: 'pending_approval'
+  };
+
+  if (queryConditions.length > 0) {
+    query.$or = queryConditions;
+  } else if (doctor._id) {
+    // Nếu không có điều kiện nào, chỉ lấy đơn được gán trực tiếp cho bác sĩ này
+    query.doctorId = doctor._id;
+  }
+
+  const { page = 1, limit = 10, status } = req.query;
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+
+  if (status && status !== 'all') {
+    query.status = status;
+  }
+
+  console.log('[getPrescriptionDraftsForDoctor] Doctor info:', {
+    doctorId: doctor._id?.toString(),
+    doctorName: doctor.user?.fullName || 'N/A',
+    hospitalId: doctorHospitalId?.toString(),
+    hospitalName: doctor.hospitalId?.name || 'N/A',
+    specialtyId: doctorSpecialtyId?.toString(),
+    specialtyName: doctor.specialtyId?.name || 'N/A'
+  });
+  
+  // Debug: Test query từng điều kiện
+  if (doctor._id) {
+    const countByDoctorId = await PrescriptionDraft.countDocuments({ 
+      status: 'pending_approval',
+      doctorId: doctor._id 
+    });
+    console.log('[getPrescriptionDraftsForDoctor] Drafts assigned to this doctor:', countByDoctorId);
+  }
+  
+  if (doctorHospitalId && doctorSpecialtyId) {
+    const countByHospitalSpecialty = await PrescriptionDraft.countDocuments({ 
+      status: 'pending_approval',
+      hospitalId: doctorHospitalId,
+      specialtyId: doctorSpecialtyId
+    });
+    console.log('[getPrescriptionDraftsForDoctor] Drafts by hospital+specialty:', countByHospitalSpecialty);
+    
+    // Debug: Xem một vài draft mẫu
+    const sampleDrafts = await PrescriptionDraft.find({ 
+      status: 'pending_approval',
+      hospitalId: doctorHospitalId,
+      specialtyId: doctorSpecialtyId
+    })
+    .select('prescriptionCode hospitalId specialtyId doctorId createdAt')
+    .limit(3)
+    .lean();
+    console.log('[getPrescriptionDraftsForDoctor] Sample drafts:', JSON.stringify(sampleDrafts, null, 2));
+  }
+  
+  console.log('[getPrescriptionDraftsForDoctor] Final query:', JSON.stringify(query, null, 2));
+
+  const drafts = await PrescriptionDraft.find(query)
+    .populate('patientId', 'fullName email phoneNumber')
+    .populate('hospitalId', 'name address')
+    .populate('specialtyId', 'name')
+    .populate({
+      path: 'doctorId',
+      select: 'title user',
+      populate: {
+        path: 'user',
+        select: 'fullName'
+      }
+    })
+    .sort({ createdAt: -1 })
+    .limit(limitNum)
+    .skip((pageNum - 1) * limitNum)
+    .lean();
+
+  const total = await PrescriptionDraft.countDocuments(query);
+
+  res.json({
+    success: true,
+    data: drafts,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum)
+    }
+  });
+});
+
+// Get single prescription draft by ID
+exports.getPrescriptionDraftById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const doctorUserId = req.user.id;
+  const doctor = await Doctor.findOne({ user: doctorUserId });
+
+  if (!doctor) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy thông tin bác sĩ'
+    });
+  }
+
+  const draft = await PrescriptionDraft.findById(id)
+    .populate('patientId', 'fullName email phoneNumber dateOfBirth gender')
+    .populate('hospitalId', 'name address')
+    .populate('specialtyId', 'name')
+    .populate({
+      path: 'doctorId',
+      select: 'title user specialtyId',
+      populate: [
+        {
+          path: 'user',
+          select: 'fullName'
+        },
+        {
+          path: 'specialtyId',
+          select: 'name'
+        }
+      ]
+    })
+    .populate('medications.medicationId', 'name unitTypeDisplay unitPrice stockQuantity')
+    .lean();
+
+  if (!draft) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy đơn thuốc nháp'
+    });
+  }
+
+  // Kiểm tra quyền: bác sĩ chỉ có thể xem đơn thuốc được gán cho mình hoặc thuộc bệnh viện và chuyên khoa của mình
+  const canView = 
+    (draft.doctorId && draft.doctorId._id?.toString() === doctor._id.toString()) ||
+    (draft.hospitalId && draft.hospitalId._id?.toString() === doctor.hospitalId.toString() &&
+     draft.specialtyId && draft.specialtyId._id?.toString() === doctor.specialtyId.toString());
+
+  if (!canView) {
+    return res.status(403).json({
+      success: false,
+      message: 'Bạn không có quyền xem đơn thuốc nháp này'
+    });
+  }
+
+  res.json({
+    success: true,
+    data: draft
+  });
+});
+
+// Approve prescription draft (create Prescription from Draft)
+exports.approvePrescriptionDraft = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { notes, medications } = req.body; // medications có thể được chỉnh sửa
+  const doctorUserId = req.user.id;
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const doctor = await Doctor.findOne({ user: doctorUserId }).session(session);
+    if (!doctor) {
+      throw new Error('Không tìm thấy thông tin bác sĩ');
+    }
+
+    // Load draft với session
+    const draft = await PrescriptionDraft.findById(id).session(session);
+    if (!draft) {
+      throw new Error('Không tìm thấy đơn thuốc nháp');
+    }
+
+    // Kiểm tra quyền
+    const canApprove = 
+      (draft.doctorId && draft.doctorId.toString() === doctor._id.toString()) ||
+      (draft.hospitalId && draft.hospitalId.toString() === doctor.hospitalId.toString() &&
+       draft.specialtyId && draft.specialtyId.toString() === doctor.specialtyId.toString());
+
+    if (!canApprove) {
+      throw new Error('Bạn không có quyền duyệt đơn thuốc nháp này');
+    }
+
+    // Kiểm tra status
+    if (draft.status !== 'pending_approval') {
+      throw new Error(`Không thể duyệt đơn thuốc ở trạng thái '${draft.status}'. Chỉ có thể duyệt đơn thuốc ở trạng thái 'pending_approval'.`);
+    }
+
+    // Validate medications từ draft hoặc từ request body
+    const finalMedications = medications || draft.medications;
+    if (!finalMedications || finalMedications.length === 0) {
+      throw new Error('Đơn thuốc phải có ít nhất 1 loại thuốc');
+    }
+
+    // Validate stock và tính tổng tiền
+    let totalAmount = 0;
+    const medicationData = [];
+
+    for (const med of finalMedications) {
+      const medicationId = med.medicationId || med.medicationId?._id || med.medicationId?.toString();
+      const medication = await Medication.findById(medicationId).session(session);
+      
+      if (!medication) {
+        throw new Error(`Không tìm thấy thuốc với ID: ${medicationId}`);
+      }
+
+      if (!medication.isActive) {
+        throw new Error(`Thuốc ${medication.name} hiện không khả dụng`);
+      }
+
+      // Validate medication thuộc đúng bệnh viện
+      const medicationHospitalId = medication.hospitalId?._id || medication.hospitalId;
+      if (medicationHospitalId.toString() !== draft.hospitalId.toString()) {
+        throw new Error(`Thuốc ${medication.name} không thuộc chi nhánh của đơn thuốc`);
+      }
+
+      // Check stock
+      const quantity = med.quantity || 1;
+      if (medication.stockQuantity < quantity) {
+        throw new Error(`Thuốc ${medication.name} không đủ số lượng trong kho. Hiện có: ${medication.stockQuantity}, yêu cầu: ${quantity}`);
+      }
+
+      const unitPrice = medication.unitPrice || 0;
+      const totalPrice = unitPrice * quantity;
+
+      medicationData.push({
+        medicationId: medication._id,
+        medicationName: medication.name,
+        quantity,
+        dosage: med.dosage || 'Theo chỉ định của bác sĩ',
+        usage: med.usage || 'Uống sau bữa ăn',
+        duration: med.duration || '7 ngày',
+        unitPrice,
+        totalPrice,
+        notes: med.notes || ''
+      });
+
+      totalAmount += totalPrice;
+    }
+
+    // Tạo appointment ảo cho đơn thuốc từ AI
+    const Appointment = require('../models/Appointment');
+    const Schedule = require('../models/Schedule');
+    
+    // Tìm một schedule có sẵn của bác sĩ cho ngày hôm nay, hoặc tạo schedule ảo
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    let scheduleId = null;
+    const existingSchedule = await Schedule.findOne({
+      doctorId: doctor._id,
+      hospitalId: draft.hospitalId,
+      date: today
+    }).session(session);
+    
+    if (existingSchedule) {
+      scheduleId = existingSchedule._id;
+    } else {
+      // Tạo schedule ảo tạm thời cho ngày hôm nay
+      const virtualSchedule = new Schedule({
+        doctorId: doctor._id,
+        hospitalId: draft.hospitalId,
+        date: today,
+        timeSlots: [{
+          startTime: '08:00',
+          endTime: '17:00',
+          isBooked: false
+        }],
+        isActive: true
+      });
+      await virtualSchedule.save({ session });
+      scheduleId = virtualSchedule._id;
+    }
+    
+    // Tạo thời gian cho appointment (thời gian hiện tại)
+    const currentTime = now.toTimeString().slice(0, 5); // Format: HH:mm
+    const appointmentEndTime = new Date(now.getTime() + 30 * 60000).toTimeString().slice(0, 5); // +30 phút
+    
+    const virtualAppointment = new Appointment({
+      patientId: draft.patientId,
+      doctorId: doctor._id,
+      hospitalId: draft.hospitalId,
+      specialtyId: draft.specialtyId,
+      scheduleId: scheduleId,
+      appointmentDate: now,
+      timeSlot: {
+        startTime: currentTime,
+        endTime: appointmentEndTime
+      },
+      appointmentType: 'consultation',
+      status: 'completed',
+      fee: {
+        consultationFee: 0,
+        additionalFees: 0,
+        discount: 0,
+        totalAmount: 0
+      },
+      paymentStatus: 'completed',
+      notes: 'Đơn thuốc được tạo từ AI và được bác sĩ duyệt'
+    });
+    await virtualAppointment.save({ session });
+
+    // Tạo Prescription từ Draft
+    const prescription = new Prescription({
+      appointmentId: virtualAppointment._id,
+      patientId: draft.patientId,
+      doctorId: doctor._id,
+      hospitalId: draft.hospitalId, // Thêm hospitalId từ draft
+      medications: medicationData,
+      diagnosis: draft.diagnosis || draft.symptom,
+      notes: notes || draft.note,
+      totalAmount,
+      status: 'approved',
+      prescriptionOrder: 1,
+      isHospitalization: false,
+      createdFromDraft: true,
+      draftId: draft._id
+    });
+
+    await prescription.save({ session });
+
+    // Cập nhật stock
+    for (const med of medicationData) {
+      const medication = await Medication.findById(med.medicationId).session(session);
+      medication.stockQuantity -= med.quantity;
+      await medication.save({ session });
+    }
+
+    // Cập nhật draft status
+    draft.status = 'approved';
+    draft.approvedBy = doctorUserId;
+    draft.approvedByRole = 'doctor';
+    draft.approvedAt = new Date();
+    await draft.save({ session });
+
+    await session.commitTransaction();
+
+    // Populate và trả về
+    const populatedPrescription = await Prescription.findById(prescription._id)
+      .populate('patientId', 'fullName email phoneNumber')
+      .populate({
+        path: 'doctorId',
+        populate: {
+          path: 'user',
+          select: 'fullName'
+        }
+      })
+      .populate('medications.medicationId', 'name unitTypeDisplay')
+      .lean();
+
+    res.json({
+      success: true,
+      message: 'Đã duyệt đơn thuốc nháp thành công',
+      data: populatedPrescription
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('Approve prescription draft error:', error);
+    return res.status(400).json({
+      success: false,
+      message: error.message || 'Không thể duyệt đơn thuốc nháp'
+    });
+  } finally {
+    session.endSession();
+  }
+});
+
+// Reject prescription draft
+exports.rejectPrescriptionDraft = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  const doctorUserId = req.user.id;
+
+  const doctor = await Doctor.findOne({ user: doctorUserId });
+  if (!doctor) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy thông tin bác sĩ'
+    });
+  }
+
+  const draft = await PrescriptionDraft.findById(id);
+  if (!draft) {
+    return res.status(404).json({
+      success: false,
+      message: 'Không tìm thấy đơn thuốc nháp'
+    });
+  }
+
+  // Kiểm tra quyền
+  const canReject = 
+    (draft.doctorId && draft.doctorId.toString() === doctor._id.toString()) ||
+    (draft.hospitalId && draft.hospitalId.toString() === doctor.hospitalId.toString() &&
+     draft.specialtyId && draft.specialtyId.toString() === doctor.specialtyId.toString());
+
+  if (!canReject) {
+    return res.status(403).json({
+      success: false,
+      message: 'Bạn không có quyền từ chối đơn thuốc nháp này'
+    });
+  }
+
+  // Kiểm tra status
+  if (draft.status !== 'pending_approval') {
+    return res.status(400).json({
+      success: false,
+      message: `Không thể từ chối đơn thuốc ở trạng thái '${draft.status}'. Chỉ có thể từ chối đơn thuốc ở trạng thái 'pending_approval'.`
+    });
+  }
+
+  // Cập nhật status
+  draft.status = 'rejected';
+  draft.approvedBy = doctorUserId;
+  draft.approvedByRole = 'doctor';
+  draft.approvedAt = new Date();
+  if (reason) {
+    draft.note = (draft.note ? draft.note + '\n' : '') + `Lý do từ chối: ${reason}`;
+  }
+  await draft.save();
+
+  res.json({
+    success: true,
+    message: 'Đã từ chối đơn thuốc nháp thành công',
+    data: draft
+  });
 });
 

@@ -89,8 +89,12 @@ const Appointments = () => {
         const appointmentsData = res.data.appointments || res.data.data || [];
         
         // Set pagination data
-        setTotalAppointments(res.data.total || 0);
-        setTotalPages(res.data.totalPages || Math.ceil(res.data.total / limit) || 1);
+        const total = res.data.total || res.data.count || 0;
+        const pages = res.data.totalPages || res.data.pages || Math.ceil(total / limit) || 1;
+        const current = res.data.currentPage || res.data.page || currentPage;
+        setTotalAppointments(total);
+        setTotalPages(pages);
+        setCurrentPage(current);
         
         // Đảm bảo rằng appointmentsData là một mảng trước khi gọi sort
         if (Array.isArray(appointmentsData)) {
@@ -237,17 +241,19 @@ const Appointments = () => {
     today.setHours(0, 0, 0, 0);
     
     if (activeTab === 'upcoming') {
-      const isUpcoming = ['pending', 'rescheduled'].includes(appointment.status);
+      const isUpcoming = ['pending', 'pending_payment', 'confirmed', 'rescheduled'].includes(appointment.status);
       
       // Áp dụng lọc trong tab "Sắp tới"
       if (upcomingFilter === 'pending') {
         return isUpcoming && appointment.status === 'pending';
+      } else if (upcomingFilter === 'pending_payment') {
+        return isUpcoming && appointment.status === 'pending_payment';
       } else if (upcomingFilter === 'confirmed') {
         return appointment.status === 'confirmed';
       } else if (upcomingFilter === 'rescheduled') {
         return isUpcoming && appointment.status === 'rescheduled';
       } else {
-        return isUpcoming || appointment.status === 'confirmed'; // Include confirmed in "all"
+        return isUpcoming; // all upcoming statuses
       }
     } else if (activeTab === 'completed') {
       return appointment.status === 'completed';
@@ -891,6 +897,19 @@ const Appointments = () => {
             </button>
             <button 
               className={`px-4 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                upcomingFilter === 'pending_payment' 
+                  ? 'bg-orange-100 text-orange-800' 
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              onClick={() => {
+                setUpcomingFilter('pending_payment');
+                setCurrentPage(1);
+              }}
+            >
+              Chờ thanh toán
+            </button>
+            <button 
+              className={`px-4 py-1.5 text-xs font-medium rounded-full transition-colors ${
                 upcomingFilter === 'confirmed' 
                   ? 'bg-green-100 text-green-800' 
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -938,6 +957,7 @@ const Appointments = () => {
               {activeTab === 'upcoming' 
                 ? `Bạn chưa có lịch hẹn nào ${upcomingFilter !== 'all' ? 
                     (upcomingFilter === 'pending' ? 'đang chờ xác nhận' : 
+                     upcomingFilter === 'pending_payment' ? 'đang chờ thanh toán' :
                      upcomingFilter === 'confirmed' ? 'đã xác nhận' : 'đã đổi lịch') 
                     : 'sắp tới'}` 
                 : activeTab === 'completed' 

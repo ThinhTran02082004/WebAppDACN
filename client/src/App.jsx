@@ -18,7 +18,6 @@ import Appointments from './pages/user/Appointments.jsx';
 import Appointment from './pages/user/Appointment.jsx';
 import AppointmentDetail from './pages/user/AppointmentDetail.jsx';
 import PaymentHistory from './pages/PaymentHistory.jsx';
-import DoctorPaymentHistory from './pages/doctor/PaymentHistory.jsx';
 import PharmacistPaymentHistory from './pages/pharmacist/PaymentHistory.jsx';
 import MedicalHistory from './pages/MedicalHistory.jsx';
 import MedicalRecordDetail from './pages/MedicalRecordDetail.jsx';
@@ -74,6 +73,7 @@ import ReviewForm from './pages/user/ReviewForm.jsx';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminSpecialties from './pages/admin/Specialties';
 import AdminServices from './pages/admin/Services';
+import SpecialtyMappings from './pages/admin/SpecialtyMappings';
 import AdminRooms from './pages/admin/Rooms';
 import Users from './pages/admin/Users';
 import Hospitals from './pages/admin/Hospitals';
@@ -96,6 +96,7 @@ import HistoryAI from './pages/admin/HistoryAI';
 import MedicationInventory from './pages/admin/MedicationInventory';
 import PrescriptionTemplates from './pages/admin/PrescriptionTemplates';
 import InpatientRooms from './pages/admin/InpatientRooms';
+import AdminPrescriptions from './pages/admin/Prescriptions';
 
 import Facilities from './pages/user/Facilities';
 import FacilitySurgery from './pages/user/FacilitySurgery';
@@ -112,8 +113,11 @@ import UserVideoCallHistory from './pages/user/VideoCallHistory';
 // Chat pages
 import UserChat from './pages/user/Chat';
 import DoctorChat from './pages/doctor/Chat';
-import ChatWidget from './components/chat/ChatWidget';
-import AIChatPopup from './components/AIChatPopup';
+import ChatDock from './components/ChatDock';
+
+// Doctor Prescription Drafts
+import DoctorPrescriptionDrafts from './pages/doctor/PrescriptionDrafts';
+import DoctorPrescriptionDraftDetail from './pages/doctor/PrescriptionDraftDetail';
 
 function AppContent() {
   const { isAuthenticated, loading, user } = useAuth();
@@ -138,6 +142,7 @@ function AppContent() {
           <Route path="pharmacists" element={<Pharmacists />} />
           <Route path="hospitals" element={<Hospitals />} />
           <Route path="specialties" element={<AdminSpecialties />} />
+          <Route path="specialty-mappings" element={<SpecialtyMappings />} />
           <Route path="services" element={<AdminServices />} />
           <Route path="rooms" element={<AdminRooms />} />
           {/* Thêm routes cho các trang admin mới */}
@@ -150,6 +155,7 @@ function AppContent() {
           <Route path="medications" element={<AdminMedications />} />
           <Route path="medication-inventory" element={<MedicationInventory />} />
           <Route path="prescription-templates" element={<PrescriptionTemplates />} />
+          <Route path="prescriptions" element={<AdminPrescriptions />} />
           <Route path="inpatient-rooms" element={<InpatientRooms />} />
           <Route path="news" element={<AdminNews />} />
           <Route path="video-rooms" element={<VideoRoomManagement />} />
@@ -171,9 +177,10 @@ function AppContent() {
           <Route path="reviews" element={<DoctorReviews />} />
           <Route path="meetings" element={<DoctorMeetingHub />} />
           <Route path="video-call-history" element={<DoctorVideoCallHistory />} />
-          <Route path="payment-history" element={<DoctorPaymentHistory />} />
           <Route path="chat" element={<DoctorChat />} />
           <Route path="chat/:conversationId" element={<DoctorChat />} />
+          <Route path="prescription-drafts" element={<DoctorPrescriptionDrafts />} />
+          <Route path="prescription-drafts/:id" element={<DoctorPrescriptionDraftDetail />} />
         </Route>
 
         {/* Pharmacist Routes - No Navbar/Footer */}
@@ -266,19 +273,15 @@ function AppContent() {
               </Routes>
             </div>
             <Footer />
-            <ChatWidget />
           </>
         } />
       </Routes>
 
-      {/* Chat widget for regular users (not in admin or doctor portals) */}
-      {showChatWidget && <ChatWidget currentUserId={user?.id} />}
-
       {/* Video call notification for all authenticated users */}
       {isAuthenticated && <VideoCallNotification />}
       
-      {/* AI Chat Popup - Available for all users (authenticated or not) */}
-      <AIChatPopup />
+      {/* Unified chat dock (AI + CSKH) */}
+      <ChatDock showSupportChat={showChatWidget} currentUserId={user?._id || user?.id} />
     </div>
   );
 }

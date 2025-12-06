@@ -4,8 +4,10 @@ import api from '../utils/api';
 import { toast } from 'react-toastify';
 import './AIChatPopup.css';
 
-const AIChatPopup = () => {
-    const [isOpen, setIsOpen] = useState(false);
+const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
+    const isControlled = typeof controlledOpen === 'boolean';
+    const [internalOpen, setInternalOpen] = useState(false);
+    const isOpen = isControlled ? controlledOpen : internalOpen;
     const [messages, setMessages] = useState([]);
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -32,6 +34,14 @@ const AIChatPopup = () => {
         }
     }, [isOpen]);
 
+    const handleClose = () => {
+        if (isControlled) {
+            onClose?.();
+        } else {
+            setInternalOpen(false);
+        }
+    };
+
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
@@ -46,7 +56,7 @@ const AIChatPopup = () => {
                 setMessages([
                     {
                         role: 'assistant',
-                        content: 'Xin chào! Tôi là trợ lý AI y tế. Tôi có thể giúp bạn:\n\n• Tìm bác sĩ và chuyên khoa\n• Đặt lịch khám\n• Tư vấn về dịch vụ y tế\n• Trả lời câu hỏi về sức khỏe\n\nBạn cần hỗ trợ gì?',
+                        content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp bạn:\n\n• Tìm bác sĩ và chuyên khoa\n• Đặt lịch khám\n• Tư vấn về dịch vụ y tế\n• Trả lời câu hỏi về sức khỏe\n\nBạn cần hỗ trợ gì?',
                         createdAt: new Date().toISOString()
                     }
                 ]);
@@ -57,7 +67,7 @@ const AIChatPopup = () => {
             setMessages([
                 {
                     role: 'assistant',
-                    content: 'Xin chào! Tôi là trợ lý AI y tế. Tôi có thể giúp gì cho bạn?',
+                    content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp gì cho bạn?',
                     createdAt: new Date().toISOString()
                 }
             ]);
@@ -124,7 +134,7 @@ const AIChatPopup = () => {
             setMessages([
                 {
                     role: 'assistant',
-                    content: 'Xin chào! Tôi là trợ lý AI y tế. Tôi có thể giúp gì cho bạn?',
+                    content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp gì cho bạn?',
                     createdAt: new Date().toISOString()
                 }
             ]);
@@ -141,25 +151,25 @@ const AIChatPopup = () => {
     return (
         <>
             {/* Floating Chat Button */}
-            {!isOpen && (
+            {!isOpen && !isControlled && (
                 <button
-                    onClick={() => setIsOpen(true)}
+                    onClick={() => setInternalOpen(true)}
                     className="fixed bottom-6 right-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full p-4 shadow-lg hover:shadow-xl ai-chat-button z-50 group"
-                    aria-label="Mở chat AI"
+                    aria-label="Mở trợ lý đặt lịch khám"
                 >
                     <FaRobot className="text-2xl" />
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
                         AI
                     </span>
                     <div className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                        Trợ lý AI y tế
+                        Trợ lý đặt lịch khám
                     </div>
                 </button>
             )}
 
             {/* Chat Popup Window */}
             {isOpen && (
-                <div className="fixed bottom-6 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 ai-chat-popup">
+                <div className="fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 ai-chat-popup">
                     {/* Header */}
                     <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 rounded-t-2xl flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -168,7 +178,7 @@ const AIChatPopup = () => {
                                 <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-white"></span>
                             </div>
                             <div>
-                                <h3 className="font-semibold">Trợ lý AI Y tế</h3>
+                                <h3 className="font-semibold text-white">Trợ lý đặt lịch khám</h3>
                                 <p className="text-xs opacity-90">Luôn sẵn sàng hỗ trợ</p>
                             </div>
                         </div>
@@ -181,7 +191,7 @@ const AIChatPopup = () => {
                                 <FaTrash className="text-sm" />
                             </button>
                             <button
-                                onClick={() => setIsOpen(false)}
+                                onClick={handleClose}
                                 className="p-2 hover:bg-white/20 rounded-lg transition-colors"
                                 aria-label="Đóng chat"
                             >
@@ -206,7 +216,7 @@ const AIChatPopup = () => {
                                     {message.role === 'assistant' && (
                                         <div className="flex items-center gap-2 mb-1">
                                             <FaRobot className="text-blue-500 text-sm" />
-                                            <span className="text-xs font-semibold text-blue-500">AI Assistant</span>
+                                            <span className="text-xs font-semibold text-white bg-gradient-to-r from-blue-500 to-purple-600 px-2 py-0.5 rounded-full">Trợ lý đặt lịch khám</span>
                                         </div>
                                     )}
                                     <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>

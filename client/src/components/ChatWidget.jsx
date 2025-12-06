@@ -113,7 +113,7 @@ const ChatWidget = () => {
       <button
         aria-label="Chatbot"
         onClick={handleToggle}
-        className="fixed bottom-4 right-20 sm:bottom-8 sm:right-24 z-[1100] bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-lg flex items-center justify-center transition-colors"
+        className="fixed bottom-4 right-4 sm:bottom-8 sm:right-[11rem] z-[1100] bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-lg flex items-center justify-center transition-colors"
         title="Chat với chúng tôi"
       >
         {isOpen ? <FaTimes className="w-6 h-6" /> : <FaComments className="w-7 h-7" />}
@@ -121,7 +121,7 @@ const ChatWidget = () => {
 
       {/* Chat panel */}
       {isOpen && (
-        <div className="fixed bottom-24 right-20 sm:bottom-28 sm:right-24 z-[1100] w-[92vw] max-w-sm sm:max-w-md bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden">
+        <div className="fixed bottom-24 right-4 sm:bottom-28 sm:right-[11rem] z-[1100] w-[92vw] max-w-sm sm:max-w-md bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden">
           {/* Header */}
           <div className="bg-blue-600 text-white px-4 py-3 flex items-center justify-between">
             <div className="font-semibold">Trợ lý tư vấn</div>

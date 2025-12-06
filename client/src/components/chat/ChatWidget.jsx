@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { FaComments, FaTimes, FaMinus } from 'react-icons/fa';
 import ConversationList from './ConversationList';
@@ -7,8 +7,10 @@ import { useNotification } from '../../context/NotificationContext';
 import { useSocket } from '../../context/SocketContext';
 import api from '../../utils/api';
 
-const ChatWidget = ({ currentUserId }) => {
-  const [isOpen, setIsOpen] = useState(false);
+const ChatWidget = ({ currentUserId, isOpen: controlledOpen, onClose }) => {
+  const isControlled = typeof controlledOpen === 'boolean';
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = isControlled ? controlledOpen : internalOpen;
   const [isMinimized, setIsMinimized] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
@@ -16,6 +18,7 @@ const ChatWidget = ({ currentUserId }) => {
   const { messageUnreadCount, fetchMessageUnreadCount } = useNotification();
   const { socket, isConnected } = useSocket();
   const [isMounted, setIsMounted] = useState(false);
+  const prevOpenRef = useRef(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -29,6 +32,21 @@ const ChatWidget = ({ currentUserId }) => {
       messageUnreadCount > 0 && fetchMessageUnreadCount();
     }
   }, [isOpen, isMinimized]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsMinimized(false);
+      setSelectedConversation(null);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const wasOpen = prevOpenRef.current;
+    if (wasOpen && !isOpen) {
+      fetchMessageUnreadCount();
+    }
+    prevOpenRef.current = isOpen;
+  }, [isOpen, fetchMessageUnreadCount]);
 
   const fetchConversations = async () => {
     try {
@@ -49,7 +67,11 @@ const ChatWidget = ({ currentUserId }) => {
   };
 
   const handleClose = () => {
-    setIsOpen(false);
+    if (isControlled) {
+      onClose?.();
+    } else {
+      setInternalOpen(false);
+    }
     setIsMinimized(false);
     setSelectedConversation(null);
     // Refresh unread count when closing
@@ -72,10 +94,10 @@ const ChatWidget = ({ currentUserId }) => {
   return createPortal(
     <>
       {/* Floating button */}
-      {!isOpen && (
+      {!isOpen && !isControlled && (
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
+          onClick={() => setInternalOpen(true)}
           className="fixed bottom-20 right-6 w-14 h-14 bg-primary text-white rounded-full shadow-lg hover:bg-primary-dark hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center animate-fade-in"
           style={{ zIndex: 1050 }}
         >
@@ -90,7 +112,7 @@ const ChatWidget = ({ currentUserId }) => {
 
       {isOpen && (
         <div
-          className={`fixed bottom-6 right-6 bg-white rounded-lg shadow-2xl transition-all duration-300 animate-slide-up max-md:fixed max-md:inset-0 max-md:w-full max-md:h-screen max-md:rounded-none max-md:bottom-0 max-md:right-0 w-[400px] ${
+          className={`fixed bottom-24 right-6 bg-white rounded-lg shadow-2xl transition-all duration-300 animate-slide-up max-md:fixed max-md:inset-0 max-md:w-full max-md:h-screen max-md:rounded-none max-md:bottom-0 max-md:right-0 w-[400px] ${
             isMinimized ? 'h-14' : 'h-[600px] max-md:h-screen'
           }`}
           style={{ zIndex: 1050 }}

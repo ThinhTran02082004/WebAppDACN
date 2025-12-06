@@ -10,6 +10,7 @@ const PaymentHistory = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
@@ -18,19 +19,23 @@ const PaymentHistory = () => {
 
   useEffect(() => {
     fetchPayments();
-  }, [user, currentPage, pageSize, activeTab]);
+  }, [user, currentPage, pageSize, activeTab, statusFilter]);
 
   const fetchPayments = async () => {
     if (!user) return;
     
     try {
       setLoading(true);
-      const response = await api.get(`/billing/payment-history?page=${currentPage}&limit=${pageSize}${activeTab !== 'all' ? `&billType=${activeTab}` : ''}`);
+      const response = await api.get(`/billing/payment-history?page=${currentPage}&limit=${pageSize}${activeTab !== 'all' ? `&billType=${activeTab}` : ''}${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}`);
       
       if (response.data && response.data.data) {
         setPayments(response.data.data);
-        setTotalItems(response.data.pagination.total);
-        setTotalPages(response.data.pagination.totalPages);
+        const pagination = response.data.pagination || {};
+        setTotalItems(pagination.total || 0);
+        setTotalPages(pagination.pages || pagination.totalPages || 1);
+        if (pagination.page) {
+          setCurrentPage(pagination.page);
+        }
       } else {
         setPayments([]);
         setTotalItems(0);
@@ -182,7 +187,7 @@ const PaymentHistory = () => {
 
           {/* Filter tabs */}
           <div className="border-b border-gray-200">
-            <div className="px-6 flex space-x-4 overflow-x-auto">
+            <div className="px-6 flex flex-wrap gap-4 overflow-x-auto items-center">
               <button
                 className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                   activeTab === 'all'
@@ -235,6 +240,23 @@ const PaymentHistory = () => {
               >
                 Phí nội trú
               </button>
+
+              <div className="flex items-center gap-2 ml-auto">
+                <label className="text-sm text-gray-600 whitespace-nowrap">Trạng thái:</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="text-sm border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+                >
+                  <option value="all">Tất cả</option>
+                  <option value="completed">Thành công</option>
+                  <option value="pending">Đang xử lý</option>
+                  <option value="failed">Thất bại</option>
+                </select>
+              </div>
             </div>
           </div>
 

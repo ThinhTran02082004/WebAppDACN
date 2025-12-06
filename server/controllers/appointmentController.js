@@ -10,6 +10,7 @@ const AppError = require('../utils/appError');
 const Room = require('../models/Room');
 const Service = require('../models/Service');
 const Specialty = require('../models/Specialty');
+const Review = require('../models/Review');
 const Coupon = require('../models/Coupon');
 const MedicalRecord = require('../models/MedicalRecord');
 const { checkCompletionEligibility, finalizeAppointmentCompletion } = require('../utils/appointmentCompletionHelper');
@@ -1125,7 +1126,7 @@ exports.getAppointmentById = async (req, res) => {
         .populate({ path: 'hospitalizationBill.hospitalizationId', select: 'status totalHours totalAmount' })
     ]);
 
-        const result = appointment.toObject();
+    const result = appointment.toObject();
     if (medicalRecord) result.medicalRecord = medicalRecord;
     if (prescriptions && prescriptions.length) result.prescriptions = prescriptions;
     if (hospitalizationRaw) {
@@ -1166,6 +1167,22 @@ exports.getAppointmentById = async (req, res) => {
       } catch (err) {
         console.error('Error auto-generating bill:', err);
       }
+    }
+
+    // Attach review status for the patient so the UI can hide completed reviews
+    try {
+      const patientId = appointment.patientId?._id || appointment.patientId;
+      const reviews = await Review.find({ appointmentId: id, userId: patientId }).select('type appointmentId');
+      const reviewStatus = {
+        doctorReviewed: reviews.some(r => r.type === 'doctor'),
+        hospitalReviewed: reviews.some(r => r.type === 'hospital')
+      };
+
+      result.reviewStatus = reviewStatus;
+      result.isReviewed = reviewStatus.doctorReviewed && reviewStatus.hospitalReviewed;
+    } catch (reviewStatusError) {
+      console.error('Error fetching review status for appointment', reviewStatusError);
+      // Do not block the response if review status cannot be determined
     }
 
     return res.status(200).json({ success: true, data: result });
@@ -3734,6 +3751,64 @@ exports.getDoctorAppointments = async (req, res) => {
  * @route   GET /api/appointments/user/patient
  * @access  Private (patient)
  */
+// Get the number of appointments a patient already has on a specific date.
+// Mirrors the server-side rule that limits patients to three active appointments per day.
+exports.getPatientDailyAppointmentCount = async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui lòng cung cấp ngày cần kiểm tra'
+      });
+    }
+
+    const parsedDate = new Date(date);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ngày không hợp lệ'
+      });
+    }
+
+    const startOfDay = new Date(parsedDate);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(parsedDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const count = await Appointment.countDocuments({
+      patientId: req.user.id,
+      appointmentDate: {
+        $gte: startOfDay,
+        $lte: endOfDay
+      },
+      status: { $nin: ['cancelled', 'rejected'] }
+    });
+
+    const maxPatientDailyAppointments = 3;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        count,
+        limit: maxPatientDailyAppointments
+      },
+      message: count >= maxPatientDailyAppointments
+        ? `Bạn đã có ${count}/${maxPatientDailyAppointments} cuộc hẹn trong ngày này`
+        : 'Bạn có thể đặt lịch cho ngày này'
+    });
+  } catch (error) {
+    console.error('Get daily appointment count error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi kiểm tra số lượng lịch hẹn trong ngày',
+      error: error.message
+    });
+  }
+};
+
 exports.getPatientAppointments = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -3788,11 +3863,28 @@ exports.getPatientAppointments = async (req, res) => {
     bills.forEach(bill => {
       billMap[bill.appointmentId.toString()] = bill;
     });
+
+    // Fetch review status for the current patient across these appointments
+    const reviews = await Review.find({ appointmentId: { $in: appointmentIds }, userId })
+      .select('appointmentId type');
+    const reviewStatusMap = {};
+    reviews.forEach(review => {
+      const key = review.appointmentId.toString();
+      if (!reviewStatusMap[key]) {
+        reviewStatusMap[key] = { doctorReviewed: false, hospitalReviewed: false };
+      }
+      if (review.type === 'doctor') {
+        reviewStatusMap[key].doctorReviewed = true;
+      } else if (review.type === 'hospital') {
+        reviewStatusMap[key].hospitalReviewed = true;
+      }
+    });
     
     // Attach bill status to each appointment
     const appointmentsWithBill = appointments.map(appointment => {
       const appointmentObj = appointment.toObject();
       const bill = billMap[appointment._id.toString()];
+      const reviewStatus = reviewStatusMap[appointment._id.toString()] || { doctorReviewed: false, hospitalReviewed: false };
       
       if (bill) {
         appointmentObj.bill = {
@@ -3818,6 +3910,9 @@ exports.getPatientAppointments = async (req, res) => {
       } else {
         appointmentObj.bill = null;
       }
+
+      appointmentObj.reviewStatus = reviewStatus;
+      appointmentObj.isReviewed = reviewStatus.doctorReviewed && reviewStatus.hospitalReviewed;
       
       return appointmentObj;
     });

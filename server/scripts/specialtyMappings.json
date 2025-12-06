@@ -1,0 +1,231 @@
+{
+  "mappings": [
+    {
+      "text": "tiêm vaccine cho trẻ",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "tiêm vaccien cho trẻ",
+      "specialtyName": "Nhi khoa",
+      "note": "Lỗi chính tả phổ biến"
+    },
+    {
+      "text": "tiêm vacxin cho trẻ",
+      "specialtyName": "Nhi khoa",
+      "note": "Biến thể khác"
+    },
+    {
+      "text": "khám cho trẻ em",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "khám nhi",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "tiêm vaccine",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "trẻ em",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "bé",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "trẻ sơ sinh",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "trẻ nhỏ",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "sốt ở trẻ",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "ho ở trẻ",
+      "specialtyName": "Nhi khoa"
+    },
+    {
+      "text": "khám thai",
+      "specialtyName": "Sản khoa"
+    },
+    {
+      "text": "siêu âm thai",
+      "specialtyName": "Sản khoa"
+    },
+    {
+      "text": "mang thai",
+      "specialtyName": "Sản khoa"
+    },
+    {
+      "text": "thai kỳ",
+      "specialtyName": "Sản khoa"
+    },
+    {
+      "text": "sản khoa",
+      "specialtyName": "Sản khoa"
+    },
+    {
+      "text": "phụ khoa",
+      "specialtyName": "Sản khoa"
+    },
+    {
+      "text": "kinh nguyệt",
+      "specialtyName": "Sản khoa"
+    },
+    {
+      "text": "khám chuyên khoa nội",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "chuyên khoa nội",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "khám tổng quát",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "tổng quát",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "khám sức khỏe tổng quát",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đau đầu",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "sốt",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "ho",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "cảm cúm",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đau bụng",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đau bụng âm ỉ",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đi ngoài",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đi ngoài nhiều",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "tiêu chảy",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đau bụng đi ngoài",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đau bụng kèm đi ngoài",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đau bụng âm ỉ kèm đi ngoài",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đau bụng âm ỉ kèm triệu chứng đi ngoài nhiều",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đau bụng và đi ngoài",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "rối loạn tiêu hóa",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "tiêu hóa",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "đau dạ dày",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "buồn nôn",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "nôn mửa",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "nội khoa",
+      "specialtyName": "Nội khoa"
+    },
+    {
+      "text": "phẫu thuật",
+      "specialtyName": "Ngoại khoa"
+    },
+    {
+      "text": "ngoại khoa",
+      "specialtyName": "Ngoại khoa"
+    },
+    {
+      "text": "chấn thương",
+      "specialtyName": "Ngoại khoa"
+    },
+    {
+      "text": "gãy xương",
+      "specialtyName": "Ngoại khoa"
+    },
+    {
+      "text": "khám da",
+      "specialtyName": "Da liễu"
+    },
+    {
+      "text": "khám da liễu",
+      "specialtyName": "Da liễu"
+    },
+    {
+      "text": "mụn",
+      "specialtyName": "Da liễu"
+    },
+    {
+      "text": "dị ứng da",
+      "specialtyName": "Da liễu"
+    },
+    {
+      "text": "phát ban",
+      "specialtyName": "Da liễu"
+    },
+    {
+      "text": "da liễu",
+      "specialtyName": "Da liễu"
+    },
+    {
+      "text": "ngứa da",
+      "specialtyName": "Da liễu"
+    },
+    {
+      "text": "eczema",
+      "specialtyName": "Da liễu"
+    }
+  ]
+}
+
