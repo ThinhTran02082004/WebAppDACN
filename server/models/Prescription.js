@@ -4,7 +4,10 @@ const prescriptionSchema = new mongoose.Schema({
   appointmentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Appointment',
-    required: true
+    required: function() {
+      // appointmentId không bắt buộc nếu đơn thuốc được tạo từ AI (draft)
+      return !this.createdFromDraft;
+    }
   },
   patientId: {
     type: mongoose.Schema.Types.ObjectId,

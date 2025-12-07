@@ -97,6 +97,39 @@ async function updateBillAmounts(bill) {
 }
 
 // Get bill by appointment
+// Get bill by prescription ID (for AI prescriptions without appointment)
+exports.getBillByPrescription = asyncHandler(async (req, res) => {
+  const { prescriptionId } = req.params;
+
+  try {
+    const bill = await Bill.findOne({
+      'medicationBill.prescriptionIds': prescriptionId,
+      appointmentId: null // Chỉ tìm bill không có appointment (đơn thuốc từ AI)
+    })
+      .populate('patientId', 'fullName email phoneNumber')
+      .populate('medicationBill.prescriptionIds')
+      .populate('medicationBill.prescriptionPayments.prescriptionId');
+
+    if (!bill) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy hóa đơn cho đơn thuốc này'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: bill
+    });
+  } catch (error) {
+    console.error('Error getting bill by prescription:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi lấy hóa đơn'
+    });
+  }
+});
+
 exports.getBillByAppointment = asyncHandler(async (req, res) => {
   const { appointmentId } = req.params;
 
@@ -835,32 +868,66 @@ exports.payPrescription = asyncHandler(async (req, res) => {
       throw new Error(`Không thể thanh toán đơn thuốc ở trạng thái '${prescription.status}'. Đơn thuốc phải được bác sĩ kê đơn (approved) hoặc dược sĩ phê duyệt (verified).`);
     }
 
-    // Get bill
-    let bill = await Bill.findOne({ appointmentId: prescription.appointmentId }).session(session);
-    if (!bill) {
-      const appointment = await Appointment.findById(prescription.appointmentId).session(session);
-      if (!appointment) {
-        throw new Error('Không tìm thấy lịch hẹn');
-      }
-      
-      bill = await Bill.create([{
-        appointmentId: prescription.appointmentId,
-        patientId: prescription.patientId,
-        consultationBill: {
-          amount: appointment.fee?.totalAmount || 0,
-          status: appointment.paymentStatus === 'completed' ? 'paid' : 'pending'
-        },
-        medicationBill: {
-          prescriptionIds: [prescriptionId],
-          amount: prescription.totalAmount,
-          prescriptionPayments: [{
-            prescriptionId: prescription._id,
-            amount: prescription.totalAmount,
-            status: 'pending'
-          }]
+    // Get bill - xử lý cả trường hợp có và không có appointmentId
+    let bill = null;
+    
+    if (prescription.appointmentId) {
+      // Đơn thuốc từ lịch hẹn thật
+      bill = await Bill.findOne({ appointmentId: prescription.appointmentId }).session(session);
+      if (!bill) {
+        const appointment = await Appointment.findById(prescription.appointmentId).session(session);
+        if (!appointment) {
+          throw new Error('Không tìm thấy lịch hẹn');
         }
-      }], { session });
-      bill = bill[0];
+        
+        bill = await Bill.create([{
+          appointmentId: prescription.appointmentId,
+          patientId: prescription.patientId,
+          consultationBill: {
+            amount: appointment.fee?.totalAmount || 0,
+            status: appointment.paymentStatus === 'completed' ? 'paid' : 'pending'
+          },
+          medicationBill: {
+            prescriptionIds: [prescriptionId],
+            amount: prescription.totalAmount,
+            prescriptionPayments: [{
+              prescriptionId: prescription._id,
+              amount: prescription.totalAmount,
+              status: 'pending'
+            }]
+          }
+        }], { session });
+        bill = bill[0];
+      }
+    } else {
+      // Đơn thuốc từ AI - tìm bill theo prescriptionId trong medicationBill
+      bill = await Bill.findOne({ 
+        'medicationBill.prescriptionIds': prescriptionId,
+        appointmentId: null // Chỉ tìm bill không có appointmentId
+      }).session(session);
+      
+      if (!bill) {
+        // Tạo bill mới cho đơn thuốc từ AI (không có appointment)
+        bill = await Bill.create([{
+          appointmentId: null, // Đơn thuốc từ AI không có appointment
+          patientId: prescription.patientId,
+          doctorId: prescription.doctorId,
+          consultationBill: {
+            amount: 0,
+            status: 'paid' // Không có phí khám cho đơn thuốc từ AI
+          },
+          medicationBill: {
+            prescriptionIds: [prescriptionId],
+            amount: prescription.totalAmount,
+            prescriptionPayments: [{
+              prescriptionId: prescription._id,
+              amount: prescription.totalAmount,
+              status: 'pending'
+            }]
+          }
+        }], { session });
+        bill = bill[0];
+      }
     }
 
     // Find prescriptionPayment entry
@@ -909,7 +976,7 @@ exports.payPrescription = asyncHandler(async (req, res) => {
     // Create BillPayment record
     await BillPayment.create([{
       billId: bill._id,
-      appointmentId: prescription.appointmentId,
+      appointmentId: prescription.appointmentId || null, // Có thể null cho đơn thuốc từ AI
       patientId: prescription.patientId,
       billType: 'medication',
       amount: prescription.totalAmount,
@@ -918,7 +985,8 @@ exports.payPrescription = asyncHandler(async (req, res) => {
       transactionId,
       paymentDetails: {
         ...paymentDetails,
-        prescriptionId: prescription._id
+        prescriptionId: prescription._id,
+        isFromAI: !prescription.appointmentId // Đánh dấu đơn thuốc từ AI
       },
       processedBy: userId
     }], { session });

@@ -15,12 +15,12 @@ const tools = {
         },
         {
             name: "findDoctors",
-            description: "Tìm kiếm bác sĩ dựa trên chuyên khoa hoặc tên.",
+            description: "Tìm kiếm bác sĩ dựa trên chuyên khoa hoặc tên. BẠN PHẢI gọi tool này NGAY LẬP TỨC khi người dùng hỏi về: (1) 'có bác sĩ nào', 'danh sách bác sĩ', 'bác sĩ hiện có', 'bác sĩ nào khám', 'tìm bác sĩ', (2) hỏi về bác sĩ của một chuyên khoa cụ thể (ví dụ: 'khoa nội có bác sĩ nào', 'bác sĩ tim mạch'), (3) hỏi về bác sĩ khám một bệnh/triệu chứng (ví dụ: 'bác sĩ khám bệnh tim', 'bác sĩ khám đau đầu'), (4) hỏi về thông tin của một bác sĩ cụ thể (ví dụ: 'bác sĩ A chuyên khoa gì', 'bác sĩ Nguyễn Văn B', 'thông tin bác sĩ X'). QUAN TRỌNG: Nếu người dùng hỏi 'có bác sĩ nào' hoặc 'danh sách bác sĩ' mà không chỉ định chuyên khoa, bạn vẫn PHẢI gọi tool này với specialty=null để lấy danh sách tất cả bác sĩ. KHÔNG trả lời mà không gọi tool - bạn không thể biết có bác sĩ nào nếu không gọi tool.",
             parameters: { 
                 type: "OBJECT",
                 properties: {
-                    specialty: { type: "STRING", description: "Chuyên khoa người dùng muốn khám (ví dụ: 'tim mạch', 'tai mũi họng')" },
-                    name: { type: "STRING", description: "Tên bác sĩ" }
+                    specialty: { type: "STRING", description: "Chuyên khoa hoặc triệu chứng/bệnh người dùng muốn khám. Có thể là tên chuyên khoa (ví dụ: 'tim mạch', 'nội khoa', 'tai mũi họng') hoặc triệu chứng/bệnh (ví dụ: 'bệnh tim', 'đau tim', 'đau đầu'). Nếu người dùng chỉ hỏi 'có bác sĩ nào' mà không chỉ định chuyên khoa, để trống hoặc null để lấy tất cả bác sĩ. Tool sẽ tự động map từ triệu chứng sang chuyên khoa phù hợp. Nếu người dùng hỏi về thông tin của một bác sĩ cụ thể (ví dụ: 'bác sĩ A chuyên khoa gì'), để trống vì bạn sẽ dùng parameter 'name' để tìm." },
+                    name: { type: "STRING", description: "Tên bác sĩ cần tìm. BẠN PHẢI extract tên này khi người dùng hỏi về một bác sĩ cụ thể. Ví dụ: 'bác sĩ A chuyên khoa gì' -> name='A', 'bác sĩ Nguyễn Văn B' -> name='Nguyễn Văn B', 'thông tin bác sĩ X' -> name='X'. Chỉ lấy phần tên, bỏ các từ như 'bác sĩ', 'bs', 'doctor'." }
                 },
             }
         },
@@ -62,21 +62,17 @@ const tools = {
         },
         {
             name: "bookAppointment",
-            description: "Đặt lịch hẹn sau khi người dùng đã chọn một mã tham chiếu (ví dụ: L01, L02, L08) từ danh sách slots đã trả về trước đó. Bạn PHẢI sử dụng slotId và serviceId từ kết quả của findAvailableSlots trong lịch sử chat, KHÔNG được tự tạo slotId. QUAN TRỌNG: Khi người dùng nói 'chọn L01' hoặc 'tôi chọn L01', bạn PHẢI gọi tool này NGAY, KHÔNG gọi lại findAvailableSlots.",
+            description: "Đặt lịch hẹn sau khi người dùng đã chọn một mã tham chiếu (ví dụ: L01, L02, L08) hoặc số thứ tự (ví dụ: 1, 2, 8) từ danh sách slots đã trả về trước đó. QUAN TRỌNG: Khi người dùng nói 'chọn L01', 'tôi chọn số 1', hoặc 'đặt lịch L08', bạn PHẢI gọi tool này NGAY với slotIndex tương ứng, KHÔNG gọi lại findAvailableSlots.",
             parameters: {
                 type: "OBJECT",
                 properties: {
-                    slotId: { 
+                    slotIndex: { 
                         type: "STRING", 
-                        description: "slotId chính xác từ kết quả của findAvailableSlots TRƯỚC ĐÓ trong lịch sử chat (format: scheduleId_timeSlotId). Bạn PHẢI tìm trong lịch sử chat để lấy slotId từ danh sách availableSlots đã trả về, KHÔNG được tự tạo hoặc suy đoán. Nếu người dùng chọn L08, bạn phải tìm trong lịch sử chat slot có referenceCode='L08' và lấy slotId tương ứng từ đó." 
-                    },
-                    serviceId: {
-                        type: "STRING",
-                        description: "serviceId từ kết quả của findAvailableSlots TRƯỚC ĐÓ trong lịch sử chat (nếu có). Lấy từ slot đã chọn để đảm bảo đặt đúng dịch vụ mà người dùng yêu cầu."
+                        description: "Mã tham chiếu (ví dụ: 'L01', 'L08') hoặc số thứ tự (ví dụ: '1', '8') mà người dùng đã chọn từ danh sách slots. Tool sẽ tự động tìm slot tương ứng từ cache dựa trên referenceCode hoặc số thứ tự này." 
                     },
                     sessionId: { type: "STRING", description: "ID của phiên chat hiện tại (bắt buộc)." }
                 },
-                required: ["slotId", "sessionId"]
+                required: ["slotIndex", "sessionId"]
             }
         },
         {
@@ -123,15 +119,14 @@ const tools = {
         },
         {
             name: "checkInventoryAndPrescribe",
-            description: "Kiểm tra kho thuốc dựa trên hoạt chất/từ khóa và tạo đơn thuốc nháp nếu có hàng.",
+            description: "Kiểm tra kho thuốc dựa trên triệu chứng và tạo đơn thuốc nháp nếu có hàng. Tool này sẽ tự động tra cứu hoạt chất phù hợp từ triệu chứng.",
             parameters: {
                 type: "OBJECT",
                 properties: {
-                    searchQuery: { type: "STRING", description: "Tên hoạt chất hoặc thuốc mà AI đã tìm được sau khi tra cứu (ví dụ: Paracetamol, Ibuprofen)." },
-                    symptom: { type: "STRING", description: "Triệu chứng của người dùng để lưu vào đơn." },
+                    symptom: { type: "STRING", description: "Triệu chứng của người dùng (ví dụ: 'đau đầu', 'sốt cao', 'đau bụng'). Tool sẽ tự động tra cứu hoạt chất phù hợp từ triệu chứng này." },
                     sessionId: { type: "STRING", description: "ID phiên chat hiện tại (để xác định người dùng)." }
                 },
-                required: ["searchQuery", "symptom", "sessionId"]
+                required: ["symptom", "sessionId"]
             }
         },
         {

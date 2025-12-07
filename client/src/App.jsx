@@ -18,6 +18,7 @@ import Appointments from './pages/user/Appointments.jsx';
 import Appointment from './pages/user/Appointment.jsx';
 import AppointmentDetail from './pages/user/AppointmentDetail.jsx';
 import PaymentHistory from './pages/PaymentHistory.jsx';
+import DoctorPaymentHistory from './pages/doctor/PaymentHistory.jsx';
 import PharmacistPaymentHistory from './pages/pharmacist/PaymentHistory.jsx';
 import MedicalHistory from './pages/MedicalHistory.jsx';
 import MedicalRecordDetail from './pages/MedicalRecordDetail.jsx';
@@ -114,6 +115,7 @@ import UserVideoCallHistory from './pages/user/VideoCallHistory';
 import UserChat from './pages/user/Chat';
 import DoctorChat from './pages/doctor/Chat';
 import ChatDock from './components/ChatDock';
+import AITour from './components/AITour';
 
 // Doctor Prescription Drafts
 import DoctorPrescriptionDrafts from './pages/doctor/PrescriptionDrafts';
@@ -177,6 +179,7 @@ function AppContent() {
           <Route path="reviews" element={<DoctorReviews />} />
           <Route path="meetings" element={<DoctorMeetingHub />} />
           <Route path="video-call-history" element={<DoctorVideoCallHistory />} />
+          <Route path="payment-history" element={<DoctorPaymentHistory />} />
           <Route path="chat" element={<DoctorChat />} />
           <Route path="chat/:conversationId" element={<DoctorChat />} />
           <Route path="prescription-drafts" element={<DoctorPrescriptionDrafts />} />
@@ -291,9 +294,10 @@ function App() {
     <AuthProvider>
       <SocketProvider>
         <NotificationProvider>
-          <Router>
-            <AppContent />
-            <ToastContainer
+          <AITour>
+            <Router>
+              <AppContent />
+              <ToastContainer
               position="top-right"
               autoClose={5000}
               hideProgressBar={false}
@@ -311,7 +315,8 @@ function App() {
                 marginTop: '4.5rem'
               }}
             />
-          </Router>
+            </Router>
+          </AITour>
         </NotificationProvider>
       </SocketProvider>
     </AuthProvider>

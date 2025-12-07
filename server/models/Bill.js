@@ -4,7 +4,8 @@ const billSchema = new mongoose.Schema({
   appointmentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Appointment',
-    required: true,
+    required: false, // Không bắt buộc cho đơn thuốc từ AI
+    sparse: true, // Cho phép null nhưng vẫn unique khi có giá trị
     unique: true
   },
   patientId: {

@@ -14,7 +14,7 @@ const billPaymentSchema = new mongoose.Schema({
   appointmentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Appointment',
-    required: true
+    required: false // Không bắt buộc cho đơn thuốc từ AI
   },
   patientId: {
     type: mongoose.Schema.Types.ObjectId,

@@ -25,7 +25,7 @@ const AdminPrescriptions = () => {
   const [detailPrescription, setDetailPrescription] = useState(null);
 
   useEffect(() => {
-    fetchPrescriptions();
+    fetchAllData();
   }, [statusFilter, currentPage, selectedSpecialty, selectedDoctor]);
 
   useEffect(() => {
@@ -43,32 +43,79 @@ const AdminPrescriptions = () => {
     }
   };
 
-  const fetchPrescriptions = async () => {
+  const fetchAllData = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        page: currentPage,
-        limit: 20
-      });
+      let combinedData = [];
+      let totalPagesCount = 1;
 
-      if (statusFilter !== 'all') {
-        params.append('status', statusFilter);
+      // Fetch regular prescriptions
+      if (statusFilter !== 'pending_approval') {
+        const params = new URLSearchParams({
+          page: currentPage,
+          limit: 20
+        });
+
+        if (statusFilter !== 'all') {
+          params.append('status', statusFilter);
+        }
+
+        if (selectedSpecialty !== 'all') {
+          params.append('specialtyId', selectedSpecialty);
+        }
+
+        if (selectedDoctor !== 'all') {
+          params.append('doctorId', selectedDoctor);
+        }
+
+        const response = await api.get(`/prescriptions/admin?${params.toString()}`);
+
+        if (response.data.success) {
+          const prescriptions = response.data.data || [];
+          combinedData = prescriptions.map(p => ({ ...p, type: 'prescription' }));
+          totalPagesCount = response.data.pagination?.pages || 1;
+        }
       }
 
-      if (selectedSpecialty !== 'all') {
-        params.append('specialtyId', selectedSpecialty);
+      // Fetch drafts if status is pending_approval or all
+      if (statusFilter === 'pending_approval' || statusFilter === 'all') {
+        const draftParams = new URLSearchParams({
+          page: currentPage,
+          limit: 20,
+          status: 'pending_approval'
+        });
+
+        try {
+          const draftResponse = await api.get(`/prescriptions/drafts/doctor?${draftParams}`);
+          if (draftResponse.data.success) {
+            const drafts = draftResponse.data.data || [];
+            const draftsWithType = drafts.map(d => ({ 
+              ...d, 
+              type: 'draft',
+              status: 'pending_approval',
+              createdFromDraft: true,
+              totalAmount: 0, // Drafts don't have calculated amount yet
+              // Map draft fields to prescription fields for consistency
+              prescriptionCode: d.prescriptionCode || d._id?.slice(-8),
+              doctorId: d.doctorId || { user: { fullName: 'Chưa gán' }, specialtyId: d.specialtyId },
+              hospitalId: d.hospitalId
+            }));
+            
+            if (statusFilter === 'pending_approval') {
+              combinedData = draftsWithType;
+              totalPagesCount = draftResponse.data.pagination?.pages || 1;
+            } else if (statusFilter === 'all') {
+              combinedData = [...combinedData, ...draftsWithType];
+            }
+          }
+        } catch (draftError) {
+          console.error('Error fetching drafts:', draftError);
+          // Don't show error for drafts if regular prescriptions loaded successfully
+        }
       }
 
-      if (selectedDoctor !== 'all') {
-        params.append('doctorId', selectedDoctor);
-      }
-
-      const response = await api.get(`/prescriptions/admin?${params.toString()}`);
-
-      if (response.data.success) {
-        setPrescriptions(response.data.data || []);
-        setTotalPages(response.data.pagination?.pages || 1);
-      }
+      setPrescriptions(combinedData);
+      setTotalPages(totalPagesCount);
     } catch (error) {
       console.error('Error fetching admin prescriptions:', error);
       toast.error(error.response?.data?.message || 'Không thể tải danh sách đơn thuốc');
@@ -77,13 +124,30 @@ const AdminPrescriptions = () => {
     }
   };
 
-  const handleVerify = async (prescriptionId) => {
+  const approveDraft = async (draftId) => {
     try {
-      await api.post(`/prescriptions/${prescriptionId}/verify`, {
-        notes: 'Phê duyệt bởi quản trị viên'
-      });
-      toast.success('Phê duyệt đơn thuốc thành công');
-      fetchPrescriptions();
+      const response = await api.post(`/prescriptions/drafts/${draftId}/approve`);
+      if (response.data.success) {
+        toast.success('Duyệt đơn thuốc thành công');
+        fetchAllData(); // Refresh list
+      }
+    } catch (error) {
+      console.error('Error approving draft:', error);
+      toast.error(error.response?.data?.message || 'Lỗi khi duyệt đơn thuốc');
+    }
+  };
+
+  const handleVerify = async (prescriptionId, isDraft = false) => {
+    try {
+      if (isDraft) {
+        await approveDraft(prescriptionId);
+      } else {
+        await api.post(`/prescriptions/${prescriptionId}/verify`, {
+          notes: 'Phê duyệt bởi quản trị viên'
+        });
+        toast.success('Phê duyệt đơn thuốc thành công');
+        fetchAllData();
+      }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Không thể phê duyệt đơn thuốc');
     }
@@ -99,7 +163,7 @@ const AdminPrescriptions = () => {
     try {
       await api.post(`/prescriptions/${prescriptionId}/reject`, { reason });
       toast.success('Đã từ chối đơn thuốc');
-      fetchPrescriptions();
+      fetchAllData();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Không thể từ chối đơn thuốc');
     }
@@ -203,8 +267,7 @@ const AdminPrescriptions = () => {
   }
 
   return (
-    <>
-      <div className="space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center">
@@ -241,7 +304,7 @@ const AdminPrescriptions = () => {
               className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
             >
               <option value="approved">Chờ phê duyệt</option>
-              <option value="pending_approval">Đơn nháp chờ duyệt</option>
+              <option value="pending_approval">Đơn AI chờ duyệt</option>
               <option value="verified">Đã phê duyệt</option>
               <option value="dispensed">Đã cấp thuốc</option>
               <option value="completed">Hoàn thành</option>
@@ -336,13 +399,13 @@ const AdminPrescriptions = () => {
                         <div className="font-semibold text-gray-800">
                           {prescription.prescriptionCode || prescription._id?.slice(0, 8).toUpperCase()}
                           {isDraft && (
-                            <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-800 rounded-full">
-                              Nháp
+                            <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
+                              AI
                             </span>
                           )}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {prescription.appointmentId?.bookingCode || (isDraft ? 'Từ AI' : '')}
+                          {prescription.appointmentId?.bookingCode || (prescription.createdFromDraft ? 'Từ AI' : '')}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -406,10 +469,14 @@ const AdminPrescriptions = () => {
                             </button>
                           </>
                         )}
-                        {isDraft && (
-                          <span className="text-xs text-gray-500 italic">
-                            (Cần bác sĩ duyệt)
-                          </span>
+                        {isDraft && prescription.status === 'pending_approval' && (
+                          <button
+                            onClick={() => handleVerify(prescription._id, true)}
+                            className="text-green-600 hover:text-green-800"
+                            title="Duyệt đơn thuốc từ AI"
+                          >
+                            <FaCheckCircle className="inline" />
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -450,7 +517,7 @@ const AdminPrescriptions = () => {
           </div>
         )}
       </div>
-      </div>
+
       {detailPrescription && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl p-6 relative">
@@ -572,7 +639,7 @@ const AdminPrescriptions = () => {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

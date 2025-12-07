@@ -8,19 +8,17 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
     const isControlled = typeof controlledOpen === 'boolean';
     const [internalOpen, setInternalOpen] = useState(false);
     const isOpen = isControlled ? controlledOpen : internalOpen;
-    const [messages, setMessages] = useState([]);
+    const createWelcomeMessage = () => ({
+        role: 'assistant',
+        content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp bạn:\n\n• Tìm bác sĩ và chuyên khoa\n• Đặt lịch khám\n• Tư vấn về dịch vụ y tế\n• Trả lời câu hỏi về sức khỏe\n\nBạn cần hỗ trợ gì?',
+        createdAt: new Date().toISOString()
+    });
+    const [messages, setMessages] = useState(() => [createWelcomeMessage()]);
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [sessionId, setSessionId] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
-
-    // Load chat history when popup opens
-    useEffect(() => {
-        if (isOpen && messages.length === 0) {
-            loadChatHistory();
-        }
-    }, [isOpen]);
 
     // Auto scroll to bottom when new messages arrive
     useEffect(() => {
@@ -46,33 +44,13 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    const loadChatHistory = async () => {
-        try {
-            const response = await api.get('/ai/chat-history');
-            if (response.data.success && response.data.data.length > 0) {
-                setMessages(response.data.data);
-            } else {
-                // Welcome message if no history
-                setMessages([
-                    {
-                        role: 'assistant',
-                        content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp bạn:\n\n• Tìm bác sĩ và chuyên khoa\n• Đặt lịch khám\n• Tư vấn về dịch vụ y tế\n• Trả lời câu hỏi về sức khỏe\n\nBạn cần hỗ trợ gì?',
-                        createdAt: new Date().toISOString()
-                    }
-                ]);
-            }
-        } catch (error) {
-            console.error('Error loading chat history:', error);
-            // Show welcome message on error
-            setMessages([
-                {
-                    role: 'assistant',
-                    content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp gì cho bạn?',
-                    createdAt: new Date().toISOString()
-                }
-            ]);
+    // Reset conversation each time popup is opened
+    useEffect(() => {
+        if (isOpen) {
+            setMessages([createWelcomeMessage()]);
+            setSessionId(null);
         }
-    };
+    }, [isOpen]);
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
@@ -130,17 +108,9 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
     };
 
     const handleClearChat = () => {
-        if (window.confirm('Bạn có chắc muốn xóa toàn bộ lịch sử chat?')) {
-            setMessages([
-                {
-                    role: 'assistant',
-                    content: 'Xin chào! Tôi là trợ lý đặt lịch khám. Tôi có thể giúp gì cho bạn?',
-                    createdAt: new Date().toISOString()
-                }
-            ]);
-            setSessionId(null);
-            toast.success('Đã xóa lịch sử chat');
-        }
+        setMessages([createWelcomeMessage()]);
+        setSessionId(null);
+        toast.success('Đã bắt đầu cuộc trò chuyện mới');
     };
 
     const formatTime = (timestamp) => {
@@ -154,22 +124,24 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
             {!isOpen && !isControlled && (
                 <button
                     onClick={() => setInternalOpen(true)}
-                    className="fixed bottom-6 right-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full p-4 shadow-lg hover:shadow-xl ai-chat-button z-50 group"
+                    className="fixed bottom-6 right-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full px-4 py-3 shadow-lg hover:shadow-xl ai-chat-button z-50 flex items-center gap-3"
                     aria-label="Mở trợ lý đặt lịch khám"
                 >
-                    <FaRobot className="text-2xl" />
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-                        AI
+                    <span className="relative inline-flex">
+                        <FaRobot className="text-2xl" />
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                            AI
+                        </span>
                     </span>
-                    <div className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    <span className="text-sm font-semibold text-white whitespace-nowrap">
                         Trợ lý đặt lịch khám
-                    </div>
+                    </span>
                 </button>
             )}
 
             {/* Chat Popup Window */}
             {isOpen && (
-                <div className="fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 ai-chat-popup">
+                <div className="fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 ai-chat-popup" data-tour="ai-chat-popup">
                     {/* Header */}
                     <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 rounded-t-2xl flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -201,7 +173,7 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
                     </div>
 
                     {/* Messages Container */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 ai-chat-messages">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 ai-chat-messages" data-tour="ai-chat-messages">
                         {messages.map((message, index) => (
                             <div
                                 key={index}
@@ -255,14 +227,16 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
                                 value={inputMessage}
                                 onChange={(e) => setInputMessage(e.target.value)}
                                 placeholder="Nhập tin nhắn..."
-                                className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ai-chat-input"
                                 disabled={isLoading}
+                                data-tour="ai-chat-input"
                             />
                             <button
                                 type="submit"
                                 disabled={isLoading || !inputMessage.trim()}
-                                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-3 rounded-full hover:shadow-lg transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                                className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-3 rounded-full hover:shadow-lg transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ai-chat-send-button"
                                 aria-label="Gửi tin nhắn"
+                                data-tour="ai-chat-send-button"
                             >
                                 <FaPaperPlane />
                             </button>
