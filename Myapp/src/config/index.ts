@@ -61,10 +61,10 @@ export const API_BASE = () => `http://${API_HOST}:${API_PORT}/api`;
 // Social auth keys (optional). Replace with your keys if available.
 // Thay thế bằng Web Client ID từ Google Console
 // Must match the Web client (client_type 3) in google-services.json
-export const GOOGLE_CLIENT_ID = '268729645043-fu4cqk261ise0fgjbsiusnmoj9r0l92g.apps.googleusercontent.com';
-export const GOOGLE_CLIENT_SECRET = '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'; 
-export const FACEBOOK_APP_ID = '3561947047432184';
-export const FACEBOOK_APP_SECRET = 'ee346cd044a9ffa5c510c4c22a74ed5c';
+export const GOOGLE_CLIENT_ID = '';
+export const GOOGLE_CLIENT_SECRET = '';
+export const FACEBOOK_APP_ID = '';
+export const FACEBOOK_APP_SECRET = '';
 
 export default {
   API_BASE,
