@@ -80,7 +80,7 @@ const videoRoomSchema = new mongoose.Schema({
   metadata: {
     maxParticipants: {
       type: Number,
-      default: 10
+      default: 30
     },
     enableRecording: {
       type: Boolean,
@@ -123,7 +123,7 @@ videoRoomSchema.index({ createdAt: -1 });
 videoRoomSchema.index({ meetingType: 1, status: 1 });
 
 // Virtual for room duration calculation
-videoRoomSchema.virtual('calculatedDuration').get(function() {
+videoRoomSchema.virtual('calculatedDuration').get(function () {
   if (this.startTime && this.endTime) {
     return Math.round((this.endTime - this.startTime) / (1000 * 60)); // in minutes
   }
@@ -131,26 +131,26 @@ videoRoomSchema.virtual('calculatedDuration').get(function() {
 });
 
 // Methods
-videoRoomSchema.methods.isActive = function() {
+videoRoomSchema.methods.isActive = function () {
   return this.status === 'active';
 };
 
-videoRoomSchema.methods.canJoin = function(userId) {
+videoRoomSchema.methods.canJoin = function (userId) {
   // Check if user is doctor (via doctor.user), patient, or admin
   const isDoctorUser = this.doctorId && this.doctorId.user && this.doctorId.user.equals(userId);
   const isPatient = this.patientId && this.patientId.equals(userId);
   const isAdmin = this.participants.some(p => p.userId.equals(userId) && p.role === 'admin');
-  
+
   return isDoctorUser || isPatient || isAdmin;
 };
 
-videoRoomSchema.methods.startRoom = function() {
+videoRoomSchema.methods.startRoom = function () {
   this.status = 'active';
   this.startTime = new Date();
   return this.save();
 };
 
-videoRoomSchema.methods.endRoom = function() {
+videoRoomSchema.methods.endRoom = function () {
   this.status = 'ended';
   this.endTime = new Date();
   if (this.startTime) {
@@ -160,7 +160,7 @@ videoRoomSchema.methods.endRoom = function() {
 };
 
 // Static method to generate unique room code
-videoRoomSchema.statics.generateRoomCode = async function() {
+videoRoomSchema.statics.generateRoomCode = async function () {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let roomCode;
   let isUnique = false;
@@ -190,7 +190,7 @@ videoRoomSchema.statics.generateRoomCode = async function() {
 };
 
 // Pre-save hook to generate room code if not present
-videoRoomSchema.pre('save', async function(next) {
+videoRoomSchema.pre('save', async function (next) {
   if (!this.roomCode && this.isNew) {
     try {
       this.roomCode = await this.constructor.generateRoomCode();

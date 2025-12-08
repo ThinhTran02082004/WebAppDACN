@@ -242,7 +242,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
       meetingType: 'appointment',
       isPublic: true, // Allow joining by room code
       metadata: {
-        maxParticipants: 10,
+        maxParticipants: 30,
         enableRecording: false,
         enableScreenShare: true,
         enableChat: true
@@ -274,7 +274,7 @@ exports.createVideoRoom = asyncHandler(async (req, res) => {
 
   try {
     await livekitService.createRoom(roomName, {
-      maxParticipants: 10, // Multiple participants allowed
+      maxParticipants: 30, // Multiple participants allowed
       emptyTimeout: 1800, // 30 minutes
       metadata: {
         appointmentId: appointmentId.toString(),
