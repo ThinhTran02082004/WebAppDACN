@@ -1,0 +1,26 @@
+{
+  "name": "hospital-cron-mapping",
+  "version": "1.0.0",
+  "description": "Standalone cron service for seeding specialty/service/doctor mappings to Qdrant",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "seed": "node scripts/seedSpecialtyMapper.js all",
+    "seed:specialty": "node scripts/seedSpecialtyMapper.js specialty",
+    "seed:service": "node scripts/seedSpecialtyMapper.js service",
+    "seed:doctor": "node scripts/seedSpecialtyMapper.js doctor"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@qdrant/js-client-rest": "^1.15.1",
+    "dotenv": "^16.3.1",
+    "mongoose": "^8.0.3",
+    "node-cron": "^3.0.3",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
+

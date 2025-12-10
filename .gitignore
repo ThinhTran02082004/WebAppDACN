@@ -13,3 +13,6 @@ dist/
 .vscode/
 .kiro/specs/
 server/logs/
+Myapp/
+AI_ARCHITECTURE.md
+AI_DATA_CONSISTENCY.md

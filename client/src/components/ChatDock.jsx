@@ -34,7 +34,8 @@ const ChatDock = ({ showSupportChat, currentUserId }) => {
     <div className="flex flex-col gap-2 mb-3 bg-white shadow-2xl rounded-2xl p-3 border border-gray-100 animate-slide-up">
       <button
         onClick={() => openPanel('ai')}
-        className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-gray-100 transition-colors text-left"
+        className="flex items-center gap-3 px-4 py-2 rounded-xl hover:bg-gray-100 transition-colors text-left ai-chat-menu-item"
+        data-tour="ai-chat-menu-item"
       >
         <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow">
           <FaRobot />
@@ -95,8 +96,9 @@ const ChatDock = ({ showSupportChat, currentUserId }) => {
 
         <button
           onClick={toggleMenu}
-          className="w-14 h-14 rounded-full bg-white border border-gray-200 shadow-xl flex items-center justify-center hover:bg-gray-50 transition-all"
+          className="w-14 h-14 rounded-full bg-white border border-gray-200 shadow-xl flex items-center justify-center hover:bg-gray-50 transition-all chat-dock-button"
           aria-label="Mở menu chat"
+          data-tour="chat-dock-button"
         >
           <FaChevronUp className={`text-gray-700 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
         </button>
