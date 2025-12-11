@@ -123,7 +123,8 @@ const Login = ({ onRegisterClick }) => {
   // Handle social login - removed notification
   const handleSocialLogin = (provider) => {
     sessionStorage.setItem('auth_redirect', from);
-    window.location.href = `${import.meta.env.VITE_API_URL}/auth/${provider}`;
+    const apiBaseURL = import.meta.env.VITE_API_URL || window.location.origin;
+    window.location.href = `${apiBaseURL}/api/auth/${provider}`;
   };
 
   return (

@@ -1,7 +1,19 @@
 import axios from 'axios';
 import { toastWarning } from './toast';
 
-const apiBaseURL = import.meta.env.VITE_API_URL ;
+// Helper to get API base URL with fallback
+export const getApiBaseURL = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // Fallback to same origin (for same-domain deployment)
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return '';
+};
+
+const apiBaseURL = getApiBaseURL();
 
 // Create a custom axios instance
 const api = axios.create({
