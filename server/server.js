@@ -216,6 +216,9 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Serve static files from client/dist (if exists) or redirect to frontend
+app.use(express.static(path.join(__dirname, '../public')));
+
 // Xử lý callback ở đường dẫn gốc (root URL)
 app.get('/', (req, res) => {
   // Kiểm tra nếu có code OAuth từ Google hoặc Facebook
@@ -244,8 +247,22 @@ app.get('/', (req, res) => {
     // Chuyển hướng đến handler thích hợp
     return res.redirect(redirectUrl);
   } else {
-    // Nếu không có code, chuyển hướng đến Facebook callback
-    res.redirect('/api/auth/facebook-root-callback');
+    // Nếu không có code, serve static files hoặc redirect về frontend
+    const publicPath = path.join(__dirname, '../public', 'index.html');
+    if (fs.existsSync(publicPath)) {
+      return res.sendFile(publicPath);
+    }
+    // Nếu không có static files, redirect về frontend URL (nếu có)
+    const frontendURL = process.env.FRONTEND_URL || process.env.CLIENT_URL;
+    if (frontendURL) {
+      return res.redirect(frontendURL);
+    }
+    // Fallback: trả về JSON response
+    res.json({ 
+      message: 'Hospital API Server', 
+      status: 'running',
+      version: '1.0.0'
+    });
   }
 });
 
