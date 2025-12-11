@@ -16,3 +16,14 @@ server/logs/
 Myapp/
 AI_ARCHITECTURE.md
 AI_DATA_CONSISTENCY.md
+@"
+node_modules/
+.env
+dist/
+build/
+.expo/
+coverage/
+android/.gradle/
+android/app/build/
+ios/Pods/
+"@ | Out-File -Encoding utf8 .gitignore
