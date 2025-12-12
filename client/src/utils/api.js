@@ -3,14 +3,19 @@ import { toastWarning } from './toast';
 
 // Helper to get API base URL with fallback
 export const getApiBaseURL = () => {
+  let baseURL = '';
   if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+    baseURL = import.meta.env.VITE_API_URL;
+  } else if (typeof window !== 'undefined') {
+    // Fallback to same origin (for same-domain deployment)
+    baseURL = window.location.origin;
   }
-  // Fallback to same origin (for same-domain deployment)
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  return '';
+  
+  // Remove trailing slash if present
+  baseURL = baseURL.replace(/\/+$/, '');
+  
+  // Add /api suffix
+  return `${baseURL}/api`;
 };
 
 const apiBaseURL = getApiBaseURL();
