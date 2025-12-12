@@ -5,7 +5,7 @@ import {
   FaNotesMedical, FaClipboardCheck, FaTimesCircle, FaCheckCircle,
   FaArrowLeft, FaFileAlt, FaPrint, FaExclamationCircle,
   FaClock, FaStethoscope, FaRegHospital, FaInfoCircle,
-  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen, FaVideo, FaPlus, FaTimes, FaComments, FaShare
+  FaPhoneAlt, FaEnvelope, FaHome, FaDoorOpen, FaVideo, FaPlus, FaTimes, FaComments, FaShare, FaEye
 } from 'react-icons/fa';
 import { toast, ToastContainer } from 'react-toastify';
 
@@ -165,6 +165,13 @@ const AppointmentDetail = () => {
       console.error('Error sharing appointment:', error);
       toast.error('Không thể chia sẻ lịch hẹn');
     }
+  };
+
+  const viewPrescriptionDetail = (prescriptionId) => {
+    if (!prescriptionId) return;
+    const idToUse = typeof prescriptionId === 'object' ? prescriptionId._id || prescriptionId.id : prescriptionId;
+    if (!idToUse) return;
+    navigate(`/doctor/prescriptions/${idToUse}`);
   };
 
   const formatDateTime = (dateTimeStr) => {
@@ -789,6 +796,14 @@ const AppointmentDetail = () => {
                                 <span className="font-medium">Ghi chú:</span> {p.notes}
                               </div>
                             )}
+                            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
+                              <button
+                                className="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 text-sm font-medium"
+                                onClick={() => viewPrescriptionDetail(p._id)}
+                              >
+                                <FaEye className="mr-2" /> Xem chi tiết đơn thuốc
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
