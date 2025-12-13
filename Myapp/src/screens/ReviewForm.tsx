@@ -227,7 +227,8 @@ export default function ReviewFormScreen({ route, navigation }: ReviewFormScreen
       );
     }
     if (targetType === 'doctor') {
-      const source = targetInfo.avatar ? { uri: targetInfo.avatar } : null;
+      const avatar = (targetInfo as any).avatar || null;
+      const source = avatar ? { uri: avatar } : null;
       return source ? (
         <Image source={source} style={styles.avatarImage} />
       ) : (

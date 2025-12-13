@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView, RefreshControl, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, FlatList, ScrollView, RefreshControl, Modal, ActivityIndicator } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,16 +49,37 @@ export default function VideoCallHistoryScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [calls, setCalls] = useState<VideoCallEntry[]>([]);
   const [selectedCall, setSelectedCall] = useState<VideoCallEntry | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const PAGE_SIZE = 10;
 
-  const loadCalls = async () => {
-    setLoading(true);
+  const loadCalls = async (pageNum: number = 1, append: boolean = false) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+    
     try {
-      const resp = await apiService.getVideoCallHistory({ page: 1, limit: 50 });
+      const resp = await apiService.getVideoCallHistory({ page: pageNum, limit: PAGE_SIZE });
       const payload: any = resp?.data || resp;
       const rawList = (payload?.data ?? payload?.records ?? payload) as any[];
+      
+      // Check if there are more pages
+      // If we got less than PAGE_SIZE items, there are no more pages
+      // If total is provided, use it; otherwise check if we got full page
+      const totalItems = payload?.total || payload?.totalCount;
+      if (totalItems !== undefined) {
+        const currentItems = append ? calls.length + rawList.length : rawList.length;
+        setHasMore(currentItems < totalItems);
+      } else {
+        // If no total provided, assume more pages if we got full page size
+        setHasMore(rawList.length === PAGE_SIZE);
+      }
       
       // If appointments are not populated, fetch them
       const itemsWithAppointments = await Promise.all(
@@ -82,10 +103,6 @@ export default function VideoCallHistoryScreen() {
       );
       
       const entries: VideoCallEntry[] = itemsWithAppointments.map((item, index) => {
-        // Debug: Log first item to see structure
-        if (index === 0) {
-          console.log('[VideoCallHistory] First item structure:', JSON.stringify(item, null, 2).substring(0, 500));
-        }
         
         const startTime = item?.startTime || item?.createdAt || item?.startedAt || '';
         const endTime = item?.endTime || item?.endedAt || '';
@@ -203,23 +220,42 @@ export default function VideoCallHistoryScreen() {
         return timeB - timeA;
       });
       
-      setCalls(entries);
+      if (append) {
+        setCalls(prev => [...prev, ...entries]);
+      } else {
+        setCalls(entries);
+      }
+      
+      setPage(pageNum);
     } catch (e: any) {
       console.error('Error loading video call history:', e);
-      setCalls([]);
+      if (!append) {
+        setCalls([]);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
+    }
+  };
+  
+  const loadMore = () => {
+    if (!loadingMore && hasMore && !loading) {
+      loadCalls(page + 1, true);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        loadCalls();
+        setPage(1);
+        setHasMore(true);
+        loadCalls(1, false);
       } else {
         setLoading(false);
         setCalls([]);
+        setPage(1);
+        setHasMore(true);
       }
     }, [user])
   );
@@ -227,7 +263,9 @@ export default function VideoCallHistoryScreen() {
   const onRefresh = () => {
     if (user) {
       setRefreshing(true);
-      loadCalls();
+      setPage(1);
+      setHasMore(true);
+      loadCalls(1, false);
     }
   };
 
@@ -306,24 +344,43 @@ export default function VideoCallHistoryScreen() {
         <Text style={styles.headerTitle}>Lịch sử Videocall</Text>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={IconColors.primary} />}
-        showsVerticalScrollIndicator={false}
-      >
-        {(!calls || calls.length === 0) && !loading ? (
-          <View style={styles.emptyWrap}>
-            <Ionicons name="videocam-outline" size={64} color="#d1d5db" />
-            <Text style={styles.emptyTitle}>Chưa có cuộc gọi</Text>
-            <Text style={styles.emptyDesc}>Bạn chưa có cuộc gọi video nào được ghi nhận</Text>
-          </View>
-        ) : (
-          calls.map((call) => {
+      {loading && calls.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={IconColors.primary} />
+          <Text style={styles.loadingText}>Đang tải...</Text>
+        </View>
+      ) : (!calls || calls.length === 0) ? (
+        <View style={styles.emptyWrap}>
+          <Ionicons name="videocam-outline" size={64} color="#d1d5db" />
+          <Text style={styles.emptyTitle}>Chưa có cuộc gọi</Text>
+          <Text style={styles.emptyDesc}>Bạn chưa có cuộc gọi video nào được ghi nhận</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={calls}
+          keyExtractor={(item) => item.id}
+          style={styles.scroll}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={IconColors.primary} />}
+          showsVerticalScrollIndicator={false}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.loadMoreContainer}>
+                <ActivityIndicator size="small" color={IconColors.primary} />
+                <Text style={styles.loadMoreText}>Đang tải thêm...</Text>
+              </View>
+            ) : !hasMore && calls.length > 0 ? (
+              <View style={styles.loadMoreContainer}>
+                <Text style={styles.loadMoreText}>Đã hiển thị tất cả</Text>
+              </View>
+            ) : null
+          }
+          renderItem={({ item: call }) => {
             const statusColor = getStatusColor(call.status);
             return (
               <TouchableOpacity
-                key={call.id}
                 style={styles.callItem}
                 activeOpacity={0.8}
                 onPress={() => {
@@ -379,9 +436,9 @@ export default function VideoCallHistoryScreen() {
                 </View>
               </TouchableOpacity>
             );
-          })
-        )}
-      </ScrollView>
+          }}
+        />
+      )}
 
       {/* Call Detail Modal */}
       <Modal
@@ -552,6 +609,27 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
   scroll: { flex: 1 },
   scrollContent: { padding: 16 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  loadMoreContainer: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadMoreText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#6b7280',
+  },
   emptyWrap: { alignItems: 'center', paddingVertical: 64 },
   emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: '700', color: '#111827' },
   emptyDesc: { marginTop: 4, fontSize: 14, color: '#6b7280' },

@@ -122,7 +122,11 @@ export default function SpecialtyDetailScreen() {
   };
 
   const handleBackPress = () => {
-    navigation.goBack();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      (navigation as any).navigate('Home');
+    }
   };
 
   const formatPrice = (price: number) => {
@@ -291,11 +295,11 @@ export default function SpecialtyDetailScreen() {
                   source={{ uri: imageUri }} 
                   style={styles.specialtyImage}
                   resizeMode="cover"
-                  onError={(e) => {
-                    console.log('SpecialtyDetail image load error:', e.nativeEvent.error);
+                  onError={() => {
+                    // Image load error - placeholder will be shown
                   }}
                   onLoad={() => {
-                    console.log('SpecialtyDetail image loaded successfully:', imageUri);
+                    // Image loaded successfully
                   }}
                 />
               ) : (
@@ -465,7 +469,12 @@ export default function SpecialtyDetailScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+        <TouchableOpacity 
+          onPress={handleBackPress} 
+          style={styles.backButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Chi tiết chuyên khoa</Text>
@@ -502,6 +511,11 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+    zIndex: 10,
+    minWidth: 40,
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,

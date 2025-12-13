@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView, RefreshControl, Modal, Platform, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, FlatList, ScrollView, RefreshControl, Modal, Platform, TextInput, ActivityIndicator } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,10 +40,14 @@ export default function PaymentHistoryScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [payments, setPayments] = useState<PaymentEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [tempDateInput, setTempDateInput] = useState('');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const PAGE_SIZE = 10;
 
   const formatVnd = (amount?: number) => {
     if (typeof amount !== 'number') return '0 ₫';
@@ -54,30 +58,33 @@ export default function PaymentHistoryScreen() {
     }
   };
 
-  const loadPayments = async () => {
-    setLoading(true);
+  const loadPayments = async (pageNum: number = 1, append: boolean = false) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+    
     try {
-      const resp = await apiService.getPaymentHistory({ page: 1, limit: 50 });
+      const resp = await apiService.getPaymentHistory({ page: pageNum, limit: PAGE_SIZE });
       const payload: any = resp?.data || resp;
       const rawList = (payload?.data ?? payload?.records ?? payload) as any[];
+      
+      // Check if there are more pages
+      const totalItems = payload?.total || payload?.totalCount;
+      if (totalItems !== undefined) {
+        const currentItems = append ? payments.length + rawList.length : rawList.length;
+        setHasMore(currentItems < totalItems);
+      } else {
+        // If no total provided, assume more pages if we got full page size
+        setHasMore(rawList.length === PAGE_SIZE);
+      }
       const entries: PaymentEntry[] = (Array.isArray(rawList) ? rawList : []).map((item, index) => {
         const amount = Number(item?.amount || 0);
         const appointment = item?.appointmentId || {};
         const doctorName = appointment?.doctorId?.user?.fullName;
         const serviceName = appointment?.serviceId?.name;
         const specialtyName = appointment?.specialtyId?.name;
-        
-        // Debug: Log payment item to see what backend returns
-        if (index === 0 || amount === 110000) {
-          console.log('[PaymentHistory] Payment item:', {
-            amount,
-            billType: item?.billType,
-            paymentType: item?.paymentType,
-            type: item?.type,
-            description: item?.description,
-            item: JSON.stringify(item).substring(0, 200),
-          });
-        }
         
         // Priority: billType first (to show correct payment type), then description, then other fields
         // IMPORTANT: Always check billType first to ensure correct payment type is displayed
@@ -134,22 +141,43 @@ export default function PaymentHistoryScreen() {
       });
 
       entries.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-      setPayments(entries);
+      
+      if (append) {
+        setPayments(prev => [...prev, ...entries]);
+      } else {
+        setPayments(entries);
+      }
+      
+      setPage(pageNum);
     } catch (e) {
-      setPayments([]);
+      if (!append) {
+        setPayments([]);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
+    }
+  };
+  
+  const loadMore = () => {
+    if (!loadingMore && hasMore && !loading && !selectedDate) {
+      // Only load more if no date filter is applied
+      loadPayments(page + 1, true);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        loadPayments();
+        setPage(1);
+        setHasMore(true);
+        loadPayments(1, false);
       } else {
         setLoading(false);
         setPayments([]);
+        setPage(1);
+        setHasMore(true);
       }
     }, [user])
   );
@@ -157,7 +185,9 @@ export default function PaymentHistoryScreen() {
   const onRefresh = () => {
     if (user) {
       setRefreshing(true);
-      loadPayments();
+      setPage(1);
+      setHasMore(true);
+      loadPayments(1, false);
     }
   };
 
@@ -425,38 +455,57 @@ export default function PaymentHistoryScreen() {
         </View>
       </Modal>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={IconColors.primary} />}
-        showsVerticalScrollIndicator={false}
-      >
-        {(!filteredPayments || filteredPayments.length === 0) && !loading ? (
-          <View style={styles.emptyWrap}>
-            <Ionicons name="card-outline" size={64} color="#d1d5db" />
-            <Text style={styles.emptyTitle}>
-              {selectedDate ? 'Không có giao dịch trong ngày này' : 'Chưa có giao dịch'}
-            </Text>
-            <Text style={styles.emptyDesc}>
-              {selectedDate
-                ? `Không tìm thấy thanh toán nào vào ngày ${formatSelectedDateDisplay(selectedDate)}`
-                : 'Bạn chưa có thanh toán nào được ghi nhận'}
-            </Text>
-            {selectedDate && (
-              <TouchableOpacity
-                style={styles.clearFilterButton}
-                onPress={clearDateFilter}
-              >
-                <Text style={styles.clearFilterButtonText}>Xóa bộ lọc</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ) : (
-          filteredPayments.map((p) => {
+      {loading && payments.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={IconColors.primary} />
+          <Text style={styles.loadingText}>Đang tải...</Text>
+        </View>
+      ) : (!filteredPayments || filteredPayments.length === 0) ? (
+        <View style={styles.emptyWrap}>
+          <Ionicons name="card-outline" size={64} color="#d1d5db" />
+          <Text style={styles.emptyTitle}>
+            {selectedDate ? 'Không có giao dịch trong ngày này' : 'Chưa có giao dịch'}
+          </Text>
+          <Text style={styles.emptyDesc}>
+            {selectedDate
+              ? `Không tìm thấy thanh toán nào vào ngày ${formatSelectedDateDisplay(selectedDate)}`
+              : 'Bạn chưa có thanh toán nào được ghi nhận'}
+          </Text>
+          {selectedDate && (
+            <TouchableOpacity
+              style={styles.clearFilterButton}
+              onPress={clearDateFilter}
+            >
+              <Text style={styles.clearFilterButtonText}>Xóa bộ lọc</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : (
+        <FlatList
+          data={filteredPayments}
+          keyExtractor={(item) => item.id}
+          style={styles.scroll}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={IconColors.primary} />}
+          showsVerticalScrollIndicator={false}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.loadMoreContainer}>
+                <ActivityIndicator size="small" color={IconColors.primary} />
+                <Text style={styles.loadMoreText}>Đang tải thêm...</Text>
+              </View>
+            ) : !hasMore && payments.length > 0 && !selectedDate ? (
+              <View style={styles.loadMoreContainer}>
+                <Text style={styles.loadMoreText}>Đã hiển thị tất cả</Text>
+              </View>
+            ) : null
+          }
+          renderItem={({ item: p }) => {
             const color = getStatusColor(p.status);
             return (
               <TouchableOpacity
-                key={p.id}
                 style={styles.paymentItem}
                 activeOpacity={0.8}
                 onPress={() => {
@@ -523,9 +572,9 @@ export default function PaymentHistoryScreen() {
                 </View>
               </TouchableOpacity>
             );
-          })
-        )}
-      </ScrollView>
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -573,6 +622,27 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   scrollContent: { padding: 16 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  loadMoreContainer: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadMoreText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#6b7280',
+  },
   emptyWrap: { alignItems: 'center', paddingVertical: 64 },
   emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: '700', color: '#111827' },
   emptyDesc: { marginTop: 4, fontSize: 14, color: '#6b7280', textAlign: 'center', paddingHorizontal: 32 },

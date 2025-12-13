@@ -84,15 +84,12 @@ export default function SpecialtyListScreen({ navigation }: Props) {
           
           if (typeof sp.image === 'string' && sp.image && sp.image.trim()) {
             normalizedImage = sp.image;
-            console.log('Normalized image (string):', normalizedImage);
           } else if (typeof sp.imageUrl === 'string' && sp.imageUrl && sp.imageUrl.trim()) {
             normalizedImage = sp.imageUrl;
-            console.log('Normalized image (imageUrl):', normalizedImage);
           } else if (sp.image && typeof sp.image === 'object') {
             const secureUrl = sp.image?.secureUrl;
             if (typeof secureUrl === 'string' && secureUrl && secureUrl.trim()) {
               normalizedImage = secureUrl;
-              console.log('Normalized image (secureUrl):', normalizedImage);
             }
           }
           
@@ -167,7 +164,6 @@ export default function SpecialtyListScreen({ navigation }: Props) {
       return rawData.image.secureUrl;
     }
     
-    console.log('No valid image found, using placeholder');
     return 'https://placehold.co/200x120';
   };
 
@@ -187,11 +183,11 @@ export default function SpecialtyListScreen({ navigation }: Props) {
               source={{ uri: imageUri }}
               style={styles.specialtyImage}
               resizeMode="cover"
-              onError={(e) => {
-                console.log('Image load error for:', imageUri, e.nativeEvent.error);
+              onError={() => {
+                // Image load error - placeholder will be shown
               }}
               onLoad={() => {
-                console.log('Image loaded successfully:', imageUri);
+                // Image loaded successfully
               }}
             />
           ) : (

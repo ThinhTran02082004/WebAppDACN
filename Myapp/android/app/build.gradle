@@ -120,6 +120,14 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+    
+    packagingOptions {
+        pickFirst 'lib/**/libjingle_peerconnection_so.so'
+    }
+}
+
+configurations.all {
+    exclude group: 'com.github.webrtc-sdk', module: 'android'
 }
 
 dependencies {

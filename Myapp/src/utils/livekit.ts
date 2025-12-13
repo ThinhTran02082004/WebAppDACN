@@ -1,4 +1,5 @@
-import { registerGlobals } from '@livekit/react-native-webrtc/lib/commonjs';
+import { registerGlobals } from '@livekit/react-native';
+// @ts-ignore - event-target-shim has type resolution issues with package.json exports
 import { EventTarget as ShimEventTarget } from 'event-target-shim';
 import { TextDecoder as PolyfillTextDecoder, TextEncoder as PolyfillTextEncoder } from 'text-encoding';
 import {
@@ -105,16 +106,20 @@ const computeOriginFromUrl = (url?: string) => {
 const ensureOriginHeader = (url: string, options?: Record<string, any>) => {
   const headers = options?.headers || {};
 
-  // For LiveKit Cloud, don't add Origin header as it may cause issues
-  // LiveKit Cloud handles WebSocket connections differently
+  // For LiveKit Cloud, still add Origin header but use a valid format
+  // Some LiveKit Cloud instances may require it for proper WebSocket upgrade
   const isLiveKitCloud = url.includes('.livekit.cloud');
   
   if (
-    !isLiveKitCloud &&
     typeof headers.Origin === 'undefined' &&
     typeof headers.origin === 'undefined'
   ) {
-    headers.Origin = computeOriginFromUrl(url);
+    if (isLiveKitCloud) {
+      // For LiveKit Cloud, use the LiveKit domain as origin
+      headers.Origin = computeOriginFromUrl(url);
+    } else {
+      headers.Origin = computeOriginFromUrl(url);
+    }
   }
 
   return {
@@ -215,15 +220,33 @@ export const ensureLivekitGlobals = () => {
   }
 
   try {
+    // Use registerGlobals from @livekit/react-native which handles all polyfills
+    // including WebSocket, Event, EventTarget, streams, etc.
+    // DO NOT patch WebSocket manually - let @livekit/react-native handle it
+    registerGlobals({
+      autoConfigureAudioSession: true
+    });
+    globalsRegistered = true;
+    console.log('[livekit] LiveKit globals registered successfully');
+  } catch (error: any) {
+    // If error is about duplicate registration, it's OK
+    if (error?.message?.includes('already') || error?.message?.includes('registered')) {
+      console.log('[livekit] Globals already registered, skipping');
+      globalsRegistered = true;
+    } else {
+      console.error('[livekit] Failed to register globals', error);
+      // Only apply minimal polyfills if registerGlobals fails
+      // DO NOT patch WebSocket as it interferes with livekit-client
+  try {
     ensureDomEventPolyfills();
     ensureEncodingPolyfills();
     ensureStreamsPolyfill();
-    ensureWebSocketPolyfill();
-    registerGlobals();
-    globalsRegistered = true;
-    console.log('[livekit] WebRTC globals registered successfully');
-  } catch (error) {
-    console.error('[livekit] Failed to register WebRTC globals', error);
+        // DO NOT call ensureWebSocketPolyfill() - let livekit-client handle WebSocket
+        console.log('[livekit] Minimal fallback polyfills applied (WebSocket not patched)');
+      } catch (fallbackError) {
+        console.error('[livekit] Fallback polyfills also failed', fallbackError);
+      }
+    }
   }
 };
 

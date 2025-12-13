@@ -220,8 +220,14 @@ export default function ProfileScreen() {
       const fileName = asset.fileName || `avatar_${Date.now()}.jpg`;
 
       // Upload avatar
+      // For Android, keep the full URI (including file:// if present)
+      // For iOS, remove file:// prefix
+      const imageUri = Platform.OS === 'ios' 
+        ? asset.uri.replace('file://', '') 
+        : asset.uri;
+      
       const response = await apiService.uploadAvatar(
-        Platform.OS === 'ios' ? asset.uri.replace('file://', '') : asset.uri,
+        imageUri,
         fileType,
         fileName
       );

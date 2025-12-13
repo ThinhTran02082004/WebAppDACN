@@ -564,12 +564,22 @@ class ApiService {
 
   async uploadAvatar(uri: string, type: string = 'image/jpeg', name: string = 'avatar.jpg'): Promise<ApiResponse<any>> {
     try {
-      console.log('[api] Starting avatar upload:', { uri, type, name });
+      // Normalize URI for React Native
+      // Android: Keep file:// prefix if present, it's needed
+      // iOS: Remove file:// prefix
+      let normalizedUri = uri;
+      if (Platform.OS === 'ios' && uri.startsWith('file://')) {
+        normalizedUri = uri.replace('file://', '');
+      }
+      // Ensure Android URIs are properly formatted
+      if (Platform.OS === 'android' && !uri.startsWith('file://') && !uri.startsWith('http')) {
+        normalizedUri = uri.startsWith('/') ? uri : `file://${uri}`;
+      }
       
       // Create FormData for multipart/form-data upload
       const formData = new FormData();
       formData.append('avatar', {
-        uri: uri,
+        uri: normalizedUri,
         type: type,
         name: name,
       } as any);
@@ -592,23 +602,35 @@ class ApiService {
 
       // Create a separate axios instance for file uploads to avoid header conflicts
       // This ensures FormData is handled correctly in React Native
-      // Use BASE_URL directly to ensure correct URL for Android (10.0.2.2) vs iOS (localhost)
-      // Recalculate BASE_URL to ensure it's correct for current platform
-      const currentBaseURL = Platform.OS === 'android' 
-        ? "http://10.0.2.2:5000/api" 
-        : "http://localhost:5000/api";
+      // For Android, try localhost first (if using adb reverse), then fallback to 10.0.2.2
+      let uploadBaseURL = BASE_URL;
+      
+      // Check if we should use localhost for Android (when using adb reverse)
+      if (Platform.OS === 'android') {
+        try {
+          const { API_BASE } = await import('../config');
+          const configBaseURL = typeof API_BASE === 'function' ? API_BASE() : null;
+          if (configBaseURL && configBaseURL.includes('localhost')) {
+            uploadBaseURL = configBaseURL;
+          }
+        } catch {
+          // Fallback to BASE_URL if config import fails
+        }
+      }
       
       const uploadClient = axios.create({
-        baseURL: currentBaseURL,
-        timeout: 30000, // Increase timeout for file uploads
+        baseURL: uploadBaseURL,
+        timeout: 60000, // Increase timeout for file uploads (60 seconds)
         headers: authHeader ? { Authorization: authHeader } : {},
         // Don't set Content-Type - let axios/FormData set it automatically
       });
-
-      console.log('[api] Uploading to:', `${currentBaseURL}/auth/profile/avatar`);
-      console.log('[api] Platform:', Platform.OS, 'Current BASE_URL:', currentBaseURL);
       
-      const res = await uploadClient.post('/auth/profile/avatar', formData);
+      const res = await uploadClient.post('/auth/profile/avatar', formData, {
+        headers: {
+          ...(authHeader ? { Authorization: authHeader } : {}),
+          // Explicitly don't set Content-Type - let FormData set it with boundary
+        },
+      });
       return this.handleResponse(res);
     } catch (e) {
       console.error('[api] Upload avatar error details:', {

@@ -13,9 +13,12 @@ import {
   Linking,
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { apiService, Hospital } from '../../services/api';
+import { apiService, Hospital, ServiceItem } from '../../services/api';
 import { AppIcons, IconColors, IconSizes } from '../../config/icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { SpecialtyCard } from '../../components/SpecialtyCard';
+import ServiceCard from '../../components/ServiceCard';
+import { Specialty } from '../../types/specialty';
 
 const { width } = Dimensions.get('window');
 
@@ -342,7 +345,66 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
                         </Text>
                       </View>
                     )}
-                    {/* Các ngày khác giống hệt file gốc */}
+                    {hospital.workingHours.tuesday && (
+                      <View style={styles.workingHoursRow}>
+                        <Text style={styles.workingHoursDay}>Thứ 3</Text>
+                        <Text style={styles.workingHoursTime}>
+                          {hospital.workingHours.tuesday.isOpen
+                            ? `${hospital.workingHours.tuesday.open} - ${hospital.workingHours.tuesday.close}`
+                            : 'Đóng cửa'}
+                        </Text>
+                      </View>
+                    )}
+                    {hospital.workingHours.wednesday && (
+                      <View style={styles.workingHoursRow}>
+                        <Text style={styles.workingHoursDay}>Thứ 4</Text>
+                        <Text style={styles.workingHoursTime}>
+                          {hospital.workingHours.wednesday.isOpen
+                            ? `${hospital.workingHours.wednesday.open} - ${hospital.workingHours.wednesday.close}`
+                            : 'Đóng cửa'}
+                        </Text>
+                      </View>
+                    )}
+                    {hospital.workingHours.thursday && (
+                      <View style={styles.workingHoursRow}>
+                        <Text style={styles.workingHoursDay}>Thứ 5</Text>
+                        <Text style={styles.workingHoursTime}>
+                          {hospital.workingHours.thursday.isOpen
+                            ? `${hospital.workingHours.thursday.open} - ${hospital.workingHours.thursday.close}`
+                            : 'Đóng cửa'}
+                        </Text>
+                      </View>
+                    )}
+                    {hospital.workingHours.friday && (
+                      <View style={styles.workingHoursRow}>
+                        <Text style={styles.workingHoursDay}>Thứ 6</Text>
+                        <Text style={styles.workingHoursTime}>
+                          {hospital.workingHours.friday.isOpen
+                            ? `${hospital.workingHours.friday.open} - ${hospital.workingHours.friday.close}`
+                            : 'Đóng cửa'}
+                        </Text>
+                      </View>
+                    )}
+                    {hospital.workingHours.saturday && (
+                      <View style={styles.workingHoursRow}>
+                        <Text style={styles.workingHoursDay}>Thứ 7</Text>
+                        <Text style={styles.workingHoursTime}>
+                          {hospital.workingHours.saturday.isOpen
+                            ? `${hospital.workingHours.saturday.open} - ${hospital.workingHours.saturday.close}`
+                            : 'Đóng cửa'}
+                        </Text>
+                      </View>
+                    )}
+                    {hospital.workingHours.sunday && (
+                      <View style={styles.workingHoursRow}>
+                        <Text style={styles.workingHoursDay}>Chủ nhật</Text>
+                        <Text style={styles.workingHoursTime}>
+                          {hospital.workingHours.sunday.isOpen
+                            ? `${hospital.workingHours.sunday.open} - ${hospital.workingHours.sunday.close}`
+                            : 'Đóng cửa'}
+                        </Text>
+                      </View>
+                    )}
                   </>
                 ) : (
                   <>
@@ -364,10 +426,81 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
             </View>
           </View>
         ) : activeTab === 'specialties' ? (
-          // giữ nguyên nội dung tab chuyên khoa & dịch vụ giống file gốc
-          <View />
+          <View style={styles.tabContent}>
+            {loadingTabs ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={IconColors.primary} />
+                <Text style={styles.loadingText}>Đang tải chuyên khoa...</Text>
+              </View>
+            ) : specialties.length > 0 ? (
+              <View style={styles.listContainer}>
+                {specialties.map((specialty: Specialty, index: number) => (
+                  <View key={specialty._id} style={[styles.listItem, index % 2 === 0 && styles.listItemLeft]}>
+                    <SpecialtyCard
+                      specialty={specialty}
+                      onPress={(sp) => navigation.navigate('SpecialtyDetail', { specialtyId: sp._id })}
+                      onBookingPress={(sp) => {
+                        if (!user) {
+                          navigation.navigate('Login');
+                        } else {
+                          navigation.navigate('Booking', {
+                            specialtyId: sp._id,
+                            hospitalId: id,
+                          });
+                        }
+                      }}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Ionicons name={AppIcons.specialtyOutline} size={IconSizes.xxl} color={IconColors.light} />
+                <Text style={styles.emptyText}>Chưa có chuyên khoa</Text>
+                <Text style={styles.emptySubtext}>Vui lòng quay lại sau</Text>
+              </View>
+            )}
+          </View>
         ) : (
-          <View />
+          <View style={styles.tabContent}>
+            {loadingTabs ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={IconColors.primary} />
+                <Text style={styles.loadingText}>Đang tải dịch vụ...</Text>
+              </View>
+            ) : services.length > 0 ? (
+              <View style={styles.listContainer}>
+                {services.map((service: ServiceItem, index: number) => (
+                  <View key={service._id} style={[styles.listItem, index % 2 === 0 && styles.listItemLeft]}>
+                    <ServiceCard
+                      service={service}
+                      onPress={(sv) => navigation.navigate('ServiceDetail', { serviceId: sv._id })}
+                      onBookingPress={(sv) => {
+                        if (!user) {
+                          navigation.navigate('Login');
+                        } else {
+                          const specialtyId = typeof sv.specialtyId === 'object'
+                            ? sv.specialtyId._id
+                            : sv.specialtyId;
+                          navigation.navigate('Booking', {
+                            serviceId: sv._id,
+                            specialtyId: specialtyId || undefined,
+                            hospitalId: id,
+                          });
+                        }
+                      }}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Ionicons name={AppIcons.serviceOutline} size={IconSizes.xxl} color={IconColors.light} />
+                <Text style={styles.emptyText}>Chưa có dịch vụ</Text>
+                <Text style={styles.emptySubtext}>Vui lòng quay lại sau</Text>
+              </View>
+            )}
+          </View>
         )}
 
         <View style={{ height: 100 }} />
@@ -755,6 +888,40 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  listContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  listItem: {
+    width: (width - 48) / 2, // 2 cards per row: (screen width - padding 32 - gap 16) / 2
+    marginBottom: 18,
+  },
+  listItemLeft: {
+    marginRight: 16,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    backgroundColor: '#fff',
+    marginTop: 12,
+    marginHorizontal: 16,
+    borderRadius: 12,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
   },
 });
 

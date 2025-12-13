@@ -3,23 +3,18 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { RTCView } from '@livekit/react-native-webrtc';
-import {
-  Participant,
-  RemoteParticipant,
-  Room,
-  RoomEvent,
-  TrackPublication
-} from 'livekit-client';
+// VideoView is deprecated but still functional
+// eslint-disable-next-line deprecation/deprecation
+import { VideoView } from '@livekit/react-native';
 import {
   Permission,
   PERMISSIONS,
@@ -29,10 +24,14 @@ import {
 } from 'react-native-permissions';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { apiService } from '../services/api';
+import { ensureLivekitGlobals } from '../utils/livekit';
+
+// Import Room and VideoTrack from livekit-client
+import { Room, VideoTrack } from 'livekit-client';
 
 type VideoTile = {
   id: string;
-  streamUrl: string;
+  videoTrack: VideoTrack | null;
   participantName: string;
   participantSid: string;
   isLocal: boolean;
@@ -51,14 +50,36 @@ const microphonePermission = (Platform.select({
   android: PERMISSIONS.ANDROID.RECORD_AUDIO
 }) ?? PERMISSIONS.ANDROID.RECORD_AUDIO) as Permission;
 
+// Hardcoded LiveKit signaling URL (override when backend returns wrong URL)
+const HARDCODED_LIVEKIT_URL = 'wss://hospitals-reoykrz5.livekit.cloud';
+
+// Ensure LiveKit globals are registered once at module level
+// This must be called before any LiveKit operations
+ensureLivekitGlobals();
+
+// Also ensure globals are registered in component if needed
+// (in case module-level call didn't work)
+
 const VideoCallScreen = () => {
+  // Ensure globals are registered when component mounts
+  useEffect(() => {
+    ensureLivekitGlobals();
+    // Verify WebSocket is available
+    const globalObj = globalThis as any;
+    if (typeof globalObj.WebSocket === 'undefined') {
+      console.error('[VideoCall] WebSocket is not available in global scope');
+    } else {
+      console.log('[VideoCall] WebSocket is available:', typeof globalObj.WebSocket);
+    }
+  }, []);
+
   const navigation = useNavigation();
   const route = useRoute();
   const { roomId, roomName, token, wsUrl, role, appointmentInfo } =
     (route.params as RootStackParamList['VideoCall']) || {};
 
-  const roomRef = useRef<Room | null>(null);
-  const listenersRef = useRef<Array<{ event: RoomEvent; handler: (...args: any[]) => void }>>([]);
+  const roomRef = useRef<any | null>(null);
+  const listenersRef = useRef<Array<{ event: string; handler: (...args: any[]) => void }>>([]);
   const leavingRef = useRef(false);
 
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
@@ -93,51 +114,95 @@ const VideoCallScreen = () => {
 
   const updateVideoTiles = useCallback(() => {
     const room = roomRef.current;
-    if (!room) return;
+    if (!room) {
+      console.log('[VideoCall] updateVideoTiles: No room');
+      return;
+    }
 
     const tiles: VideoTile[] = [];
 
-    const pushPublication = (
-      publication: TrackPublication,
-      participant: Participant,
-      isLocal: boolean
-    ) => {
-      const track = publication.videoTrack;
-      if (!track || publication.isMuted) return;
+    const pushTrack = (track: VideoTrack | null, participant: any, publication: any, trackSid?: string) => {
+      if (!track) {
+        console.log('[VideoCall] pushTrack: No track for participant', participant.identity);
+        return;
+      }
+      
+      if (track.isMuted) {
+        console.log('[VideoCall] pushTrack: Track is muted', trackSid);
+        return;
+      }
 
-      const stream = track.mediaStream as MediaStream | undefined;
-      const streamUrl =
-        typeof (stream as any)?.toURL === 'function'
-          ? (stream as any).toURL()
-          : undefined;
-      if (!streamUrl) return;
+      console.log('[VideoCall] pushTrack: Adding track', {
+        publicationTrackSid: trackSid,
+        participant: participant.identity,
+        isLocal: participant.isLocal,
+        trackSid: track.sid,
+        kind: track.kind
+      });
 
       tiles.push({
-        id: publication.trackSid ?? `${participant.sid}-${publication.trackName}`,
-        streamUrl,
+        id: trackSid ?? `${participant.sid}-${track.sid ?? 'video'}`,
+        videoTrack: track,
         participantName:
           participant.name ||
-          (participant as RemoteParticipant).metadata ||
+          participant.metadata ||
           participant.identity ||
-          (isLocal ? 'Bạn' : 'Thành viên'),
+          (participant.isLocal ? 'Bạn' : 'Thành viên'),
         participantSid: participant.sid,
-        isLocal,
-        isMuted: publication.isMuted
+        isLocal: participant.isLocal,
+        isMuted: track.isMuted
       });
     };
 
-    room.localParticipant.getTrackPublications().forEach(publication => {
-      if (publication.kind !== 'video') return;
-      pushPublication(publication, room.localParticipant, true);
-    });
-
-    room.remoteParticipants.forEach((participant: RemoteParticipant) => {
-      participant.getTrackPublications().forEach((publication: TrackPublication) => {
-        if (publication.kind !== 'video') return;
-        pushPublication(publication, participant, false);
+    // Local participant video tracks
+    console.log('[VideoCall] Checking local participant videoTracks:', room.localParticipant.videoTracks?.size ?? 0);
+    if (room.localParticipant.videoTracks) {
+      room.localParticipant.videoTracks.forEach((publication: any, trackSid: string) => {
+        console.log('[VideoCall] Local publication:', {
+          trackSid,
+          track: publication.track ? 'exists' : 'null',
+          isMuted: publication.isMuted,
+          isSubscribed: publication.isSubscribed
+        });
+        
+        // For local participant, track should be available directly
+        const track = publication.track as VideoTrack | null;
+        if (track && track.kind === 'video') {
+          pushTrack(track, room.localParticipant, trackSid);
+        }
       });
+    }
+
+    // Remote participants video tracks
+    console.log('[VideoCall] Checking remote participants:', room.remoteParticipants.size);
+    room.remoteParticipants.forEach((participant: any) => {
+      console.log('[VideoCall] Remote participant:', {
+        identity: participant.identity,
+        videoTracks: participant.videoTracks?.size ?? 0
+      });
+      
+      if (participant.videoTracks) {
+        participant.videoTracks.forEach((publication: any, trackSid: string) => {
+          console.log('[VideoCall] Remote publication:', {
+            trackSid,
+            track: publication.track ? 'exists' : 'null',
+            isMuted: publication.isMuted,
+            isSubscribed: publication.isSubscribed,
+            kind: publication.kind
+          });
+          
+          // For remote participants, track must be subscribed
+          if (publication.isSubscribed && publication.track) {
+            const track = publication.track as VideoTrack | null;
+            if (track && track.kind === 'video') {
+              pushTrack(track, participant, trackSid);
+            }
+          }
+        });
+      }
     });
 
+    console.log('[VideoCall] Total video tiles found:', tiles.length);
     setVideoTiles(tiles);
   }, []);
 
@@ -176,45 +241,45 @@ const VideoCallScreen = () => {
     }
   }, []);
 
-  const attachRoomListeners = useCallback((room: Room) => {
+  const attachRoomListeners = useCallback((room: any) => {
     removeRoomListeners();
 
-    const listeners: Array<{ event: RoomEvent; handler: (...args: any[]) => void }> = [
+    const listeners: Array<{ event: string; handler: (...args: any[]) => void }> = [
       {
-        event: RoomEvent.TrackSubscribed,
+        event: 'trackSubscribed',
         handler: () => updateVideoTiles()
       },
       {
-        event: RoomEvent.TrackUnsubscribed,
+        event: 'trackUnsubscribed',
         handler: () => updateVideoTiles()
       },
       {
-        event: RoomEvent.TrackPublished,
+        event: 'trackPublished',
         handler: () => updateVideoTiles()
       },
       {
-        event: RoomEvent.TrackUnpublished,
+        event: 'trackUnpublished',
         handler: () => updateVideoTiles()
       },
       {
-        event: RoomEvent.TrackMuted,
+        event: 'trackMuted',
         handler: () => updateVideoTiles()
       },
       {
-        event: RoomEvent.TrackUnmuted,
+        event: 'trackUnmuted',
         handler: () => updateVideoTiles()
       },
       {
-        event: RoomEvent.ParticipantConnected,
+        event: 'participantConnected',
         handler: () => updateVideoTiles()
       },
       {
-        event: RoomEvent.ParticipantDisconnected,
+        event: 'participantDisconnected',
         handler: () => updateVideoTiles()
       },
       {
-        event: RoomEvent.ActiveSpeakersChanged,
-        handler: speakers => {
+        event: 'activeSpeakersChanged',
+        handler: (speakers: any[]) => {
           if (Array.isArray(speakers) && speakers.length > 0) {
             setActiveSpeakerSid(speakers[0]?.sid ?? null);
           } else {
@@ -223,15 +288,15 @@ const VideoCallScreen = () => {
         }
       },
       {
-        event: RoomEvent.Reconnecting,
+        event: 'reconnecting',
         handler: () => setConnectionState('reconnecting')
       },
       {
-        event: RoomEvent.Reconnected,
+        event: 'reconnected',
         handler: () => setConnectionState('connected')
       },
       {
-        event: RoomEvent.Disconnected,
+        event: 'disconnected',
         handler: () => {
           setConnectionState('disconnected');
           if (!leavingRef.current) {
@@ -245,8 +310,7 @@ const VideoCallScreen = () => {
     ];
 
     listeners.forEach(({ event, handler }) => {
-      // @ts-ignore
-      room.on(event, handler);
+      room.on(event as any, handler);
     });
 
     listenersRef.current = listeners;
@@ -324,33 +388,119 @@ const VideoCallScreen = () => {
       return;
     }
 
-    const room = new Room({
-      adaptiveStream: true,
-      dynacast: true,
-      audioCaptureDefaults: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      }
-    });
+    if (!token) {
+      setError('Token không hợp lệ. Vui lòng thử lại.');
+      setConnectionState('disconnected');
+      return;
+    }
 
-    roomRef.current = room;
-    attachRoomListeners(room);
+    // Check if Room is available - but DON'T check typeof Room !== 'function'
+    // Room might be an object with a constructor, not a direct function
+    if (!Room) {
+      console.error('[VideoCall] LiveKit Room module is not available');
+      setError('Không thể khởi tạo LiveKit. Vui lòng khởi động lại ứng dụng.');
+      setConnectionState('disconnected');
+      return;
+    }
+
+    let room;
+    try {
+      // Create Room instance
+      room = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+        audioCaptureDefaults: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      if (!room) {
+        throw new Error('Failed to instantiate Room');
+      }
+
+      roomRef.current = room;
+      attachRoomListeners(room);
+    } catch (err: any) {
+      console.error('[VideoCall] Failed to create Room instance', err);
+      setError('Không thể khởi tạo phòng video. Vui lòng thử lại.');
+      setConnectionState('disconnected');
+      return;
+    }
+
+    // Convert HTTP URL to WebSocket URL if needed
+    let effectiveWebSocketUrl = convertToWebSocketUrl(wsUrl || '');
+    
+    // Validate URL format
+    if (!effectiveWebSocketUrl || (!effectiveWebSocketUrl.startsWith('ws://') && !effectiveWebSocketUrl.startsWith('wss://'))) {
+      console.warn('[VideoCall] Invalid wsUrl from server:', wsUrl, '- using fallback');
+      effectiveWebSocketUrl = HARDCODED_LIVEKIT_URL;
+    }
+
+    if (effectiveWebSocketUrl.includes('.livekit.cloud')) {
+      // Clean up query/fragment first
+      effectiveWebSocketUrl = effectiveWebSocketUrl.split('?')[0].split('#')[0];
+      
+      // Remove any existing paths like /rtc, /ws, etc. and trailing slashes
+      // LiveKit SDK will automatically add /rtc path
+      const urlMatch = effectiveWebSocketUrl.match(/^(wss?:\/\/[^\/]+)/);
+      if (urlMatch) {
+        effectiveWebSocketUrl = urlMatch[1];
+      }
+      
+      // Remove trailing slash - LiveKit SDK will add /rtc automatically
+      effectiveWebSocketUrl = effectiveWebSocketUrl.replace(/\/+$/, '');
+    }
 
     try {
-      // Convert HTTP URL to WebSocket URL if needed
-      const webSocketUrl = convertToWebSocketUrl(wsUrl);
       console.log('[VideoCall] Original wsUrl:', wsUrl);
-      console.log('[VideoCall] Converted WebSocket URL:', webSocketUrl);
+      console.log('[VideoCall] Effective WebSocket URL:', effectiveWebSocketUrl);
       console.log('[VideoCall] Token present:', !!token);
+      console.log('[VideoCall] Token length:', token?.length);
       
-      await room.connect(webSocketUrl, token, { autoSubscribe: true });
+      // For LiveKit, use the base URL - SDK will handle path
+      // Ensure URL is clean base URL (protocol + host, no path)
+      let connectUrl = effectiveWebSocketUrl;
+      
+      // Extract just the base URL (protocol + host)
+      const baseUrlMatch = connectUrl.match(/^(wss?:\/\/[^\/]+)/);
+      if (baseUrlMatch) {
+        connectUrl = baseUrlMatch[1];
+      }
+      
+      // Remove trailing slash
+      connectUrl = connectUrl.replace(/\/+$/, '');
+      
+      console.log('[VideoCall] Final connect URL (base only):', connectUrl);
+      
+      // Connect using base URL - LiveKit SDK will automatically add /rtc path
+      await room.connect(connectUrl, token, { 
+        autoSubscribe: true
+      });
+      
+      console.log('[VideoCall] Room connected, enabling media...');
+      
+      // Enable microphone first
       await room.localParticipant.setMicrophoneEnabled(true);
-      await room.localParticipant.setCameraEnabled(true);
       setMicEnabled(true);
+      console.log('[VideoCall] Microphone enabled');
+      
+      // Enable camera and wait for track to be ready
+      await room.localParticipant.setCameraEnabled(true);
       setCameraEnabled(true);
+      console.log('[VideoCall] Camera enabled');
+      
+      // Wait a bit for tracks to be published
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
+      
       setConnectionState('connected');
-      updateVideoTiles();
+      
+      // Update video tiles after a short delay to ensure tracks are ready
+      setTimeout(() => {
+        updateVideoTiles();
+      }, 1000);
+      
       console.log('[VideoCall] Successfully connected to room');
     } catch (err: any) {
       console.error('[VideoCall] Failed to connect', err);
@@ -359,9 +509,22 @@ const VideoCallScreen = () => {
         code: err?.code,
         reason: err?.reason,
         wsUrl: wsUrl,
-        convertedUrl: convertToWebSocketUrl(wsUrl)
+        effectiveUrl: effectiveWebSocketUrl,
+        tokenLength: token?.length,
+        tokenPreview: token ? token.substring(0, 50) + '...' : 'null'
       });
-      setError(err?.message || 'Không thể kết nối tới phòng video. Vui lòng thử lại.');
+      
+      // Provide more specific error messages
+      let errorMessage = 'Không thể kết nối tới phòng video.';
+      if (err?.message?.includes('101')) {
+        errorMessage = 'Lỗi kết nối WebSocket. Vui lòng kiểm tra kết nối mạng và thử lại.';
+      } else if (err?.message?.includes('token') || err?.message?.includes('unauthorized')) {
+        errorMessage = 'Token không hợp lệ. Vui lòng thử lại.';
+      } else if (err?.message?.includes('network') || err?.code === 'ENOTFOUND') {
+        errorMessage = 'Không thể kết nối tới server. Vui lòng kiểm tra kết nối mạng.';
+      }
+      
+      setError(errorMessage);
       setConnectionState('disconnected');
     }
   }, [attachRoomListeners, convertToWebSocketUrl, requestMediaPermissions, token, updateVideoTiles, wsUrl]);
@@ -502,13 +665,15 @@ const VideoCallScreen = () => {
       )}
 
       <View style={styles.videoSection}>
-        {mainVideo ? (
+        {mainVideo && mainVideo.videoTrack ? (
           <View style={styles.mainVideoWrapper}>
-            <RTCView
-              streamURL={mainVideo.streamUrl}
+            {/* eslint-disable-next-line deprecation/deprecation */}
+            <VideoView
+              videoTrack={mainVideo.videoTrack}
               style={styles.mainVideo}
               objectFit="cover"
               zOrder={0}
+              mirror={mainVideo.isLocal}
             />
             <View style={styles.participantLabel}>
               <Text style={styles.participantText}>
@@ -530,7 +695,16 @@ const VideoCallScreen = () => {
           <View style={styles.thumbnailRow}>
             {thumbnails.map(tile => (
               <View key={tile.id} style={styles.thumbnail}>
-                <RTCView streamURL={tile.streamUrl} style={styles.thumbnailVideo} objectFit="cover" zOrder={1} />
+                {tile.videoTrack ? (
+                  // @ts-ignore - VideoView deprecated but still works
+                  <VideoView
+                    videoTrack={tile.videoTrack}
+                    style={styles.thumbnailVideo}
+                    objectFit="cover"
+                    zOrder={1}
+                    mirror={tile.isLocal}
+                  />
+                ) : null}
                 <View style={styles.thumbnailLabel}>
                   <Text style={styles.thumbnailText}>{tile.participantName}</Text>
                 </View>
@@ -589,6 +763,8 @@ const VideoCallScreen = () => {
     </SafeAreaView>
   );
 };
+
+export default VideoCallScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -756,6 +932,3 @@ const styles = StyleSheet.create({
     marginTop: 10
   }
 });
-
-export default VideoCallScreen;
-

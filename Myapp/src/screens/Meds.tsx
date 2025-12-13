@@ -54,7 +54,7 @@ const PAGE_SIZE = 10;
 const MedsScreen = () => {
   const insets = useSafeAreaInsets();
   const { user, loading: authLoading } = useAuth();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
 
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);

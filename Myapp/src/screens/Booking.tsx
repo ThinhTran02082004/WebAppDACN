@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList, Image, Modal, Alert, useWindowDimensions, TextInput, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
@@ -6,6 +6,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { AppIcons, IconColors } from '../config/icons';
 import { apiService, Hospital, ServiceItem, Doctor } from '../services/api';
 import { ToastService } from '../services/ToastService';
+import { useSocket } from '../contexts/SocketContext';
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -157,6 +158,11 @@ export default function BookingAllInOne() {
     limit: 3,
     date: '',
   });
+  
+  // Realtime time slot updates
+  const { socket, isConnected, emit, on, off } = useSocket();
+  const [lockedSlots, setLockedSlots] = useState<Map<string, string>>(new Map()); // Map<`${scheduleId}_${timeSlotId}`, userId>
+  const lockedSlotsRef = useRef<Map<string, string>>(new Map());
 
   // Step 4
   const [appointmentType, setAppointmentType] = useState<string>('first-visit');
@@ -686,6 +692,193 @@ export default function BookingAllInOne() {
     };
     loadDaySlots();
   }, [doctorId, date, doctorSchedules]);
+
+  // Join appointment room for realtime updates
+  useEffect(() => {
+    if (!socket || !isConnected || !doctorId || !date) return;
+
+    const formattedDate = date.split('T')[0]; // Ensure YYYY-MM-DD format
+    console.log('[Booking] Joining appointment room:', { doctorId, date: formattedDate });
+    
+    emit('join_appointment_room', {
+      doctorId,
+      date: formattedDate
+    });
+
+    return () => {
+      // Leave room when component unmounts or dependencies change
+      console.log('[Booking] Leaving appointment room');
+    };
+  }, [socket, isConnected, doctorId, date, emit]);
+
+  // Track previously selected slot for cleanup
+  const previousSelectedSlotRef = useRef<{ scheduleId: string; timeSlotId: string } | null>(null);
+
+  // Lock/unlock slot when user selects/deselects
+  useEffect(() => {
+    if (!socket || !isConnected || !doctorId || !date) return;
+
+    const currentSlot = selectedSlot && selectedSlot.scheduleId && selectedSlot.startTime
+      ? { scheduleId: selectedSlot.scheduleId, timeSlotId: normalizeTime(selectedSlot.startTime) }
+      : null;
+
+    // Unlock previous slot if changed
+    if (previousSelectedSlotRef.current && 
+        previousSelectedSlotRef.current.scheduleId !== currentSlot?.scheduleId &&
+        previousSelectedSlotRef.current.timeSlotId !== currentSlot?.timeSlotId) {
+      emit('unlock_time_slot', {
+        scheduleId: previousSelectedSlotRef.current.scheduleId,
+        timeSlotId: previousSelectedSlotRef.current.timeSlotId,
+        doctorId,
+        date: date.split('T')[0]
+      });
+    }
+
+    // Lock new slot
+    if (currentSlot) {
+      emit('lock_time_slot', {
+        scheduleId: currentSlot.scheduleId,
+        timeSlotId: currentSlot.timeSlotId,
+        doctorId,
+        date: date.split('T')[0]
+      });
+      previousSelectedSlotRef.current = currentSlot;
+    } else {
+      previousSelectedSlotRef.current = null;
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (previousSelectedSlotRef.current && socket && isConnected) {
+        emit('unlock_time_slot', {
+          scheduleId: previousSelectedSlotRef.current.scheduleId,
+          timeSlotId: previousSelectedSlotRef.current.timeSlotId,
+          doctorId,
+          date: date.split('T')[0]
+        });
+      }
+    };
+  }, [socket, isConnected, doctorId, date, selectedSlot, emit]);
+
+  // Listen to realtime time slot updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleTimeSlotUpdate = (data: { scheduleId: string; timeSlotInfo: any }) => {
+      const { scheduleId, timeSlotInfo } = data;
+      console.log('[Booking] Time slot updated:', { scheduleId, timeSlotInfo });
+
+      // Update dayTimeSlots with new booking information
+      setDayTimeSlots(prev => {
+        return prev.map(slot => {
+          // Match by scheduleId and startTime
+          if (slot.scheduleId === scheduleId && 
+              normalizeTime(slot.startTime) === normalizeTime(timeSlotInfo.startTime)) {
+            return {
+              ...slot,
+              isBooked: timeSlotInfo.isBooked,
+              bookedCount: timeSlotInfo.bookedCount,
+              maxBookings: timeSlotInfo.maxBookings || slot.maxBookings
+            };
+          }
+          return slot;
+        });
+      });
+
+      // Show notification if slot becomes fully booked (only if user is viewing this date)
+      if (date && timeSlotInfo.isBooked) {
+        ToastService.show(
+          'info',
+          'Cập nhật khung giờ',
+          `Khung giờ ${timeSlotInfo.startTime}-${timeSlotInfo.endTime} đã được đặt kín`
+        );
+      } else if (date && timeSlotInfo.bookedCount > 0) {
+        const remaining = (timeSlotInfo.maxBookings || 3) - timeSlotInfo.bookedCount;
+        if (remaining > 0) {
+          ToastService.show(
+            'info',
+            'Cập nhật khung giờ',
+            `Khung giờ ${timeSlotInfo.startTime}-${timeSlotInfo.endTime} còn ${remaining}/${timeSlotInfo.maxBookings || 3} chỗ trống`
+          );
+        }
+      }
+    };
+
+    const handleTimeSlotLocked = (data: { scheduleId: string; timeSlotId: string; userId: string }) => {
+      const { scheduleId, timeSlotId, userId } = data;
+      console.log('[Booking] Time slot locked:', { scheduleId, timeSlotId, userId });
+      
+      const slotKey = `${scheduleId}_${timeSlotId}`;
+      setLockedSlots(prev => {
+        const newMap = new Map(prev);
+        newMap.set(slotKey, userId);
+        lockedSlotsRef.current = newMap;
+        return newMap;
+      });
+    };
+
+    const handleTimeSlotUnlocked = (data: { scheduleId: string; timeSlotId: string }) => {
+      const { scheduleId, timeSlotId } = data;
+      console.log('[Booking] Time slot unlocked:', { scheduleId, timeSlotId });
+      
+      const slotKey = `${scheduleId}_${timeSlotId}`;
+      setLockedSlots(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(slotKey);
+        lockedSlotsRef.current = newMap;
+        return newMap;
+      });
+    };
+
+    const handleCurrentLockedSlots = (data: { lockedSlots: Array<{ scheduleId: string; timeSlotId: string; userId: string }> }) => {
+      console.log('[Booking] Current locked slots:', data.lockedSlots);
+      const locksMap = new Map<string, string>();
+      data.lockedSlots.forEach(({ scheduleId, timeSlotId, userId }) => {
+        locksMap.set(`${scheduleId}_${timeSlotId}`, userId);
+      });
+      setLockedSlots(locksMap);
+      lockedSlotsRef.current = locksMap;
+    };
+
+    const handleTimeSlotLockRejected = (data: { message?: string; scheduleId?: string; timeSlotId?: string }) => {
+      console.warn('[Booking] Lock rejected:', data);
+      ToastService.show(
+        'error',
+        'Khung giờ không khả dụng',
+        'Khung giờ này đang được người khác xử lý. Vui lòng chọn khung giờ khác.'
+      );
+      
+      // Reset selection if our selection was rejected
+      if (selectedSlot && data.scheduleId === selectedSlot.scheduleId && 
+          data.timeSlotId === normalizeTime(selectedSlot.startTime)) {
+        setTimeSlot(null);
+        setSelectedSlot(null);
+        previousSelectedSlotRef.current = null;
+      }
+    };
+
+    const handleTimeSlotLockConfirmed = (data: { scheduleId: string; timeSlotId: string }) => {
+      console.log('[Booking] Lock confirmed:', data);
+    };
+
+    // Register event listeners
+    on('time_slot_updated', handleTimeSlotUpdate);
+    on('time_slot_locked', handleTimeSlotLocked);
+    on('time_slot_unlocked', handleTimeSlotUnlocked);
+    on('current_locked_slots', handleCurrentLockedSlots);
+    on('time_slot_lock_rejected', handleTimeSlotLockRejected);
+    on('time_slot_lock_confirmed', handleTimeSlotLockConfirmed);
+
+    // Cleanup listeners
+    return () => {
+      off('time_slot_updated', handleTimeSlotUpdate);
+      off('time_slot_locked', handleTimeSlotLocked);
+      off('time_slot_unlocked', handleTimeSlotUnlocked);
+      off('current_locked_slots', handleCurrentLockedSlots);
+      off('time_slot_lock_rejected', handleTimeSlotLockRejected);
+      off('time_slot_lock_confirmed', handleTimeSlotLockConfirmed);
+    };
+  }, [socket, on, off, date, selectedSlot]);
 
   useEffect(() => {
     if (!date) {
@@ -1304,18 +1497,23 @@ export default function BookingAllInOne() {
                         const endMin = (isNaN(eh) ? 0 : eh) * 60 + (isNaN(em) ? 0 : em);
                         isPastTime = endMin <= nowMin;
                       }
-                      const disabled = fullyBooked || isBookedFlag || isPastTime || dailyLimitReached;
+                      // Check if slot is locked by someone else
+                      const slotKey = `${slot?.scheduleId}_${normalizeTime(start)}`;
+                      const isLocked = lockedSlots.has(slotKey);
+                      const disabled = fullyBooked || isBookedFlag || isPastTime || dailyLimitReached || isLocked;
                       const active = !disabled && timeSlot && normalizeTime(timeSlot) === normalizeTime(start);
                       const marginStyle = { marginRight: (index % 3 === 2) ? 0 : 8 } as any;
                       return (
                         <TouchableOpacity
-                          style={[styles.timeCell, marginStyle, active && styles.timeCellActive, disabled && { opacity: 0.45 }]}
+                          style={[styles.timeCell, marginStyle, active && styles.timeCellActive, disabled && { opacity: 0.45 }, isLocked && styles.timeCellLocked]}
                           onPress={() => { if (!disabled) { setTimeSlot(normalizeTime(start)); setSelectedSlot({ startTime: normalizeTime(start), endTime: normalizeTime(end), scheduleId: slot?.scheduleId }); setTimeOpen(false); } }}
                           activeOpacity={0.9}
                           disabled={disabled}
                         >
                           <Text style={[styles.timeCellText, active && styles.timeCellTextActive]}>{label}</Text>
-                          {disabled ? (
+                          {isLocked ? (
+                            <Text style={[styles.timeCellSub, { color: '#f59e0b' }]}>Đang chọn</Text>
+                          ) : disabled ? (
                             <Text style={[styles.timeCellSub, { color: '#ef4444' }]}>Hết chỗ</Text>
                           ) : cap > 0 ? (
                             <Text style={styles.timeCellSub}>{`Còn ${remaining}/${cap}`}</Text>
@@ -1697,12 +1895,15 @@ const styles = StyleSheet.create({
   calendarTrigger: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, 
                      borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8 },
   calendarText: { color: '#111827', fontWeight: '700', marginLeft: 8 },
-  limitInfo: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#bfdbfe', marginTop: 8 },
+  limitInfo: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 8, padding: 10,
+               borderWidth: 1, borderColor: '#bfdbfe', marginTop: 8 },
   limitInfoText: { color: '#1e40af', fontSize: 12, flex: 1 },
-  limitAlertModal: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fee2e2', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#fecaca', marginBottom: 12 },
+  limitAlertModal: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fee2e2', borderRadius: 8, 
+                     padding: 12, borderWidth: 1, borderColor: '#fecaca', marginBottom: 12 },
   limitAlertTitle: { color: '#b91c1c', fontWeight: '700', marginBottom: 4 },
   limitAlertText: { color: '#b91c1c', fontSize: 12 },
-  limitInfoWarning: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fffbeb', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#fcd34d', marginTop: 8 },
+  limitInfoWarning: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fffbeb', borderRadius: 8, 
+                      padding: 12, borderWidth: 1, borderColor: '#fcd34d', marginTop: 8 },
   limitInfoWarningText: { color: '#92400e', fontSize: 12, flex: 1 },
   pill: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 999,
           marginRight: 8, backgroundColor: '#fff' },
@@ -1715,6 +1916,7 @@ const styles = StyleSheet.create({
   timeCell: { width: '32%', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, 
               paddingVertical: 14, paddingHorizontal: 10, marginBottom: 10, alignItems: 'center' },
   timeCellActive: { borderColor: '#0a84ff', backgroundColor: '#eff6ff' },
+  timeCellLocked: { borderColor: '#f59e0b', backgroundColor: '#fffbeb' },
   timeCellText: { fontWeight: '700', color: '#111827', fontSize: 13 },
   timeCellTextActive: { color: '#0a84ff' },
   timeCellSub: { marginTop: 4, color: '#10b981', fontWeight: '600', fontSize: 11 },

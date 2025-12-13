@@ -32,14 +32,16 @@ export default function FacilityCard({ facility, onPress, onBookingPress }: Prop
         defaultSource={{ uri: 'https://placehold.co/160x120' }}
       />
       <View style={styles.facilityContent}>
-        <Text style={styles.facilityName} numberOfLines={2}>
-          {facility.name}
-        </Text>
-        <View style={styles.locationContainer}>
-          <Ionicons name="location" size={10} color="#666" />
-          <Text style={styles.facilityAddress} numberOfLines={1}>
-            {facility.address}
+        <View style={styles.textContainer}>
+          <Text style={styles.facilityName} numberOfLines={2}>
+            {facility.name}
           </Text>
+          <View style={styles.locationContainer}>
+            <Ionicons name="location" size={10} color="#666" />
+            <Text style={styles.facilityAddress} numberOfLines={1}>
+              {facility.address}
+            </Text>
+          </View>
         </View>
         <TouchableOpacity
           style={styles.facilityBookingButton}
@@ -80,6 +82,10 @@ const styles = StyleSheet.create({
   facilityContent: {
     padding: 12,
     flex: 1,
+    justifyContent: 'space-between',
+  },
+  textContainer: {
+    flex: 1,
   },
   facilityName: {
     fontSize: 14,
@@ -104,7 +110,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
-    marginTop: 8,
+    marginTop: 'auto',
     alignSelf: 'stretch',
   },
   facilityBookingButtonText: {
