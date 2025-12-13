@@ -5,18 +5,18 @@ class LiveKitService {
     this.apiKey = process.env.LIVEKIT_API_KEY;
     this.apiSecret = process.env.LIVEKIT_API_SECRET;
     this.wsUrl = process.env.LIVEKIT_WS_URL;
-    
+
     // console.log('=== LIVEKIT SERVICE INIT ===');
     // console.log('API Key exists:', !!this.apiKey);
     // console.log('API Secret exists:', !!this.apiSecret);
     // console.log('WS URL:', this.wsUrl);
     // console.log('============================');
-    
+
     if (!this.apiKey || !this.apiSecret || !this.wsUrl) {
       console.error('Missing LiveKit credentials in environment variables');
       throw new Error('Missing LiveKit credentials');
     }
-    
+
     // Initialize Room Service Client for managing rooms
     const host = this.wsUrl.replace('wss://', 'https://').replace('ws://', 'http://');
     this.roomService = new RoomServiceClient(host, this.apiKey, this.apiSecret);
@@ -36,7 +36,7 @@ class LiveKitService {
     // console.log('Participant name:', participantName);
     // console.log('Participant identity:', participantIdentity);
     // console.log('Metadata:', metadata);
-    
+
     try {
       const at = new AccessToken(this.apiKey, this.apiSecret, {
         identity: participantIdentity,
@@ -79,12 +79,12 @@ class LiveKitService {
       const room = await this.roomService.createRoom({
         name: roomName,
         emptyTimeout: options.emptyTimeout || 600, // 10 minutes
-        maxParticipants: options.maxParticipants || 2,
+        maxParticipants: options.maxParticipants || 30,
         metadata: JSON.stringify(options.metadata || {})
       });
       return room;
     } catch (error) {
-      console.error('Error creating room:', error);
+      console.error('Error creating room:', error); 
       throw error;
     }
   }
