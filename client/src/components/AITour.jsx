@@ -147,7 +147,7 @@ const TourButton = () => {
       title="Hướng dẫn sử dụng AI"
     >
       <FaQuestionCircle className="text-xl" />
-      <span className="text-sm font-medium pr-2 whitespace-nowrap">
+      <span className="hidden md:inline-block text-sm font-medium pr-2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
         Hướng dẫn AI
       </span>
     </button>
