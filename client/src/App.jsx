@@ -115,7 +115,6 @@ import UserVideoCallHistory from './pages/user/VideoCallHistory';
 import UserChat from './pages/user/Chat';
 import DoctorChat from './pages/doctor/Chat';
 import ChatDock from './components/ChatDock';
-import AITour from './components/AITour';
 
 // Doctor Prescription Drafts
 import DoctorPrescriptionDrafts from './pages/doctor/PrescriptionDrafts';
@@ -171,7 +170,6 @@ function AppContent() {
           <Route path="dashboard" element={<DoctorDashboard />} />
           <Route path="appointments" element={<DoctorAppointments />} />
           <Route path="appointments/:id" element={<DoctorAppointmentDetail />} />
-          <Route path="prescriptions/:id" element={<PrescriptionDetail />} />
           <Route path="patients" element={<DoctorPatients />} />
           <Route path="medical-records/:patientId" element={<DoctorMedicalRecords />} />
           <Route path="medical-records" element={<DoctorMedicalRecords />} />
@@ -295,10 +293,9 @@ function App() {
     <AuthProvider>
       <SocketProvider>
         <NotificationProvider>
-          <AITour>
-            <Router>
-              <AppContent />
-              <ToastContainer
+          <Router>
+            <AppContent />
+            <ToastContainer
               position="top-right"
               autoClose={5000}
               hideProgressBar={false}
@@ -316,8 +313,7 @@ function App() {
                 marginTop: '4.5rem'
               }}
             />
-            </Router>
-          </AITour>
+          </Router>
         </NotificationProvider>
       </SocketProvider>
     </AuthProvider>

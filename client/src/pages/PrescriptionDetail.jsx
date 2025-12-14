@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import { toast } from 'react-toastify';
@@ -13,10 +13,6 @@ const PrescriptionDetail = () => {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const isDoctor = user?.roleType === 'doctor' || user?.role === 'doctor';
-  const autoPrint = searchParams.get('autoPrint') === 'true';
-  const closeAfterPrint = searchParams.get('closeAfterPrint') === 'true';
   const [prescription, setPrescription] = useState(null);
   const [appointment, setAppointment] = useState(null);
   const [bill, setBill] = useState(null);
@@ -25,7 +21,6 @@ const PrescriptionDetail = () => {
   const [paymentMethod, setPaymentMethod] = useState('momo'); // Default to momo instead of cash
   const [processingPayment, setProcessingPayment] = useState(false);
   const [showPayPalModal, setShowPayPalModal] = useState(false);
-  const [autoPrintDone, setAutoPrintDone] = useState(false);
 
   useEffect(() => {
     if (id && user) {
@@ -219,33 +214,6 @@ const PrescriptionDetail = () => {
     window.print();
   };
 
-  useEffect(() => {
-    if (autoPrint && prescription && !autoPrintDone) {
-      handlePrint();
-      setAutoPrintDone(true);
-    }
-  }, [autoPrint, prescription, autoPrintDone]);
-
-  useEffect(() => {
-    if (!(autoPrint && closeAfterPrint)) return;
-
-    const handleAfterPrint = () => {
-      if (window.opener) {
-        window.close();
-      }
-    };
-
-    window.addEventListener('afterprint', handleAfterPrint);
-
-    // Fallback in case afterprint does not fire
-    const fallback = setTimeout(handleAfterPrint, 1200);
-
-    return () => {
-      window.removeEventListener('afterprint', handleAfterPrint);
-      clearTimeout(fallback);
-    };
-  }, [autoPrint, closeAfterPrint]);
-
   if (loading) {
     return (
       <div className="bg-gray-50 min-h-screen py-8">
@@ -296,13 +264,6 @@ const PrescriptionDetail = () => {
 
   const paymentStatus = getPrescriptionPaymentStatus();
   const appointmentId = prescription.appointmentId?._id || prescription.appointmentId;
-  const appointmentDetailPath = appointmentId
-    ? (isDoctor ? `/doctor/appointments/${appointmentId}` : `/appointments/${appointmentId}`)
-    : null;
-  const backLink = appointmentDetailPath
-    || (prescription.createdFromDraft
-      ? (isDoctor ? '/doctor/prescription-drafts' : '/prescriptions')
-      : (isDoctor ? '/doctor/appointments' : '/appointments'));
 
   return (
     <div className="bg-gray-50 min-h-screen py-8">
@@ -311,7 +272,7 @@ const PrescriptionDetail = () => {
           {/* Header */}
           <div className="mb-6 print:hidden">
             <Link 
-              to={backLink}
+              to={appointmentId ? `/appointments/${appointmentId}` : (prescription.createdFromDraft ? '/prescriptions' : '/appointments')} 
               className="inline-flex items-center text-primary hover:text-primary-dark"
             >
               <FaArrowLeft className="mr-2" />
@@ -500,9 +461,9 @@ const PrescriptionDetail = () => {
               <FaPrint className="mr-2" /> In đơn thuốc
             </button>
             
-            {appointmentDetailPath && !prescription.createdFromDraft && (
+            {appointmentId && !prescription.createdFromDraft && (
               <Link 
-                to={appointmentDetailPath}
+                to={`/appointments/${appointmentId}`}
                 className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Xem chi tiết lịch hẹn

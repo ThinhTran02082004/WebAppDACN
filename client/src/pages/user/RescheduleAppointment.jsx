@@ -57,16 +57,9 @@ const RescheduleAppointment = () => {
 
       console.log("Connecting to socket server at:", socketUrl);
 
-      // Get JWT token from storage or context
-      const storedUser = JSON.parse(localStorage.getItem('userInfo')) ||
-                         JSON.parse(sessionStorage.getItem('userInfo')) || {};
-      const token = user?.token || storedUser.token;
-
-      if (!token) {
-        console.error('Socket connection error: missing auth token');
-        toast.error('Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại để đổi lịch.');
-        return;
-      }
+      // Get JWT token from localStorage
+      const userInfo = JSON.parse(localStorage.getItem('userInfo')) || {};
+      const token = userInfo.token;
 
       // Create socket instance with improved configuration
       const socketInstance = io(socketUrl, {
