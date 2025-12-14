@@ -9,9 +9,11 @@ type AuthContextData = {
   loading: boolean;
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signInWithGoogle: (token: string, tokenType?: 'idToken' | 'accessToken', rememberMe?: boolean) => Promise<void>;
+  signInWithFacebook: (accessToken: string, userID: string, rememberMe?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
   signUp: (data: any) => Promise<void>;
   resendVerification: (email: string) => Promise<void>;
+  updateUser: (userData: User) => void;
 };
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
@@ -28,8 +30,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // set token in apiService so subsequent requests include Authorization header
           apiService.setToken(token);
           // Optionally fetch current user
-          const res = await apiService.getCurrentUser();
-          if (res.success) setUser(res.data || null);
+          try {
+            const res = await apiService.getCurrentUser();
+            if (res.success) {
+              setUser(res.data || null);
+            } else {
+              // Token may be invalid, clear it
+              await AsyncStorage.removeItem('token');
+              apiService.setToken(null);
+              setUser(null);
+            }
+          } catch (error: any) {
+            // If getCurrentUser fails with 401, token is expired
+            if (error?.response?.status === 401) {
+              await AsyncStorage.removeItem('token');
+              apiService.setToken(null);
+            }
+            setUser(null);
+          }
         }
       } catch {
         // ignore
@@ -104,13 +122,60 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const signInWithFacebook = async (accessToken: string, userID: string, rememberMe = false) => {
+    try {
+      console.log('[AuthContext] Starting Facebook login with userID:', userID);
+      const res = await apiService.facebookLogin(accessToken, userID);
+      
+      if (!res) {
+        throw new Error('Không nhận được phản hồi từ server');
+      }
+      
+      if (res.success && res.data?.token) {
+        console.log('[AuthContext] Facebook login successful, setting token');
+        if (rememberMe) {
+          await AsyncStorage.setItem('token', res.data.token);
+        }
+        apiService.setToken(res.data.token);
+        
+        console.log('[AuthContext] Fetching current user info');
+        const me = await apiService.getCurrentUser();
+        if (me.success && me.data) {
+          console.log('[AuthContext] User info fetched, setting user:', me.data._id);
+          setUser(me.data);
+        } else {
+          console.warn('[AuthContext] Failed to fetch user info, but login was successful');
+          // Still consider login successful even if we can't fetch user info
+        }
+      } else {
+        const errorMessage = res.message || 'Facebook login failed';
+        console.error('[AuthContext] Facebook login failed:', errorMessage);
+        throw new Error(errorMessage);
+      }
+    } catch (e: any) {
+      console.error('[AuthContext] Facebook login error:', e);
+      // Re-throw with more context if needed
+      if (e?.response?.data?.message) {
+        throw new Error(e.response.data.message);
+      } else if (e?.message) {
+        throw e;
+      } else {
+        throw new Error('Đăng nhập Facebook thất bại. Vui lòng thử lại.');
+      }
+    }
+  };
+
   const resendVerification = async (email: string) => {
     const res = await apiService.resendVerification(email);
     if (!res.success) throw new Error(res.message || 'Resend verification failed');
   };
 
+  const updateUser = (userData: User) => {
+    setUser(userData);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp, resendVerification, signInWithGoogle }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, signUp, resendVerification, signInWithGoogle, signInWithFacebook, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,54 +1,73 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Specialty } from '../types/specialty';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { AppIcons, IconColors } from '../config/icons';
-import { normalizeImageSource } from '../utils/helpers';
+import { AppIcons, IconColors, IconSizes } from '../config/icons';
 
 interface SpecialtyCardProps {
   specialty: Specialty;
-  size?: 'small' | 'medium' | 'large';
   onPress?: (specialty: Specialty) => void;
+  onBookingPress?: (specialty: Specialty) => void;
 }
 
-export const SpecialtyCard = ({ specialty, size = 'medium', onPress }: SpecialtyCardProps) => {
-  const cardStyle = [
-    styles.card,
-    size === 'small' && styles.smallCard,
-    size === 'large' && styles.largeCard,
-  ];
+export const SpecialtyCard = ({ specialty, onPress, onBookingPress }: SpecialtyCardProps) => {
+  const [imageError, setImageError] = useState(false);
+
+  const getImageUri = () => {
+    if (typeof (specialty as any).image === 'string' && (specialty as any).image) {
+      return (specialty as any).image;
+    }
+    if (typeof (specialty as any).imageUrl === 'string' && (specialty as any).imageUrl) {
+      return (specialty as any).imageUrl;
+    }
+    if ((specialty as any).image && typeof (specialty as any).image === 'object') {
+      const secureUrl = (specialty as any).image?.secureUrl;
+      if (typeof secureUrl === 'string' && secureUrl) {
+        return secureUrl;
+      }
+    }
+    return null;
+  };
+
+  const imageUri = getImageUri();
+  const hasImage = imageUri && !imageError;
 
   return (
     <TouchableOpacity
-      style={cardStyle}
+      style={styles.card}
       onPress={() => onPress?.(specialty)}
       activeOpacity={0.7}
     >
-      <Image
-        source={normalizeImageSource(specialty.image, 'https://placehold.co/160x120')}
-        style={styles.specialtyImage}
-        defaultSource={{ uri: 'https://placehold.co/160x120' }}
-      />
-      <View style={styles.contentContainer}>
-        <Text style={styles.title} numberOfLines={2}>
-          {specialty.name}
-        </Text>
-        {size !== 'small' && specialty.description && (
-          <Text style={styles.description} numberOfLines={2}>
-            {specialty.description}
-          </Text>
-        )}
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <Ionicons name={AppIcons.doctor} size={14} color={IconColors.primary} />
-            <Text style={styles.statsText}>{specialty.doctorCount || 0} </Text>
-          </View>
-          <View style={styles.statItem}>
-            <Ionicons name={AppIcons.service} size={14} color={IconColors.primary} />
-            <Text style={styles.statsText}>{specialty.serviceCount || 0} </Text>
-          </View>
+      {hasImage ? (
+        <Image
+          source={{ uri: imageUri }}
+          style={styles.specialtyImage}
+          onError={() => setImageError(true)}
+          onLoadStart={() => setImageError(false)}
+        />
+      ) : (
+        <View style={styles.imagePlaceholder}>
+          <Ionicons name={AppIcons.specialtyOutline as any} size={IconSizes.lg} color={IconColors.primary} />
         </View>
-        <TouchableOpacity style={styles.bookingButton} onPress={() => onPress?.(specialty)}>
+      )}
+      <View style={styles.contentContainer}>
+        <View style={styles.textContainer}>
+          <Text style={styles.title} numberOfLines={2}>
+            {specialty.name}
+          </Text>
+          {specialty.description && (
+            <Text style={styles.description} numberOfLines={2}>
+              {specialty.description}
+            </Text>
+          )}
+        </View>
+        <TouchableOpacity 
+          style={styles.bookingButton} 
+          onPress={(e) => {
+            e.stopPropagation();
+            onBookingPress ? onBookingPress(specialty) : onPress?.(specialty);
+          }}
+        >
           <Text style={styles.bookingButtonText}>Đặt khám ngay</Text>
         </TouchableOpacity>
       </View>
@@ -65,27 +84,30 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    width: 160,
-    height: 280,
-    marginRight: 12,
+    width: 170,
+    height: 245,
+    marginRight: 16,
     marginBottom: 18,
     overflow: 'hidden',
-  },
-  smallCard: {
-    width: 120,
-    height: 140,
-  },
-  largeCard: {
-    width: 160,
-    height:280,
   },
   specialtyImage: {
     width: '100%',
     height: 120,
     backgroundColor: '#f0f0f0',
   },
+  imagePlaceholder: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   contentContainer: {
     padding: 12,
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  textContainer: {
     flex: 1,
   },
   title: {
@@ -99,36 +121,13 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginBottom: 8,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
-    marginBottom: 4,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statIcon: {
-    fontSize: 12,
-    marginRight: 4,
-  },
-  statsText: {
-    fontSize: 12,
-    color: '#1e293b',
-    fontWeight: '600',
-    marginLeft: 4,
-  },
   bookingButton: {
     backgroundColor: '#0a84ff',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
     alignSelf: 'stretch',
+    marginTop: 'auto',
   },
   bookingButtonText: {
     color: '#fff',

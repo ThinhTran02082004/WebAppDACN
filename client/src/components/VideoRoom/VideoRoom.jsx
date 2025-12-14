@@ -234,12 +234,15 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
       });
     }
   };
+  const containerClasses = 'fixed inset-0 z-[9999] bg-neutral-950 flex flex-col p-1.5 sm:p-2 gap-1 sm:gap-1.5 overflow-hidden';
+  const panelClasses = 'flex-1 bg-neutral-900 border border-neutral-800 rounded-xl p-1.5 sm:p-1.5 shadow-2xl flex flex-col min-h-0';
+
   if (loading) {
     return (
-      <div className="video-room-container">
-        <div className="video-room-loading">
-          <FaSpinner className="animate-spin text-4xl text-blue-500 mb-4" />
-          <p className="text-gray-600">Đang kết nối với phòng video...</p>
+      <div className={containerClasses}>
+        <div className="flex-1 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center flex-col text-slate-100 gap-3 shadow-2xl">
+          <FaSpinner className="animate-spin text-4xl text-blue-400" />
+          <p className="text-sm text-slate-300">Đang kết nối với phòng video...</p>
         </div>
       </div>
     );
@@ -247,12 +250,12 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
 
   if (error) {
     return (
-      <div className="video-room-container">
-        <div className="video-room-error">
-          <p className="text-red-600 mb-4">{error}</p>
+      <div className={containerClasses}>
+        <div className="flex-1 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center flex-col text-slate-100 gap-3 shadow-2xl">
+          <p className="text-red-400 text-center text-sm">{error}</p>
           <button 
             onClick={onClose}
-            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
           >
             Đóng
           </button>
@@ -262,27 +265,27 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
   }
 
   return (
-    <div className="video-room-container">
-      <div className="video-room-header">
-        <div className="room-info">
-          <h3 className="text-lg font-semibold text-white">
+    <div className={containerClasses}>
+      <div className="flex items-start justify-between rounded-xl px-2 py-1 bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg gap-1.5">
+        <div className="flex flex-col gap-0.5 text-white min-w-0">
+          <h3 className="text-[11px] sm:text-xs font-semibold leading-tight truncate">
             {roomInfo?.meetingType === 'internal' ? 'Cuộc họp nội bộ' : 'Phòng video khám bệnh'}
           </h3>
           {roomInfo?.appointmentInfo && (
-            <div className="text-sm text-gray-200">
-              <span>Bác sĩ: {roomInfo.appointmentInfo.doctorName}</span>
-              <span className="mx-2">•</span>
-              <span>Bệnh nhân: {roomInfo.appointmentInfo.patientName}</span>
+            <div className="flex items-center flex-wrap gap-1 text-[9px] sm:text-[10px] text-white">
+              <span className="truncate">Bác sĩ: {roomInfo.appointmentInfo.doctorName}</span>
+              <span className="opacity-70">•</span>
+              <span className="truncate">Bệnh nhân: {roomInfo.appointmentInfo.patientName}</span>
             </div>
           )}
           {roomInfo?.roomCode && (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-sm text-gray-200">
-                Mã phòng: <strong className="text-yellow-300 text-base">{roomInfo.roomCode}</strong>
+            <div className="flex items-center flex-wrap gap-1 text-[9px] sm:text-[10px] text-white font-medium">
+              <span className="truncate">
+                Mã phòng: <strong className="text-yellow-300 text-[10px] sm:text-[11px] tracking-wide">{roomInfo.roomCode}</strong>
               </span>
               <button
                 onClick={handleCopyRoomCode}
-                className="px-2 py-1 bg-white/20 hover:bg-white/30 rounded text-xs flex items-center gap-1 transition-colors"
+                className="inline-flex items-center gap-1 px-1 py-0.5 rounded bg-white/20 hover:bg-white/30 text-white text-[9px] sm:text-[10px] font-semibold transition-colors"
                 title="Sao chép mã phòng"
               >
                 {copied ? <FaCheck className="text-green-300" /> : <FaCopy />}
@@ -293,38 +296,44 @@ const VideoRoom = ({ roomId, onClose, userRole, meetingMode = false, initialToke
         </div>
         <button 
           onClick={handleLeave}
-          className="close-button"
+          className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 hover:bg-white/30 text-white transition-transform duration-200 hover:scale-105"
           title="Rời phòng"
         >
           <FaTimes />
         </button>
       </div>
-      {token && roomInfo && !roomEnded && (
-        <LiveKitRoom
-          video={true}
-          audio={true}
-          token={token}
-          serverUrl={roomInfo.wsUrl}
-          onConnected={handleConnected}
-          onDisconnected={handleDisconnected}
-          data-lk-theme="default"
-          style={{ height: 'calc(100% - 60px)' }}
-        >
-          <VideoConference />
-          <RoomAudioRenderer />
-        </LiveKitRoom>
-      )}
-      {roomEnded && (
-        <div className="video-room-ended">
-          <p className="text-lg text-gray-600 mb-4">Cuộc gọi video đã kết thúc</p>
-          <button 
-            onClick={onClose}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-          >
-            Đóng
-          </button>
-        </div>
-      )}
+      <div className={panelClasses}>
+        {token && roomInfo && !roomEnded && (
+          <div className="flex-1 min-h-0 rounded-lg overflow-hidden bg-black">
+            <LiveKitRoom
+              video={true}
+              audio={true}
+              token={token}
+              serverUrl={roomInfo.wsUrl}
+              onConnected={handleConnected}
+              onDisconnected={handleDisconnected}
+              data-lk-theme="default"
+              style={{ height: '100%' }}
+            >
+              <VideoConference />
+              <RoomAudioRenderer />
+            </LiveKitRoom>
+          </div>
+        )}
+        {roomEnded && (
+          <div className="flex-1 flex items-center justify-center text-slate-100 bg-neutral-900 rounded-lg border border-neutral-800">
+            <div className="flex flex-col items-center gap-3">
+              <p className="text-base sm:text-lg text-slate-200">Cuộc gọi video đã kết thúc</p>
+              <button 
+                onClick={onClose}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

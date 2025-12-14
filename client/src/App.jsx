@@ -171,6 +171,7 @@ function AppContent() {
           <Route path="dashboard" element={<DoctorDashboard />} />
           <Route path="appointments" element={<DoctorAppointments />} />
           <Route path="appointments/:id" element={<DoctorAppointmentDetail />} />
+          <Route path="prescriptions/:id" element={<PrescriptionDetail />} />
           <Route path="patients" element={<DoctorPatients />} />
           <Route path="medical-records/:patientId" element={<DoctorMedicalRecords />} />
           <Route path="medical-records" element={<DoctorMedicalRecords />} />

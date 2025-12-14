@@ -1,9 +1,13 @@
-// import { Platform } from 'react-native';
+import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// import { API_BASE } from '../config';
 
-const BASE_URL = "http://localhost:5000/api";
+// For Android emulator, use 10.0.2.2 to access host machine's localhost
+// For iOS simulator, use localhost
+// For physical devices via WiFi, use your computer's IP address (e.g., http://192.168.1.xxx:5000/api)
+const BASE_URL = Platform.OS === 'android' 
+  ? "http://10.0.2.2:5000/api" 
+  : "http://localhost:5000/api";
 
 export interface Hospital {
   _id: string;
@@ -76,6 +80,10 @@ export interface Doctor {
   consultationFee: number;
   isAvailable: boolean;
   averageRating?: number;
+  ratings?: {
+    average?: number;
+    count?: number;
+  };
   services?: Array<{
     _id: string;
     name: string;
@@ -89,8 +97,11 @@ export interface Specialty {
   description?: string;
   icon?: string;
   imageUrl?: string;
-  image?: { secureUrl: string };
+  image?: string | { secureUrl: string };
   isActive?: boolean;
+  // Client-enriched fields
+  doctorCount?: number;
+  serviceCount?: number;
 }
 
 export interface ServiceItem {
@@ -135,20 +146,56 @@ class ApiService {
   constructor() {
     console.log('[api] ApiService initialized with baseURL:', this.client.defaults.baseURL);
     this.client.interceptors.request.use(async (config) => {
-      // attach token
+        // attach token - prioritize in-memory token first, then fallback to AsyncStorage
       try {
-        const token = await AsyncStorage.getItem('token');
-        if (token && config.headers) {
-          (config.headers as any).Authorization = `Bearer ${token}`;
+        const inMemoryToken = (this.client.defaults.headers as any).Authorization;
+        if (inMemoryToken && config.headers) {
+          // Token already set in memory, use it
+          (config.headers as any).Authorization = inMemoryToken;
+        } else {
+          // Fallback to AsyncStorage
+          const token = await AsyncStorage.getItem('token');
+          if (token && config.headers) {
+            (config.headers as any).Authorization = `Bearer ${token}`;
+          }
         }
       } catch {
         // ignore
+      }
+      // If data is FormData, remove Content-Type header to let axios set it automatically
+      // This is important for React Native FormData to work correctly
+      if (config.data instanceof FormData && config.headers) {
+        // Remove Content-Type from both common headers and request-specific headers
+        delete (config.headers as any)['Content-Type'];
+        delete (config.headers as any)['content-type'];
+        // Also remove from defaults if present
+        if ((this.client.defaults.headers as any).common?.['Content-Type']) {
+          delete (config.headers as any)['Content-Type'];
+        }
       }
       // add start time for logging
       (config as any).__startTime = Date.now();
       console.log(`[api] -> ${config.method?.toUpperCase() || 'GET'} ${config.baseURL || ''}${config.url}`);
       return config;
     });
+
+    // Add response interceptor to handle 401 errors (unauthorized)
+    this.client.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        if (error?.response?.status === 401) {
+          // Token expired or invalid, clear it
+          try {
+            await AsyncStorage.removeItem('token');
+            (this.client.defaults.headers as any).Authorization = undefined;
+            console.log('[api] Token expired, cleared from storage');
+          } catch {
+            // ignore
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   // Allow setting auth token in-memory (useful for session-like behavior when rememberMe is false)
@@ -222,18 +269,7 @@ class ApiService {
     // const dt = start ? `${Date.now() - start}ms` : '';
 
     // Safe logging: don't throw from logging itself
-    try {
-      const urlInfo = conf?.url ? `${conf.url}` : `${this.client.defaults.baseURL || ''}`;
-      console.error(`[api] ERROR ${conf?.method?.toUpperCase() || 'GET'} ${urlInfo}`, e?.response?.data || e?.message || e);
-    } catch {
-      // Fallback logging
-      try {
-        console.error('[api] ERROR (logging failed)', e?.message || e);
-      } catch {
-        // last-resort
-        // nothing else to do
-      }
-    }
+    // Logging removed to reduce console noise
 
     // Common mapped errors
     if (e?.code === 'ECONNABORTED') {
@@ -270,6 +306,24 @@ class ApiService {
   async getHospitalById(id: string): Promise<ApiResponse<Hospital>> {
     try {
       const res = await this.client.get(`/hospitals/${id}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getHospitalSpecialties(hospitalId: string): Promise<ApiResponse<any[]>> {
+    try {
+      const res = await this.client.get(`/hospitals/${hospitalId}/specialties`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getHospitalServices(hospitalId: string): Promise<ApiResponse<any[]>> {
+    try {
+      const res = await this.client.get(`/hospitals/${hospitalId}/services`);
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);
@@ -337,13 +391,56 @@ class ApiService {
       const res = await this.client.get(`/doctors/${id}`);
       return this.handleResponse(res);
     } catch (e) {
-      this.handleError(e);
+      // Fallbacks for mis-mounted route paths
+      try {
+        // Case 1: route registered as /api/doctors/doctors/:id
+        const alt1 = await this.client.get(`/doctors/doctors/${id}`);
+        return this.handleResponse(alt1);
+      } catch (e2) {
+        try {
+          // Case 2: try without /api prefix entirely (server root)
+          const base = this.client.defaults.baseURL || '';
+          const serverRoot = String(base).replace(/\/_?api\/?$/i, '').replace(/\/$/, '');
+          const alt2 = await axios.get(`${serverRoot}/api/doctors/doctors/${id}`);
+          return this.handleResponse(alt2);
+        } catch (e3) {
+          this.handleError(e3);
+        }
+      }
     }
   }
 
   async getDoctorReviews(doctorId: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<any[] | { reviews?: any[]; data?: any[]; count?: number; total?: number; averageRating: number }>> {
     try {
       const res = await this.client.get(`/reviews/doctor/${doctorId}`, { params });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async createDoctorReview(payload: { appointmentId: string; doctorId: string; rating: number; content: string }): Promise<ApiResponse<any>> {
+    try {
+      const res = await this.client.post('/reviews/doctor', payload);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async createHospitalReview(payload: { appointmentId: string; hospitalId: string; rating: number; content: string }): Promise<ApiResponse<any>> {
+    try {
+      const res = await this.client.post('/reviews/hospital', payload);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getDoctorSchedules(doctorId: string): Promise<ApiResponse<any[]>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/appointments/doctors/${doctorId}/schedules`);
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);
@@ -376,18 +473,44 @@ class ApiService {
 
   async googleLogin(googleToken: string, tokenType: 'idToken' | 'accessToken' = 'idToken'): Promise<ApiResponse<{ user: any; token: string }>> {
     try {
-      // Backend only needs the token (id_token), not tokenType
-      const payload = { token: googleToken };
-      const res = await this.client.post('/auth/google/token', payload);
+  const payload: any = { token: googleToken, tokenType };
+  const res = await this.client.post('/auth/google/token', payload);
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);
     }
   }
 
-  async facebookLogin(facebookToken: string): Promise<ApiResponse<{ user: any; token: string }>> {
+  async facebookLogin(accessToken: string, userID: string): Promise<ApiResponse<{ user: any; token: string }>> {
     try {
-      const res = await this.client.post('/auth/facebook', { token: facebookToken });
+      const res = await this.client.post('/auth/facebook/token', { accessToken, userID });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getFavoriteDoctors(): Promise<ApiResponse<{ doctors: Doctor[] } | Doctor[]>> {
+    try {
+      const res = await this.client.get('/doctors/favorites');
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async addFavoriteDoctor(doctorId: string): Promise<ApiResponse<any>> {
+    try {
+      const res = await this.client.post(`/doctors/${doctorId}/favorite`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async removeFavoriteDoctor(doctorId: string): Promise<ApiResponse<any>> {
+    try {
+      const res = await this.client.delete(`/doctors/${doctorId}/favorite`);
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);
@@ -412,9 +535,412 @@ class ApiService {
     }
   }
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse<any>> {
+    try {
+      const res = await this.client.post('/auth/change-password', { currentPassword, newPassword });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
   async getCurrentUser(): Promise<ApiResponse<any>> {
     try {
       const res = await this.client.get('/auth/profile');
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async updateProfile(profileData: any): Promise<ApiResponse<any>> {
+    try {
+      const res = await this.client.put('/auth/profile', profileData);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async uploadAvatar(uri: string, type: string = 'image/jpeg', name: string = 'avatar.jpg'): Promise<ApiResponse<any>> {
+    try {
+      // Normalize URI for React Native
+      // Android: Keep file:// prefix if present, it's needed
+      // iOS: Remove file:// prefix
+      let normalizedUri = uri;
+      if (Platform.OS === 'ios' && uri.startsWith('file://')) {
+        normalizedUri = uri.replace('file://', '');
+      }
+      // Ensure Android URIs are properly formatted
+      if (Platform.OS === 'android' && !uri.startsWith('file://') && !uri.startsWith('http')) {
+        normalizedUri = uri.startsWith('/') ? uri : `file://${uri}`;
+      }
+      
+      // Create FormData for multipart/form-data upload
+      const formData = new FormData();
+      formData.append('avatar', {
+        uri: normalizedUri,
+        type: type,
+        name: name,
+      } as any);
+
+      // Get authorization token
+      let authHeader = '';
+      try {
+        const inMemoryToken = (this.client.defaults.headers as any).Authorization;
+        if (inMemoryToken) {
+          authHeader = inMemoryToken;
+        } else {
+          const token = await AsyncStorage.getItem('token');
+          if (token) {
+            authHeader = `Bearer ${token}`;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // Create a separate axios instance for file uploads to avoid header conflicts
+      // This ensures FormData is handled correctly in React Native
+      // For Android, try localhost first (if using adb reverse), then fallback to 10.0.2.2
+      let uploadBaseURL = BASE_URL;
+      
+      // Check if we should use localhost for Android (when using adb reverse)
+      if (Platform.OS === 'android') {
+        try {
+          const { API_BASE } = await import('../config');
+          const configBaseURL = typeof API_BASE === 'function' ? API_BASE() : null;
+          if (configBaseURL && configBaseURL.includes('localhost')) {
+            uploadBaseURL = configBaseURL;
+          }
+        } catch {
+          // Fallback to BASE_URL if config import fails
+        }
+      }
+      
+      const uploadClient = axios.create({
+        baseURL: uploadBaseURL,
+        timeout: 60000, // Increase timeout for file uploads (60 seconds)
+        headers: authHeader ? { Authorization: authHeader } : {},
+        // Don't set Content-Type - let axios/FormData set it automatically
+      });
+      
+      const res = await uploadClient.post('/auth/profile/avatar', formData, {
+        headers: {
+          ...(authHeader ? { Authorization: authHeader } : {}),
+          // Explicitly don't set Content-Type - let FormData set it with boundary
+        },
+      });
+      return this.handleResponse(res);
+    } catch (e) {
+      console.error('[api] Upload avatar error details:', {
+        message: (e as any)?.message,
+        code: (e as any)?.code,
+        response: (e as any)?.response?.data,
+        status: (e as any)?.response?.status,
+        stack: (e as any)?.stack,
+      });
+      this.handleError(e);
+    }
+  }
+
+  async createAppointment(payload: any): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post('/appointments', payload);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getAvailableSchedules(params: { doctorId: string; date?: string; hospitalId?: string }): Promise<ApiResponse<any[]>> {
+    try {
+      // Public endpoint: /api/schedules
+      const res = await this.client.get('/schedules', { params });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getUserAppointments(params?: { page?: number; limit?: number; status?: string }): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get('/appointments/user/patient', { params });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getDailyAppointmentCount(date: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get('/appointments/user/patient/daily-count', { params: { date } });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getUserPrescriptionHistory(params?: { page?: number; limit?: number; status?: string }): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get('/prescriptions/user/history', { params });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getPrescriptionById(prescriptionId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/prescriptions/${prescriptionId}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getPaymentHistory(params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    method?: string;
+    billType?: string;
+    appointmentId?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get('/billing/payment-history', { params });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getAppointmentById(appointmentId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/appointments/${appointmentId}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async cancelAppointment(appointmentId: string, reason?: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const config = reason ? { data: { cancellationReason: reason } } : undefined;
+      const res = await this.client.delete(`/appointments/${appointmentId}`, config);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async rescheduleAppointment(
+    appointmentId: string,
+    payload: { scheduleId: string; timeSlot: { startTime: string; endTime: string }; appointmentDate: string; notes?: string }
+  ): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.put(`/appointments/${appointmentId}/reschedule`, payload);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  // Payments - PayPal: create and execute
+  async createPaypalPayment(params: {
+    appointmentId: string;
+    amount: number;
+    billType?: string;
+    prescriptionId?: string;
+  }): Promise<ApiResponse<{ paymentId: string; approvalUrl: string }>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post('/payments/paypal/create', params);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async executePaypalPayment(paymentId: string, PayerID: string): Promise<ApiResponse<any>> {
+    try {
+      const res = await this.client.post('/payments/paypal/execute', { paymentId, PayerID });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  // Payments - MoMo: create payment session and check status
+  async createMomoPayment(params: { appointmentId: string; amount: number; billType?: string; prescriptionId?: string; orderInfo?: string; redirectUrl?: string }): Promise<ApiResponse<{ orderId: string; payUrl: string }>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post('/payments/momo/create', params);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  // Billing - get bill by appointment (used by mobile app, same as web UserBilling)
+  async getAppointmentBill(appointmentId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/billing/appointment/${appointmentId}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async checkMomoStatus(orderId: string): Promise<ApiResponse<{ payment: { status: string; appointmentId: string } }>> {
+    try {
+      const res = await this.client.get(`/payments/momo/status/${orderId}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async verifyMomoPaymentResult(orderId: string, resultCode: string | number): Promise<ApiResponse<{ paymentStatus: string; appointmentId?: string; message?: string }>> {
+    try {
+      const res = await this.client.get(`/payments/momo/result`, {
+        params: { orderId, resultCode },
+      });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  // Video Room APIs
+  async getVideoRoomByAppointment(appointmentId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/video-rooms/appointment/${appointmentId}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async createVideoRoom(appointmentId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post('/video-rooms/create', { appointmentId });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async joinVideoRoom(roomId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/video-rooms/join/${roomId}`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async leaveVideoRoom(roomId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post(`/video-rooms/${roomId}/leave`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async endVideoRoom(roomId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post(`/video-rooms/${roomId}/end`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getVideoCallHistory(params?: {
+    page?: number;
+    limit?: number;
+    appointmentId?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get('/video-rooms/history', { params });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  // Chat APIs
+  async getConversations(): Promise<ApiResponse<any[]>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get('/chat/conversations');
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async getConversationMessages(conversationId: string): Promise<ApiResponse<any[]>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.get(`/chat/conversations/${conversationId}/messages`);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async sendMessage(conversationId: string, content: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post(`/chat/conversations/${conversationId}/messages`, {
+        content
+      });
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async createConversation(params: { participantId: string; appointmentId?: string }): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post('/chat/conversations', params);
+      return this.handleResponse(res);
+    } catch (e) {
+      this.handleError(e);
+    }
+  }
+
+  async sendAppointmentToChat(conversationId: string, appointmentId: string): Promise<ApiResponse<any>> {
+    try {
+      await this.probeBackend();
+      const res = await this.client.post(`/chat/conversations/${conversationId}/send-appointment`, {
+        appointmentId
+      });
       return this.handleResponse(res);
     } catch (e) {
       this.handleError(e);

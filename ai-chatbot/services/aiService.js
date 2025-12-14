@@ -642,9 +642,16 @@ const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medic
     }
     
     // 2. Lấy 5-10 messages gần nhất từ history
-    const recentHistory = history && history.length > 0 
+    let recentHistory = history && history.length > 0 
         ? history.slice(-10) // Lấy 10 messages gần nhất (5 cặp user-assistant)
         : [];
+    
+    // QUAN TRỌNG: Đảm bảo recentHistory bắt đầu bằng 'user'
+    // Nếu recentHistory bắt đầu bằng 'model', loại bỏ các message 'model' ở đầu
+    while (recentHistory.length > 0 && recentHistory[0].role === 'model') {
+        console.log(`[History Fix] Loại bỏ message 'model' ở đầu history`);
+        recentHistory = recentHistory.slice(1);
+    }
     
     formattedHistory = formattedHistory.concat(recentHistory);
     
@@ -686,13 +693,40 @@ const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medic
         }
     }
     
+    // 4. QUAN TRỌNG: Đảm bảo message đầu tiên trong formattedHistory luôn là 'user'
+    // Nếu không có summary và recentHistory bắt đầu bằng 'model', thêm một message 'user' placeholder
+    if (formattedHistory.length > 0 && formattedHistory[0].role !== 'user') {
+        console.log(`[History Fix] Message đầu tiên không phải 'user', đang sửa...`);
+        // Loại bỏ tất cả message 'model' ở đầu cho đến khi gặp 'user'
+        while (formattedHistory.length > 0 && formattedHistory[0].role === 'model') {
+            formattedHistory = formattedHistory.slice(1);
+        }
+        // Nếu sau khi loại bỏ vẫn không có message nào, hoặc vẫn không bắt đầu bằng 'user'
+        // Thêm một message 'user' placeholder
+        if (formattedHistory.length === 0 || formattedHistory[0].role !== 'user') {
+            formattedHistory.unshift({
+                role: 'user',
+                parts: [{ text: '[Bắt đầu hội thoại]' }]
+            });
+            console.log(`[History Fix] Đã thêm message 'user' placeholder ở đầu`);
+        }
+    }
+    
     // Log history để debug
     if (formattedHistory && formattedHistory.length > 0) {
         console.log(`[Flash Model] Nhận được ${formattedHistory.length} tin nhắn trong lịch sử (bao gồm summary và state)`);
+        // Log message đầu tiên để đảm bảo là 'user'
+        const firstMsg = formattedHistory[0];
+        const firstRole = firstMsg?.role || 'unknown';
+        const firstContent = firstMsg?.parts?.[0]?.text || firstMsg?.content || '';
+        console.log(`[Flash Model] Message đầu tiên: role="${firstRole}", content="${firstContent.substring(0, 100)}${firstContent.length > 100 ? '...' : ''}"`);
+        
+        // Log 4 messages cuối cùng
         formattedHistory.slice(-4).forEach((msg, idx) => {
             const role = msg.role || 'unknown';
             const content = msg.parts?.[0]?.text || msg.content || '';
-            console.log(`  [${idx}] ${role}: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
+            const actualIdx = formattedHistory.length - 4 + idx;
+            console.log(`  [${actualIdx}] ${role}: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
         });
     } else {
         console.log('[Flash Model] Không có lịch sử hội thoại');

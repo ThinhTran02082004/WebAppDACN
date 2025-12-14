@@ -10,7 +10,11 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.trant.myapp"
+      "bundleIdentifier": "com.trant.myapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Ứng dụng cần quyền truy cập camera để thực hiện cuộc gọi video.",
+        "NSMicrophoneUsageDescription": "Ứng dụng cần quyền truy cập microphone để thực hiện cuộc gọi video."
+      }
     },
     "android": {
       "package": "com.trant.myapp",
@@ -21,7 +25,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "output": "static",
@@ -38,6 +47,13 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ứng dụng cần quyền truy cập ảnh để bạn có thể chọn ảnh đại diện.",
+          "cameraPermission": "Ứng dụng cần quyền truy cập camera để bạn có thể chụp ảnh đại diện."
         }
       ],
       [

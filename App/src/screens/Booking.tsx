@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList, Image, Modal, Alert, useWindowDimensions, TextInput, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { AppIcons, IconColors } from '../config/icons';
 import { apiService, Hospital, ServiceItem, Doctor } from '../services/api';
 import { ToastService } from '../services/ToastService';
+import { useSocket } from '../contexts/SocketContext';
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -29,8 +30,96 @@ export default function BookingAllInOne() {
   const insets = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
   const navigation = useNavigation();
+  const route = useRoute();
+  
+  // Get params from current route or parent route (since Booking is inside BookingNavigator)
+  // Use useMemo to recalculate when route.params changes
+  const routeParams = useMemo(() => {
+    // Try current route params first
+    const currentParams = route.params as any;
+    if (currentParams && Object.keys(currentParams).length > 0) {
+      console.log('Using current route params:', currentParams);
+      return currentParams;
+    }
+    
+    // Try to get params from parent navigator (RootNavigator)
+    try {
+      const parent = navigation.getParent();
+      if (parent) {
+        const parentState = parent.getState();
+        const parentRoute = parentState?.routes?.find((r: any) => r.name === 'Booking');
+        if (parentRoute?.params) {
+          console.log('Using parent route params:', parentRoute.params);
+          return parentRoute.params as any;
+        }
+      }
+    } catch (e) {
+      console.log('Error getting parent params:', e);
+    }
+    
+    // Try navigation state
+    try {
+      const navState = navigation.getState();
+      if (navState) {
+        // Check all routes in the navigation state
+        for (const r of navState.routes) {
+          if (r.name === 'Booking' && r.params) {
+            console.log('Using navigation state params:', r.params);
+            return r.params as any;
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Error getting navigation state params:', e);
+    }
+    
+    console.log('No params found, returning empty object');
+    return {};
+  }, [route.params, navigation]);
 
   const [step, setStep] = useState<Step>(1);
+  const [isPreFilling, setIsPreFilling] = useState(false);
+  const [routeParamsState, setRouteParamsState] = useState<any>({});
+  
+  // Update route params when screen is focused (to catch params from parent navigator)
+  useFocusEffect(
+    React.useCallback(() => {
+      const getParams = () => {
+        // Try current route params first
+        const currentParams = route.params as any;
+        if (currentParams && Object.keys(currentParams).length > 0) {
+          console.log('useFocusEffect: Using current route params:', currentParams);
+          return currentParams;
+        }
+        
+        // Try to get params from parent navigator (RootNavigator)
+        try {
+          const parent = navigation.getParent();
+          if (parent) {
+            const parentState = parent.getState();
+            const parentRoute = parentState?.routes?.find((r: any) => r.name === 'Booking');
+            if (parentRoute?.params) {
+              console.log('useFocusEffect: Using parent route params:', parentRoute.params);
+              return parentRoute.params as any;
+            }
+          }
+        } catch (e) {
+          console.log('useFocusEffect: Error getting parent params:', e);
+        }
+        
+        return {};
+      };
+      
+      const params = getParams();
+      if (Object.keys(params).length > 0) {
+        console.log('useFocusEffect: Setting route params state:', params);
+        setRouteParamsState(params);
+      }
+    }, [route.params, navigation])
+  );
+  
+  // Use routeParamsState if available, otherwise use computed routeParams
+  const finalRouteParams = Object.keys(routeParamsState).length > 0 ? routeParamsState : routeParams;
 
   // Step 1
   const [branches, setBranches] = useState<Hospital[]>([]);
@@ -63,6 +152,17 @@ export default function BookingAllInOne() {
   });
   const [availableDates, setAvailableDates] = useState<Set<string>>(new Set());
   const [doctorSchedules, setDoctorSchedules] = useState<any[]>([]);
+  const [dailyLimitInfo, setDailyLimitInfo] = useState({
+    status: 'idle',
+    count: 0,
+    limit: 3,
+    date: '',
+  });
+  
+  // Realtime time slot updates
+  const { socket, isConnected, emit, on, off } = useSocket();
+  const [lockedSlots, setLockedSlots] = useState<Map<string, string>>(new Map()); // Map<`${scheduleId}_${timeSlotId}`, userId>
+  const lockedSlotsRef = useRef<Map<string, string>>(new Map());
 
   // Step 4
   const [appointmentType, setAppointmentType] = useState<string>('first-visit');
@@ -84,12 +184,292 @@ export default function BookingAllInOne() {
         ]);
         setBranches((h as any)?.data?.hospitals || []);
         setSpecialties((s as any)?.data?.specialties || []);
+        console.log('Initial data loaded:', { 
+          branches: (h as any)?.data?.hospitals?.length || 0, 
+          specialties: (s as any)?.data?.specialties?.length || 0 
+        });
       } catch (e) {
         console.error('Load step1 failed', e);
       }
     };
     load();
   }, []);
+
+  // Pre-fill functions (similar to client Appointment.jsx)
+  const preFillFromDoctor = async (doctorIdParam: string) => {
+    try {
+      setIsPreFilling(true);
+      const res = await apiService.getDoctorById(doctorIdParam);
+      if (!res.success || !res.data) {
+        ToastService.show('error', 'Không tìm thấy bác sĩ');
+        return;
+      }
+      const doctor = res.data;
+      
+      // Extract IDs
+      const specialtyId = typeof doctor.specialtyId === 'object' 
+        ? doctor.specialtyId._id 
+        : doctor.specialtyId;
+      const hospitalId = typeof doctor.hospitalId === 'object' 
+        ? doctor.hospitalId._id 
+        : doctor.hospitalId;
+      
+      // Set form data
+      console.log('Setting form data:', { doctorIdParam, specialtyId, hospitalId });
+      setDoctorId(doctorIdParam);
+      if (specialtyId) {
+        setSelectedSpecialty(specialtyId);
+        console.log('Set specialty:', specialtyId);
+      }
+      if (hospitalId) {
+        setSelectedBranch(hospitalId);
+        console.log('Set hospital:', hospitalId);
+      }
+      
+      // Fetch related data
+      if (hospitalId) {
+        try {
+          const specialtiesRes = await apiService.getSpecialties({ isActive: true, limit: 50 });
+          const specialtiesData = (specialtiesRes as any)?.data?.specialties || [];
+          setSpecialties(specialtiesData);
+        } catch (err) {
+          console.error('Error fetching specialties:', err);
+        }
+      }
+      
+      if (specialtyId) {
+        try {
+          // Fetch doctors for this specialty
+          const doctorsRes = await apiService.getDoctors({ specialtyId });
+          const doctorsData = (doctorsRes as any)?.data?.doctors || 
+                             (Array.isArray((doctorsRes as any)?.data) ? (doctorsRes as any).data : []);
+          setDoctors(doctorsData);
+          
+          // Fetch services for this specialty
+          const servicesRes = await apiService.getServices({ specialtyId });
+          const servicesData = (servicesRes as any)?.data?.services || 
+                              (Array.isArray((servicesRes as any)?.data) ? (servicesRes as any).data : []);
+          setServices(servicesData);
+        } catch (err) {
+          console.error('Error fetching services:', err);
+        }
+      }
+      
+      // Auto-advance to Step 2
+      setStep(2);
+    } catch (error) {
+      console.error('Error pre-filling from doctor:', error);
+      ToastService.show('error', 'Lỗi khi tải thông tin bác sĩ');
+    } finally {
+      setIsPreFilling(false);
+    }
+  };
+
+  const preFillFromService = async (serviceIdParam: string) => {
+    try {
+      setIsPreFilling(true);
+      // Get all services to find the one we need
+      const servicesRes = await apiService.getServices({ limit: 1000, isActive: true });
+      let servicesData: ServiceItem[] = [];
+      if ('services' in (servicesRes as any)?.data) {
+        servicesData = ((servicesRes as any).data as any).services || [];
+      } else if ('data' in (servicesRes as any)?.data) {
+        servicesData = ((servicesRes as any).data as any).data || [];
+      } else if (Array.isArray((servicesRes as any)?.data)) {
+        servicesData = (servicesRes as any).data as ServiceItem[];
+      }
+      
+      const service = servicesData.find((s: ServiceItem) => s._id === serviceIdParam);
+      if (!service) {
+        ToastService.show('error', 'Không tìm thấy dịch vụ');
+        return;
+      }
+      
+      // Extract specialty ID
+      const specialtyId = typeof service.specialtyId === 'object' 
+        ? service.specialtyId._id 
+        : service.specialtyId;
+      
+      // Set service
+      setServiceId(serviceIdParam);
+      setServices(servicesData.filter((s: ServiceItem) => s._id === serviceIdParam));
+      
+      if (specialtyId) {
+        setSelectedSpecialty(specialtyId);
+        
+        // Fetch doctors for this specialty
+        try {
+          const doctorsRes = await apiService.getDoctors({ specialtyId });
+          const doctorsData = (doctorsRes as any)?.data?.doctors || 
+                             (Array.isArray((doctorsRes as any)?.data) ? (doctorsRes as any).data : []);
+          setDoctors(doctorsData);
+          
+          // Auto-select first doctor and their hospital
+          if (doctorsData.length > 0) {
+            const firstDoctor = doctorsData[0];
+            setDoctorId(firstDoctor._id);
+            const selectedHospitalId = typeof firstDoctor.hospitalId === 'object'
+              ? firstDoctor.hospitalId._id
+              : firstDoctor.hospitalId;
+            if (selectedHospitalId) {
+              setSelectedBranch(selectedHospitalId);
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching doctors:', err);
+        }
+      }
+      
+      // Auto-advance to Step 3
+      setStep(3);
+    } catch (error) {
+      console.error('Error pre-filling from service:', error);
+      ToastService.show('error', 'Lỗi khi tải thông tin dịch vụ');
+    } finally {
+      setIsPreFilling(false);
+    }
+  };
+
+  const preFillFromSpecialty = async (specialtyIdParam: string) => {
+    try {
+      setIsPreFilling(true);
+      setSelectedSpecialty(specialtyIdParam);
+      
+      // Fetch doctors for this specialty to find a hospital
+      try {
+        const doctorsRes = await apiService.getDoctors({ specialtyId: specialtyIdParam });
+        const doctorsData = (doctorsRes as any)?.data?.doctors || 
+                           (Array.isArray((doctorsRes as any)?.data) ? (doctorsRes as any).data : []);
+        setDoctors(doctorsData);
+        
+        // Auto-select first hospital that has this specialty (from first doctor)
+        if (doctorsData.length > 0) {
+          const firstDoctor = doctorsData[0];
+          const selectedHospitalId = typeof firstDoctor.hospitalId === 'object'
+            ? firstDoctor.hospitalId._id
+            : firstDoctor.hospitalId;
+          if (selectedHospitalId) {
+            setSelectedBranch(selectedHospitalId);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching doctors:', err);
+      }
+      
+      // Fetch services for this specialty
+      try {
+        const servicesRes = await apiService.getServices({ specialtyId: specialtyIdParam });
+        const servicesData = (servicesRes as any)?.data?.services || 
+                            (Array.isArray((servicesRes as any)?.data) ? (servicesRes as any).data : []);
+        setServices(servicesData);
+      } catch (err) {
+        console.error('Error fetching services:', err);
+      }
+      
+      // Auto-advance to Step 2
+      setStep(2);
+    } catch (error) {
+      console.error('Error pre-filling from specialty:', error);
+      ToastService.show('error', 'Lỗi khi tải thông tin chuyên khoa');
+    } finally {
+      setIsPreFilling(false);
+    }
+  };
+
+  const preFillFromHospital = async (hospitalIdParam: string) => {
+    try {
+      setIsPreFilling(true);
+      setSelectedBranch(hospitalIdParam);
+      
+      // Fetch specialties for this hospital
+      try {
+        const specialtiesRes = await apiService.getSpecialties({ isActive: true, limit: 50 });
+        const specialtiesData = (specialtiesRes as any)?.data?.specialties || [];
+        setSpecialties(specialtiesData);
+      } catch (err) {
+        console.error('Error fetching specialties:', err);
+      }
+      
+      // Stay on Step 1
+    } catch (error) {
+      console.error('Error pre-filling from hospital:', error);
+      ToastService.show('error', 'Lỗi khi tải thông tin bệnh viện');
+    } finally {
+      setIsPreFilling(false);
+    }
+  };
+
+  // Handle pre-fill from route params
+  const [hasPreFilled, setHasPreFilled] = useState(false);
+  const [preFillKey, setPreFillKey] = useState<string>('');
+  
+  // Reset hasPreFilled when route params change
+  useEffect(() => {
+    const { doctorId, specialtyId, hospitalId, serviceId } = finalRouteParams;
+    const newKey = `${doctorId || ''}_${specialtyId || ''}_${hospitalId || ''}_${serviceId || ''}`;
+    console.log('Route params changed:', { newKey, preFillKey, routeParams });
+    if (newKey !== preFillKey && newKey !== '___') {
+      console.log('Resetting hasPreFilled for new params');
+      setHasPreFilled(false);
+      setPreFillKey(newKey);
+    }
+  }, [routeParams, preFillKey]);
+  
+  useEffect(() => {
+    const handlePreFill = async () => {
+      if (isPreFilling || hasPreFilled) {
+        console.log('Pre-fill skipped:', { isPreFilling, hasPreFilled });
+        return;
+      }
+      
+      const { doctorId: doctorIdParam, specialtyId: specialtyIdParam, 
+              hospitalId: hospitalIdParam, serviceId: serviceIdParam } = finalRouteParams;
+      
+      
+      if (!doctorIdParam && !serviceIdParam && !specialtyIdParam && !hospitalIdParam) {
+        console.log('No pre-fill params found');
+        return; // No pre-fill params
+      }
+      
+      // Wait for initial data to load before pre-filling (at least one should be loaded)
+      if (branches.length === 0 && specialties.length === 0) {
+        console.log('Waiting for initial data to load...');
+        return;
+      }
+      
+      console.log('Starting pre-fill...');
+      setHasPreFilled(true);
+      
+      // Priority order: doctor > service > specialty > hospital
+      try {
+        if (doctorIdParam) {
+          console.log('Pre-filling from doctor:', doctorIdParam);
+          await preFillFromDoctor(doctorIdParam);
+        } else if (serviceIdParam) {
+          console.log('Pre-filling from service:', serviceIdParam);
+          await preFillFromService(serviceIdParam);
+        } else if (specialtyIdParam) {
+          console.log('Pre-filling from specialty:', specialtyIdParam);
+          await preFillFromSpecialty(specialtyIdParam);
+        } else if (hospitalIdParam) {
+          console.log('Pre-filling from hospital:', hospitalIdParam);
+          await preFillFromHospital(hospitalIdParam);
+        }
+        console.log('Pre-fill completed successfully');
+      } catch (error) {
+        console.error('Error in pre-fill:', error);
+        setHasPreFilled(false); // Reset on error so it can retry
+        ToastService.show('error', 'Lỗi khi tự động điền thông tin');
+      }
+    };
+    
+    // Add a small delay to ensure component is fully mounted
+    const timer = setTimeout(() => {
+      handlePreFill();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [finalRouteParams, branches.length, specialties.length, isPreFilling, hasPreFilled]);
 
   // Load Step 2 data when specialty selected
   useEffect(() => {
@@ -110,9 +490,15 @@ export default function BookingAllInOne() {
     load();
   }, [selectedSpecialty]);
 
+  const limitThreshold = dailyLimitInfo.limit || 3;
+  const dailyLimitReached = dailyLimitInfo.status === 'loaded' &&
+    dailyLimitInfo.date === date &&
+    dailyLimitInfo.count >= limitThreshold;
+  const isCheckingDailyLimit = dailyLimitInfo.status === 'loading';
+
   const canNextStep1 = !!(selectedBranch && selectedSpecialty);
   const canNextStep2 = !!(doctorId && serviceId);
-  const canNextStep3 = !!(date && timeSlot);
+  const canNextStep3 = !!(date && timeSlot) && !dailyLimitReached;
 
   const formatVnd = (amount?: number) => {
     if (typeof amount !== 'number') return '';
@@ -306,6 +692,204 @@ export default function BookingAllInOne() {
     };
     loadDaySlots();
   }, [doctorId, date, doctorSchedules]);
+
+  // Join appointment room for realtime updates
+  useEffect(() => {
+    if (!socket || !isConnected || !doctorId || !date) return;
+
+    const formattedDate = date.split('T')[0]; // Ensure YYYY-MM-DD format
+    console.log('[Booking] Joining appointment room:', { doctorId, date: formattedDate });
+    
+    emit('join_appointment_room', {
+      doctorId,
+      date: formattedDate
+    });
+
+    return () => {
+      // Leave room when component unmounts or dependencies change
+      console.log('[Booking] Leaving appointment room');
+    };
+  }, [socket, isConnected, doctorId, date, emit]);
+
+  // Track previously selected slot for cleanup
+  const previousSelectedSlotRef = useRef<{ scheduleId: string; timeSlotId: string } | null>(null);
+
+  // Lock/unlock slot when user selects/deselects
+  useEffect(() => {
+    if (!socket || !isConnected || !doctorId || !date) return;
+
+    const currentSlot = selectedSlot && selectedSlot.scheduleId && selectedSlot.startTime
+      ? { scheduleId: selectedSlot.scheduleId, timeSlotId: normalizeTime(selectedSlot.startTime) }
+      : null;
+
+    // Unlock previous slot if changed
+    if (previousSelectedSlotRef.current && 
+        previousSelectedSlotRef.current.scheduleId !== currentSlot?.scheduleId &&
+        previousSelectedSlotRef.current.timeSlotId !== currentSlot?.timeSlotId) {
+      emit('unlock_time_slot', {
+        scheduleId: previousSelectedSlotRef.current.scheduleId,
+        timeSlotId: previousSelectedSlotRef.current.timeSlotId,
+        doctorId,
+        date: date.split('T')[0]
+      });
+    }
+
+    // Lock new slot
+    if (currentSlot) {
+      emit('lock_time_slot', {
+        scheduleId: currentSlot.scheduleId,
+        timeSlotId: currentSlot.timeSlotId,
+        doctorId,
+        date: date.split('T')[0]
+      });
+      previousSelectedSlotRef.current = currentSlot;
+    } else {
+      previousSelectedSlotRef.current = null;
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (previousSelectedSlotRef.current && socket && isConnected) {
+        emit('unlock_time_slot', {
+          scheduleId: previousSelectedSlotRef.current.scheduleId,
+          timeSlotId: previousSelectedSlotRef.current.timeSlotId,
+          doctorId,
+          date: date.split('T')[0]
+        });
+      }
+    };
+  }, [socket, isConnected, doctorId, date, selectedSlot, emit]);
+
+  // Listen to realtime time slot updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleTimeSlotUpdate = (data: { scheduleId: string; timeSlotInfo: any }) => {
+      const { scheduleId, timeSlotInfo } = data;
+      console.log('[Booking] Time slot updated:', { scheduleId, timeSlotInfo });
+
+      // Update dayTimeSlots with new booking information
+      setDayTimeSlots(prev => {
+        return prev.map(slot => {
+          // Match by scheduleId and startTime
+          if (slot.scheduleId === scheduleId && 
+              normalizeTime(slot.startTime) === normalizeTime(timeSlotInfo.startTime)) {
+            return {
+              ...slot,
+              isBooked: timeSlotInfo.isBooked,
+              bookedCount: timeSlotInfo.bookedCount,
+              maxBookings: timeSlotInfo.maxBookings || slot.maxBookings
+            };
+          }
+          return slot;
+        });
+      });
+
+      // Show notification if slot becomes fully booked (only if user is viewing this date)
+      if (date && timeSlotInfo.isBooked) {
+        ToastService.show(
+          'info',
+          'Cập nhật khung giờ',
+          `Khung giờ ${timeSlotInfo.startTime}-${timeSlotInfo.endTime} đã được đặt kín`
+        );
+      } else if (date && timeSlotInfo.bookedCount > 0) {
+        const remaining = (timeSlotInfo.maxBookings || 3) - timeSlotInfo.bookedCount;
+        if (remaining > 0) {
+          ToastService.show(
+            'info',
+            'Cập nhật khung giờ',
+            `Khung giờ ${timeSlotInfo.startTime}-${timeSlotInfo.endTime} còn ${remaining}/${timeSlotInfo.maxBookings || 3} chỗ trống`
+          );
+        }
+      }
+    };
+
+    const handleTimeSlotLocked = (data: { scheduleId: string; timeSlotId: string; userId: string }) => {
+      const { scheduleId, timeSlotId, userId } = data;
+      console.log('[Booking] Time slot locked:', { scheduleId, timeSlotId, userId });
+      
+      const slotKey = `${scheduleId}_${timeSlotId}`;
+      setLockedSlots(prev => {
+        const newMap = new Map(prev);
+        newMap.set(slotKey, userId);
+        lockedSlotsRef.current = newMap;
+        return newMap;
+      });
+    };
+
+    const handleTimeSlotUnlocked = (data: { scheduleId: string; timeSlotId: string }) => {
+      const { scheduleId, timeSlotId } = data;
+      console.log('[Booking] Time slot unlocked:', { scheduleId, timeSlotId });
+      
+      const slotKey = `${scheduleId}_${timeSlotId}`;
+      setLockedSlots(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(slotKey);
+        lockedSlotsRef.current = newMap;
+        return newMap;
+      });
+    };
+
+    const handleCurrentLockedSlots = (data: { lockedSlots: Array<{ scheduleId: string; timeSlotId: string; userId: string }> }) => {
+      console.log('[Booking] Current locked slots:', data.lockedSlots);
+      const locksMap = new Map<string, string>();
+      data.lockedSlots.forEach(({ scheduleId, timeSlotId, userId }) => {
+        locksMap.set(`${scheduleId}_${timeSlotId}`, userId);
+      });
+      setLockedSlots(locksMap);
+      lockedSlotsRef.current = locksMap;
+    };
+
+    const handleTimeSlotLockRejected = (data: { message?: string; scheduleId?: string; timeSlotId?: string }) => {
+      console.warn('[Booking] Lock rejected:', data);
+      ToastService.show(
+        'error',
+        'Khung giờ không khả dụng',
+        'Khung giờ này đang được người khác xử lý. Vui lòng chọn khung giờ khác.'
+      );
+      
+      // Reset selection if our selection was rejected
+      if (selectedSlot && data.scheduleId === selectedSlot.scheduleId && 
+          data.timeSlotId === normalizeTime(selectedSlot.startTime)) {
+        setTimeSlot(null);
+        setSelectedSlot(null);
+        previousSelectedSlotRef.current = null;
+      }
+    };
+
+    const handleTimeSlotLockConfirmed = (data: { scheduleId: string; timeSlotId: string }) => {
+      console.log('[Booking] Lock confirmed:', data);
+    };
+
+    // Register event listeners
+    on('time_slot_updated', handleTimeSlotUpdate);
+    on('time_slot_locked', handleTimeSlotLocked);
+    on('time_slot_unlocked', handleTimeSlotUnlocked);
+    on('current_locked_slots', handleCurrentLockedSlots);
+    on('time_slot_lock_rejected', handleTimeSlotLockRejected);
+    on('time_slot_lock_confirmed', handleTimeSlotLockConfirmed);
+
+    // Cleanup listeners
+    return () => {
+      off('time_slot_updated', handleTimeSlotUpdate);
+      off('time_slot_locked', handleTimeSlotLocked);
+      off('time_slot_unlocked', handleTimeSlotUnlocked);
+      off('current_locked_slots', handleCurrentLockedSlots);
+      off('time_slot_lock_rejected', handleTimeSlotLockRejected);
+      off('time_slot_lock_confirmed', handleTimeSlotLockConfirmed);
+    };
+  }, [socket, on, off, date, selectedSlot]);
+
+  useEffect(() => {
+    if (!date) {
+      setDailyLimitInfo({
+        status: 'idle',
+        count: 0,
+        limit: 3,
+        date: '',
+      });
+    }
+  }, [date]);
   const buildMonthMatrix = (cursor: Date) => {
     const year = cursor.getFullYear();
     const month = cursor.getMonth();
@@ -338,6 +922,77 @@ export default function BookingAllInOne() {
     for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
     return weeks;
   };
+
+  const checkDailyAppointmentLimit = useCallback(async (isoDate: string) => {
+    if (!isoDate) return { blocked: false, limit: 3, count: 0 };
+    setDailyLimitInfo((prev) => ({
+      ...prev,
+      status: 'loading',
+      date: isoDate,
+    }));
+    try {
+      const response = await apiService.getDailyAppointmentCount(isoDate);
+      const payload = (response as any)?.data;
+      const count = typeof payload?.count === 'number' ? payload.count : payload?.data?.count || 0;
+      const limitFromApi = typeof payload?.limit === 'number' ? payload.limit : payload?.data?.limit || 3;
+      const limitValue = limitFromApi || 3;
+      const isBlocked = count >= limitValue;
+      setDailyLimitInfo({
+        status: 'loaded',
+        count,
+        limit: limitValue,
+        date: isoDate,
+      });
+      return { blocked: isBlocked, limit: limitValue, count };
+    } catch (error) {
+      console.error('Error checking daily appointment limit:', error);
+      setDailyLimitInfo((prev) => ({
+        ...prev,
+        status: 'error',
+      }));
+      return { blocked: false, limit: 3, count: 0 };
+    }
+  }, []);
+
+  const handleDateSelect = useCallback(async (isoDate: string) => {
+    if (!isoDate) return;
+    const currentLimit = dailyLimitInfo.limit || 3;
+
+    if (dailyLimitInfo.status === 'loaded' && dailyLimitInfo.date === isoDate) {
+      if (dailyLimitInfo.count >= currentLimit) {
+        setDateOpen(false);
+        ToastService.show(
+          'error',
+          'Giới hạn lịch hẹn',
+          `Bạn đã có ${dailyLimitInfo.count}/${currentLimit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`
+        );
+        return;
+      }
+      setDate(isoDate);
+      setTimeSlot(null);
+      setSelectedSlot(null);
+      setDateOpen(false);
+      setTimeout(() => setTimeOpen(true), 150);
+      return;
+    }
+
+    const { blocked, limit, count } = await checkDailyAppointmentLimit(isoDate);
+    if (blocked) {
+      setDateOpen(false);
+      ToastService.show(
+        'error',
+        'Giới hạn lịch hẹn',
+        `Bạn đã có ${count}/${limit} lịch hẹn trong ngày này. Vui lòng chọn ngày khác.`
+      );
+      return;
+    }
+
+    setDate(isoDate);
+    setTimeSlot(null);
+    setSelectedSlot(null);
+    setDateOpen(false);
+    setTimeout(() => setTimeOpen(true), 150);
+  }, [checkDailyAppointmentLimit, dailyLimitInfo, setDateOpen]);
 
   const submit = async () => {
     if (isSubmitting) return;
@@ -459,8 +1114,31 @@ export default function BookingAllInOne() {
     ? ((step - 1) / (STEPS.length - 0.5))  
     : (step - 1) / (STEPS.length - 1);
 
+  const handleBackPress = () => {
+    // Navigate to Home instead of just going back
+    // This ensures user always returns to Home from booking screen
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Home');
+    }
+  };
+
   return (
     <View style={[styles.container, { paddingBottom: Math.max(24, insets.bottom + 100) }]}> 
+      {/* Header with back button */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={handleBackPress}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Đặt lịch khám</Text>
+        <View style={styles.headerRight} />
+      </View>
+
       <View style={styles.progressWrap}>
         <View style={styles.progressTrack} />
         <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(1, progress)) * 100}%` }]} />
@@ -598,52 +1276,56 @@ export default function BookingAllInOne() {
             </View>
           </Modal>
 
-          <Text style={[styles.title, { marginTop: 16 }]}>Chọn dịch vụ</Text>
-          <View style={styles.dropdown}>
-            <TouchableOpacity style={styles.dropdownHeader} onPress={() => setServiceOpen(true)}>
-              <Text style={styles.dropdownHeaderText}>
-                {services.find(s => s._id === serviceId)?.name || 'Chọn dịch vụ'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <Modal visible={serviceOpen} transparent animationType="fade" onRequestClose={() => setServiceOpen(false)}>
-            <View style={[styles.modalBackdrop, { justifyContent: 'flex-end' }]}>
-              <View
-                style={[
-                  styles.modalCard,
-                  {
-                    paddingBottom: insets.bottom + 12,
-                    width: '100%',
-                    maxWidth: '100%',
-                    height: Math.round(screenHeight * 0.74),
-                    borderTopLeftRadius: 16,
-                    borderTopRightRadius: 16,
-                    borderBottomLeftRadius: 0,
-                    borderBottomRightRadius: 0,
-                  },
-                ]}
-              >
-                <Text style={styles.modalTitle}>Chọn dịch vụ</Text>
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8, paddingHorizontal: 8 }}>
-                  {services.map((item: any) => (
-                    <TouchableOpacity
-                      key={item._id}
-                      style={[styles.serviceCard, serviceId === item._id && styles.serviceCardActive]}
-                      onPress={() => { setServiceId(item._id); setServiceOpen(false); }}
-                      activeOpacity={0.9}
-                    >
-                      <Text numberOfLines={2} style={styles.serviceName}>{item.name}</Text>
-                      <Text style={styles.servicePrice}>{formatVnd(item.price)}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <TouchableOpacity style={styles.modalClose} onPress={() => setServiceOpen(false)}>
-                  <Text style={styles.modalCloseText}>Đóng</Text>
+          {doctorId ? (
+            <>
+              <Text style={[styles.title, { marginTop: 16 }]}>Chọn dịch vụ</Text>
+              <View style={styles.dropdown}>
+                <TouchableOpacity style={styles.dropdownHeader} onPress={() => setServiceOpen(true)}>
+                  <Text style={styles.dropdownHeaderText}>
+                    {services.find(s => s._id === serviceId)?.name || 'Chọn dịch vụ'}
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </Modal>
+
+              <Modal visible={serviceOpen} transparent animationType="fade" onRequestClose={() => setServiceOpen(false)}>
+                <View style={[styles.modalBackdrop, { justifyContent: 'flex-end' }]}>
+                  <View
+                    style={[
+                      styles.modalCard,
+                      {
+                        paddingBottom: insets.bottom + 12,
+                        width: '100%',
+                        maxWidth: '100%',
+                        height: Math.round(screenHeight * 0.74),
+                        borderTopLeftRadius: 16,
+                        borderTopRightRadius: 16,
+                        borderBottomLeftRadius: 0,
+                        borderBottomRightRadius: 0,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.modalTitle}>Chọn dịch vụ</Text>
+                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 8, paddingHorizontal: 8 }}>
+                      {services.map((item: any) => (
+                        <TouchableOpacity
+                          key={item._id}
+                          style={[styles.serviceCard, serviceId === item._id && styles.serviceCardActive]}
+                          onPress={() => { setServiceId(item._id); setServiceOpen(false); }}
+                          activeOpacity={0.9}
+                        >
+                          <Text numberOfLines={2} style={styles.serviceName}>{item.name}</Text>
+                          <Text style={styles.servicePrice}>{formatVnd(item.price)}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    <TouchableOpacity style={styles.modalClose} onPress={() => setServiceOpen(false)}>
+                      <Text style={styles.modalCloseText}>Đóng</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </Modal>
+            </>
+          ) : null}
 
           <BottomActions 
             disabled={!canNextStep2} 
@@ -669,7 +1351,7 @@ export default function BookingAllInOne() {
           </TouchableOpacity>
           <Modal visible={dateOpen} transparent animationType="fade" onRequestClose={() => setDateOpen(false)}>
             <View style={[styles.modalBackdrop, { justifyContent: 'flex-end' }]}>
-              <View style={[styles.modalCard, { width: '100%', maxWidth: '100%', height: Math.round(screenHeight * 0.74), borderTopLeftRadius: 16, borderTopRightRadius: 16, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, paddingBottom: insets.bottom + 12 }]}>
+              <View style={[styles.modalCard, { width: '100%', maxWidth: '100%', height: Math.round(screenHeight * 0.72), borderTopLeftRadius: 16, borderTopRightRadius: 16, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, paddingBottom: Math.max(6, insets.bottom + 2) }]}>
                 <View style={styles.calHeader}>
                   <TouchableOpacity style={styles.calNavBtn} onPress={() => setMonthCursor((prev: Date) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}>
                     <Ionicons name={AppIcons.chevronBack as any} size={18} color="#111827" />
@@ -698,7 +1380,16 @@ export default function BookingAllInOne() {
                         const isPast = isPastLocal(iso);
                         const isAvailable = availableDates.has(iso);
                         return (
-                          <TouchableOpacity key={iso} style={styles.calDay} onPress={() => { if (isCurrentMonth && isAvailable && !isPast) { setDate(iso); setDateOpen(false); } }} activeOpacity={0.8}>
+                          <TouchableOpacity
+                            key={iso}
+                            style={styles.calDay}
+                            onPress={() => {
+                              if (isCurrentMonth && isAvailable && !isPast) {
+                                handleDateSelect(iso);
+                              }
+                            }}
+                            activeOpacity={0.8}
+                          >
                             <View style={[styles.calDayCircle, isSelected && styles.calDayCircleSelected, !isCurrentMonth && styles.calDayCircleMuted, ((isCurrentMonth && !isAvailable) || isPast) && { opacity: 0.35 }]}>
                               <Text style={[styles.calDayText, isSelected && styles.calDayTextSelected, !isCurrentMonth && styles.calDayTextMuted]}>{cell.date.getDate()}</Text>
                               {isCurrentMonth && isAvailable && !isSelected && !isPast ? <View style={styles.calDot} /> : null}
@@ -709,21 +1400,75 @@ export default function BookingAllInOne() {
                     </View>
                   ))}
                 </ScrollView>
+                <TouchableOpacity style={styles.modalClose} onPress={() => setDateOpen(false)}>
+                  <Text style={styles.modalCloseText}>Đóng</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </Modal>
 
+          {isCheckingDailyLimit && (
+            <View style={styles.limitInfo}>
+              <ActivityIndicator size="small" color="#2563eb" style={{ marginRight: 8 }} />
+              <Text style={styles.limitInfoText}>
+                Đang kiểm tra số lịch hẹn của bạn cho ngày {dailyLimitInfo.date ? formatDateDDMMYYYY(dailyLimitInfo.date) : ''}...
+              </Text>
+            </View>
+          )}
+
+          {dailyLimitInfo.status === 'error' && (
+            <View style={styles.limitInfoWarning}>
+              <Ionicons name="information-circle" size={18} color="#92400e" style={{ marginRight: 8 }} />
+              <Text style={styles.limitInfoWarningText}>
+                Không thể kiểm tra giới hạn lịch hẹn. Bạn vẫn có thể thử lại hoặc chọn ngày khác.
+              </Text>
+            </View>
+          )}
+
           <Text style={[styles.title, { marginTop: 16 }]}>Chọn giờ</Text>
-          <TouchableOpacity style={styles.calendarTrigger} onPress={() => setTimeOpen(true)}>
+          <TouchableOpacity
+            style={styles.calendarTrigger}
+            onPress={() => {
+              if (dailyLimitReached) {
+                ToastService.show(
+                  'error',
+                  'Giới hạn lịch hẹn',
+                  'Bạn đã đạt giới hạn 3 lịch hẹn trong ngày này. Vui lòng chọn ngày khác.'
+                );
+                return;
+              }
+              setTimeOpen(true);
+            }}
+          >
             <Ionicons name={AppIcons.time as any} size={16} color={IconColors.primary} />
             <Text style={styles.calendarText}>{selectedSlot ? formatHourRange(selectedSlot.startTime, selectedSlot.endTime) : (timeSlot ? `${normalizeTime(timeSlot)} - ` : 'Chọn giờ')}</Text>
           </TouchableOpacity>
 
           <Modal visible={timeOpen} transparent animationType="fade" onRequestClose={() => setTimeOpen(false)}>
             <View style={[styles.modalBackdrop, { justifyContent: 'flex-end' }]}>
-              <View style={[styles.modalCard, { width: '100%', maxWidth: '100%', height: Math.round(screenHeight * 0.6), borderTopLeftRadius: 16, borderTopRightRadius: 16, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, paddingBottom: insets.bottom + 12 }]}> 
+              <View style={[
+                styles.modalCard,
+                {
+                  width: '100%',
+                  maxWidth: '100%',
+                  height: Math.round(screenHeight * 0.6),
+                  borderTopLeftRadius: 16,
+                  borderTopRightRadius: 16,
+                  borderBottomLeftRadius: 0,
+                  borderBottomRightRadius: 0,
+                  paddingBottom: Math.max(6, insets.bottom + 2),
+                },
+              ]}> 
                 <Text style={styles.modalTitle}>Chọn khung giờ</Text>
-                {dayTimeSlots.length === 0 && !timeLoading ? (
+                {dailyLimitReached ? (
+                  <View style={styles.limitAlertModal}>
+                    <Ionicons name="warning" size={18} color="#b91c1c" style={{ marginRight: 8 }} />
+                    <View>
+                      <Text style={styles.limitAlertTitle}>Bạn đã đạt giới hạn 3 lịch hẹn trong ngày này.</Text>
+                      <Text style={styles.limitAlertText}>Vui lòng chọn ngày khác để tiếp tục đặt lịch.</Text>
+                    </View>
+                  </View>
+                ) : dayTimeSlots.length === 0 && !timeLoading ? (
                   <View style={{ width: '100%', alignItems: 'center', paddingVertical: 16 }}>
                     <Text style={{ color: '#6b7280', fontWeight: '600' }}>Không có khung giờ</Text>
                   </View>
@@ -752,18 +1497,23 @@ export default function BookingAllInOne() {
                         const endMin = (isNaN(eh) ? 0 : eh) * 60 + (isNaN(em) ? 0 : em);
                         isPastTime = endMin <= nowMin;
                       }
-                      const disabled = fullyBooked || isBookedFlag || isPastTime;
+                      // Check if slot is locked by someone else
+                      const slotKey = `${slot?.scheduleId}_${normalizeTime(start)}`;
+                      const isLocked = lockedSlots.has(slotKey);
+                      const disabled = fullyBooked || isBookedFlag || isPastTime || dailyLimitReached || isLocked;
                       const active = !disabled && timeSlot && normalizeTime(timeSlot) === normalizeTime(start);
                       const marginStyle = { marginRight: (index % 3 === 2) ? 0 : 8 } as any;
                       return (
                         <TouchableOpacity
-                          style={[styles.timeCell, marginStyle, active && styles.timeCellActive, disabled && { opacity: 0.45 }]}
+                          style={[styles.timeCell, marginStyle, active && styles.timeCellActive, disabled && { opacity: 0.45 }, isLocked && styles.timeCellLocked]}
                           onPress={() => { if (!disabled) { setTimeSlot(normalizeTime(start)); setSelectedSlot({ startTime: normalizeTime(start), endTime: normalizeTime(end), scheduleId: slot?.scheduleId }); setTimeOpen(false); } }}
                           activeOpacity={0.9}
                           disabled={disabled}
                         >
                           <Text style={[styles.timeCellText, active && styles.timeCellTextActive]}>{label}</Text>
-                          {disabled ? (
+                          {isLocked ? (
+                            <Text style={[styles.timeCellSub, { color: '#f59e0b' }]}>Đang chọn</Text>
+                          ) : disabled ? (
                             <Text style={[styles.timeCellSub, { color: '#ef4444' }]}>Hết chỗ</Text>
                           ) : cap > 0 ? (
                             <Text style={styles.timeCellSub}>{`Còn ${remaining}/${cap}`}</Text>
@@ -1072,6 +1822,40 @@ export default function BookingAllInOne() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f7f7f7', padding: 16 },
+  // Header styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    backgroundColor: '#f7f7f7',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginHorizontal: 8,
+  },
+  headerRight: {
+    width: 40,
+  },
   stepHeader: { color: '#6b7280', fontWeight: '700', marginBottom: 8 },
   title: { fontWeight: '700', fontSize: 16, marginBottom: 8 },
 
@@ -1111,6 +1895,16 @@ const styles = StyleSheet.create({
   calendarTrigger: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, 
                      borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8 },
   calendarText: { color: '#111827', fontWeight: '700', marginLeft: 8 },
+  limitInfo: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 8, padding: 10,
+               borderWidth: 1, borderColor: '#bfdbfe', marginTop: 8 },
+  limitInfoText: { color: '#1e40af', fontSize: 12, flex: 1 },
+  limitAlertModal: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fee2e2', borderRadius: 8, 
+                     padding: 12, borderWidth: 1, borderColor: '#fecaca', marginBottom: 12 },
+  limitAlertTitle: { color: '#b91c1c', fontWeight: '700', marginBottom: 4 },
+  limitAlertText: { color: '#b91c1c', fontSize: 12 },
+  limitInfoWarning: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fffbeb', borderRadius: 8, 
+                      padding: 12, borderWidth: 1, borderColor: '#fcd34d', marginTop: 8 },
+  limitInfoWarningText: { color: '#92400e', fontSize: 12, flex: 1 },
   pill: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 999,
           marginRight: 8, backgroundColor: '#fff' },
   pillActive: { borderColor: '#0a84ff', backgroundColor: '#eff6ff' },
@@ -1122,6 +1916,7 @@ const styles = StyleSheet.create({
   timeCell: { width: '32%', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, 
               paddingVertical: 14, paddingHorizontal: 10, marginBottom: 10, alignItems: 'center' },
   timeCellActive: { borderColor: '#0a84ff', backgroundColor: '#eff6ff' },
+  timeCellLocked: { borderColor: '#f59e0b', backgroundColor: '#fffbeb' },
   timeCellText: { fontWeight: '700', color: '#111827', fontSize: 13 },
   timeCellTextActive: { color: '#0a84ff' },
   timeCellSub: { marginTop: 4, color: '#10b981', fontWeight: '600', fontSize: 11 },

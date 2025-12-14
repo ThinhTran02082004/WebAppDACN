@@ -13,8 +13,23 @@ import {
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { ToastService } from '../services/ToastService';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { signInWithGoogle as expoGoogleSignIn } from '../config/googleConfig';
+import { GOOGLE_CLIENT_ID } from '../config';
+import { LoginManager, AccessToken, Settings } from 'react-native-fbsdk-next';
+import { FACEBOOK_APP_ID } from '../config';
+
+// Configure once at module load using the shared config value from environment
+if (GOOGLE_CLIENT_ID) {
+  GoogleSignin.configure({
+    webClientId: GOOGLE_CLIENT_ID, // Web Client ID from environment variable
+    offlineAccess: true,
+    hostedDomain: '',
+    forceCodeForRefreshToken: true,
+    // Add scopes if needed
+    scopes: ['https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
+  });
+}
 
 type Props = {
   navigation: any;
@@ -26,8 +41,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  const { signIn } = useAuth();
-  const { signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, signInWithFacebook } = useAuth();
 
   // Google Sign-In already configured above
 
@@ -42,7 +56,7 @@ export default function LoginScreen({ navigation }: Props) {
       await signIn(email, password, rememberMe);
       // show success and navigate to Home (reset stack so user can't go back to Login)
       ToastService.show('success', 'Thành công', 'Đăng nhập thành công');
-      navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
     } catch (error: any) {
       if (error?.needVerification) {
         ToastService.show('info', 'Tài khoản chưa xác thực', error.message || 'Tài khoản cần xác thực. Vui lòng kiểm tra email.');
@@ -58,39 +72,71 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       setLoading(true);
       
-      // Perform Google Sign-In using expo-auth-session
-      console.log('[GoogleSignin] Starting Google Sign-In with expo-auth-session');
-      const result = await expoGoogleSignIn();
-      console.log('[GoogleSignin] Sign-In result:', result);
+      // Check if Google Play Services is available
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       
-      // Get idToken or accessToken from result
-      const idToken = result.idToken;
-      const accessToken = result.accessToken;
+      // Sign out any existing session to ensure account chooser appears
+      try { 
+        await GoogleSignin.signOut(); 
+      } catch { 
+        // ignore if no session 
+      }
       
-      if (!idToken && !accessToken) {
+      // Perform Google Sign-In
+      const userInfo = await GoogleSignin.signIn();
+      console.log('[GoogleSignin] userInfo:', userInfo);
+      
+      // Get idToken from userInfo
+      let idToken = (userInfo as any).idToken;
+      
+      if (!idToken) {
+        // Try to get tokens if idToken is not available
+        try {
+          const tokens = await GoogleSignin.getTokens();
+          idToken = tokens.idToken;
+        } catch (tErr) {
+          console.warn('GoogleSignin.getTokens() failed', tErr);
+        }
+      }
+      
+      if (!idToken) {
+        // Fallback: try using accessToken
+        try {
+          const tokens = await GoogleSignin.getTokens();
+          const accessToken = tokens.accessToken;
+          
+          if (accessToken) {
+            console.log('[GoogleSignin] falling back to accessToken');
+            await signInWithGoogle(accessToken, 'accessToken', rememberMe);
+            ToastService.show('success', 'Thành công', 'Đăng nhập bằng Google thành công');
+            navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+            return;
+          }
+        } catch (tokenError) {
+          console.warn('Failed to get access token:', tokenError);
+        }
+        
         throw new Error('Không thể lấy token từ Google. Vui lòng kiểm tra cấu hình Google OAuth.');
-      }
-      
-      // Prefer idToken, fallback to accessToken
-      if (idToken) {
-        console.log('[GoogleSignin] Using idToken for authentication');
+      } else {
+        // Use idToken for authentication
+        console.log('[GoogleSignin] using idToken for authentication');
         await signInWithGoogle(idToken, 'idToken', rememberMe);
-      } else if (accessToken) {
-        console.log('[GoogleSignin] Falling back to accessToken for authentication');
-        await signInWithGoogle(accessToken, 'accessToken', rememberMe);
+        ToastService.show('success', 'Thành công', 'Đăng nhập bằng Google thành công');
+        navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
       }
-      
-      ToastService.show('success', 'Thành công', 'Đăng nhập bằng Google thành công');
-      navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
     } catch (error: any) {
       console.error('Google Sign-In Error:', error);
       
-      if (error.message?.includes('cancelled') || error.message?.includes('cancel')) {
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         // User cancelled the sign-in process
         console.log('User cancelled Google Sign-In');
-        // Don't show error for cancellation
+        // Don't show error message for user cancellation
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        ToastService.show('info', 'Thông báo', 'Đang xử lý đăng nhập Google');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        ToastService.show('error', 'Lỗi', 'Google Play Services không khả dụng. Vui lòng cài đặt Google Play Services.');
       } else if (error.message?.includes('DEVELOPER_ERROR')) {
-        ToastService.show('error', 'Lỗi cấu hình', 'Lỗi cấu hình Google OAuth. Vui lòng kiểm tra cấu hình.');
+        ToastService.show('error', 'Lỗi cấu hình', 'Lỗi cấu hình Google OAuth. SHA-1 fingerprint đã được cập nhật. Vui lòng thử lại.');
       } else if (error.message?.includes('NETWORK_ERROR')) {
         ToastService.show('error', 'Lỗi mạng', 'Không thể kết nối đến Google. Vui lòng kiểm tra kết nối internet.');
       } else {
@@ -103,10 +149,124 @@ export default function LoginScreen({ navigation }: Props) {
 
   const handleFacebookLogin = async () => {
     try {
-      // TODO: Implement Facebook Sign-In
-      Alert.alert('Thông báo', 'Tính năng đăng nhập Facebook sẽ được cập nhật sớm');
-    } catch {
-      Alert.alert('Lỗi', 'Đăng nhập Facebook thất bại');
+      setLoading(true);
+      console.log('[FacebookLogin] Starting Facebook login process');
+      
+      // Verify Facebook SDK is configured
+      if (!FACEBOOK_APP_ID) {
+        throw new Error('Facebook App ID chưa được cấu hình. Vui lòng kiểm tra file .env');
+      }
+      console.log('[FacebookLogin] Facebook App ID configured:', FACEBOOK_APP_ID);
+      
+      // Verify LoginManager is available (native module check)
+      if (!LoginManager) {
+        throw new Error('Facebook LoginManager không khả dụng. Vui lòng kiểm tra cài đặt native module.');
+      }
+      
+      // Ensure clean state to avoid reusing stale sessions
+      try {
+        await LoginManager.logOut();
+        console.log('[FacebookLogin] Logged out from previous session');
+      } catch (error: any) {
+        // ignore if no session
+        console.log('[FacebookLogin] Logout error (ignored):', error?.message || error);
+      }
+
+      // Request login with permissions
+      console.log('[FacebookLogin] Requesting login with permissions');
+      let result;
+      try {
+        result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
+      } catch (loginError: any) {
+        // Catch native errors that might cause crashes
+        console.error('[FacebookLogin] LoginManager.logInWithPermissions error:', loginError);
+        throw new Error(`Lỗi khi mở Facebook login: ${loginError?.message || 'Unknown error'}`);
+      }
+      console.log('[FacebookLogin] Login result:', { 
+        isCancelled: result.isCancelled, 
+        error: result.error,
+        declinedPermissions: result.declinedPermissions 
+      });
+
+      if (result.isCancelled) {
+        console.log('[FacebookLogin] User cancelled Facebook login');
+        return;
+      }
+
+      // Check for errors in result
+      if (result.error) {
+        const errorMsg = result.error || 'Lỗi đăng nhập Facebook';
+        console.error('[FacebookLogin] Login result error:', errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      // Get access token
+      console.log('[FacebookLogin] Getting access token');
+      const tokenData = await AccessToken.getCurrentAccessToken();
+      
+      if (!tokenData || !tokenData.accessToken) {
+        console.error('[FacebookLogin] No access token received');
+        throw new Error('Không thể lấy token từ Facebook');
+      }
+
+      // Get user ID from token data
+      const userID = tokenData.userID;
+      if (!userID) {
+        console.error('[FacebookLogin] No user ID in token data');
+        throw new Error('Không thể lấy User ID từ Facebook');
+      }
+
+      console.log('[FacebookLogin] Access token obtained successfully, userID:', userID);
+      
+      // Sign in with Facebook using access token and user ID
+      console.log('[FacebookLogin] Calling signInWithFacebook');
+      await signInWithFacebook(tokenData.accessToken, userID, rememberMe);
+      console.log('[FacebookLogin] signInWithFacebook completed successfully');
+      
+      // Wait a bit to ensure state is updated
+      await new Promise((resolve: any) => setTimeout(resolve, 200));
+      
+      ToastService.show('success', 'Thành công', 'Đăng nhập bằng Facebook thành công');
+      
+      // Navigate safely with error handling
+      try {
+        console.log('[FacebookLogin] Navigating to Home');
+        navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+        console.log('[FacebookLogin] Navigation successful');
+      } catch (navError: any) {
+        console.error('[FacebookLogin] Navigation error:', navError?.message || navError);
+        // Fallback navigation
+        try {
+          navigation.navigate('Home' as never);
+        } catch (fallbackError: any) {
+          console.error('[FacebookLogin] Fallback navigation also failed:', fallbackError?.message || fallbackError);
+          ToastService.show('error', 'Lỗi', 'Đăng nhập thành công nhưng không thể chuyển trang. Vui lòng khởi động lại app.');
+        }
+      }
+    } catch (error: any) {
+      console.error('[FacebookLogin] Facebook Sign-In Error:', {
+        message: error?.message,
+        stack: error?.stack,
+        code: error?.code,
+        response: error?.response?.data
+      });
+      
+      // Check for specific error types
+      const errorMessage = error?.message || String(error) || 'Đăng nhập Facebook thất bại';
+      
+      if (errorMessage.toLowerCase().includes('cancelled') || errorMessage.toLowerCase().includes('canceled')) {
+        // User cancelled, don't show error
+        console.log('[FacebookLogin] User cancelled Facebook Sign-In');
+      } else if (errorMessage.toLowerCase().includes('network_error') || errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('cannot reach')) {
+        ToastService.show('error', 'Lỗi mạng', 'Không thể kết nối đến Facebook. Vui lòng kiểm tra kết nối internet.');
+      } else if (errorMessage.toLowerCase().includes('developer_error') || errorMessage.toLowerCase().includes('configuration') || errorMessage.toLowerCase().includes('app_id')) {
+        ToastService.show('error', 'Lỗi cấu hình', 'Lỗi cấu hình Facebook. Vui lòng kiểm tra Facebook App ID trong cấu hình.');
+      } else {
+        ToastService.show('error', 'Lỗi', errorMessage);
+      }
+    } finally {
+      setLoading(false);
+      console.log('[FacebookLogin] Login process completed, loading set to false');
     }
   };
 

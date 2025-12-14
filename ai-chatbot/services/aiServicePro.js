@@ -517,9 +517,36 @@ async function runProChatWithTools(userPrompt, history, sessionId) {
     
     const enhancedPrompt = `${userPrompt}${contextInfo}`;
 
+    // QUAN TRỌNG: Đảm bảo message đầu tiên trong history là 'user'
+    // Gemini API yêu cầu message đầu tiên phải có role 'user'
+    let formattedHistory = Array.isArray(history) ? [...history] : [];
+    
+    // Loại bỏ các message 'model' ở đầu cho đến khi gặp 'user'
+    while (formattedHistory.length > 0 && formattedHistory[0].role === 'model') {
+        console.log(`[Pro Model] Loại bỏ message 'model' ở đầu history`);
+        formattedHistory = formattedHistory.slice(1);
+    }
+    
+    // Nếu sau khi loại bỏ vẫn không có message nào, hoặc vẫn không bắt đầu bằng 'user'
+    // Thêm một message 'user' placeholder
+    if (formattedHistory.length === 0 || formattedHistory[0].role !== 'user') {
+        formattedHistory.unshift({
+            role: 'user',
+            parts: [{ text: '[Bắt đầu hội thoại]' }]
+        });
+        console.log(`[Pro Model] Đã thêm message 'user' placeholder ở đầu history`);
+    }
+    
+    // Log để debug
+    if (formattedHistory.length > 0) {
+        const firstMsg = formattedHistory[0];
+        const firstRole = firstMsg?.role || 'unknown';
+        console.log(`[Pro Model] Message đầu tiên trong history: role="${firstRole}"`);
+    }
+
     const chat = proModel.startChat({
         tools: proTools,
-        history
+        history: formattedHistory
     });
 
     let result;

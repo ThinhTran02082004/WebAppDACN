@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { apiService } from '../services/api';
@@ -54,6 +54,7 @@ const PAGE_SIZE = 10;
 const MedsScreen = () => {
   const insets = useSafeAreaInsets();
   const { user, loading: authLoading } = useAuth();
+  const navigation = useNavigation();
 
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
@@ -236,6 +237,11 @@ const MedsScreen = () => {
     );
   }
 
+  const handleOpenPrescription = (id?: string) => {
+    if (!id) return;
+    navigation.navigate('PrescriptionDetail', { prescriptionId: id });
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}> 
       <View style={styles.header}>
@@ -308,7 +314,12 @@ const MedsScreen = () => {
             {record.prescriptions.map((item) => {
               const badgeStyle = getStatusBadgeStyle(item.status);
               return (
-                <View key={item._id} style={styles.prescriptionItem}>
+                <TouchableOpacity
+                  key={item._id}
+                  style={styles.prescriptionItem}
+                  activeOpacity={0.85}
+                  onPress={() => handleOpenPrescription(item._id)}
+                >
                   <View style={styles.prescriptionItemHeader}>
                     <Text style={styles.prescriptionTitle}>
                       Đơn thuốc {item.prescriptionOrder ? `đợt ${item.prescriptionOrder}` : ''}
@@ -342,7 +353,7 @@ const MedsScreen = () => {
                       <Text style={styles.hospitalizationTagText}>Đơn thuốc nội trú</Text>
                     </View>
                   ) : null}
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>

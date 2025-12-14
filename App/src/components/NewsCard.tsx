@@ -1,170 +1,84 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-} from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { NewsItem } from '../services/api';
-import { normalizeImageSource } from '../utils/helpers';
+import type { NewsItem } from '../services/api';
 
-interface NewsCardProps {
-  newsItem: NewsItem;
-  onPress: (newsItem: NewsItem) => void;
-}
+type Props = {
+  news: NewsItem;
+  onPress?: (news: NewsItem) => void;
+};
 
-export default function NewsCard({ newsItem, onPress }: NewsCardProps) {
-  const formatDate = (dateString: string | Date) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('vi-VN', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
+export default function NewsCard({ news, onPress }: Props) {
+  const handlePress = () => {
+    onPress?.(news);
   };
 
   return (
     <TouchableOpacity
       style={styles.newsCard}
-      onPress={() => onPress(newsItem)}
+      onPress={handlePress}
       activeOpacity={0.7}
     >
-      <View style={styles.imageContainer}>
-        {newsItem.image ? (
-          <Image 
-            source={normalizeImageSource(newsItem.image, 'https://placehold.co/300x200')} 
-            style={styles.newsImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.placeholderImage}>
-            <Ionicons name="newspaper" size={32} color="#ccc" />
-          </View>
-        )}
-      </View>
-      
-      <View style={styles.newsContent}>
-        <Text style={styles.newsTitle} numberOfLines={2}>
-          {newsItem.title}
-        </Text>
-        
-        {newsItem.summary && (
-          <Text style={styles.newsSummary} numberOfLines={3}>
-            {newsItem.summary}
-          </Text>
-        )}
-        
-        <View style={styles.newsFooter}>
-          <View style={styles.newsDate}>
-            <Ionicons name="calendar-outline" size={14} color="#666" />
-            <Text style={styles.newsDateText}>
-              {formatDate(newsItem.publishDate || newsItem.createdAt || new Date())}
-            </Text>
-          </View>
-          
-          {newsItem.author && (
-            <View style={styles.newsAuthor}>
-              <Ionicons name="person-outline" size={14} color="#666" />
-              <Text style={styles.newsAuthorText}>
-                {typeof newsItem.author === 'string' ? newsItem.author : newsItem.author.fullName}
-              </Text>
-            </View>
-          )}
+      {news.image?.secureUrl ? (
+        <Image
+          source={{ uri: news.image.secureUrl }}
+          style={styles.newsImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.newsImagePlaceholder}>
+          <Ionicons name="newspaper" size={24} color="#ccc" />
         </View>
-        
-        {newsItem.category && (
-          <View style={styles.categoryContainer}>
-            <Text style={styles.categoryText}>{newsItem.category}</Text>
-          </View>
-        )}
-      </View>
+      )}
+      <Text style={styles.newsTitle} numberOfLines={2}>
+        {news.title}
+      </Text>
+      {news.summary ? (
+        <Text style={styles.newsSummary} numberOfLines={2}>
+          {news.summary}
+        </Text>
+      ) : null}
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   newsCard: {
+    width: 170,
+    height: 200,
+    marginRight: 16,
     backgroundColor: '#fff',
     borderRadius: 12,
-    marginBottom: 16,
+    padding: 12,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    overflow: 'hidden',
-  },
-  imageContainer: {
-    width: '100%',
-    height: 180,
-    backgroundColor: '#f0f0f0',
+    marginBottom: 12,
   },
   newsImage: {
-    width: '100%',
-    height: '100%',
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: '#eee',
+    marginBottom: 8,
   },
-  placeholderImage: {
-    width: '100%',
-    height: '100%',
+  newsImagePlaceholder: {
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: '#eee',
+    marginBottom: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-  },
-  newsContent: {
-    padding: 16,
   },
   newsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#333',
-    marginBottom: 8,
-    lineHeight: 24,
   },
   newsSummary: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  newsFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  newsDate: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  newsDateText: {
+    marginTop: 4,
     fontSize: 12,
     color: '#666',
-    marginLeft: 4,
-  },
-  newsAuthor: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  newsAuthorText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4,
-  },
-  categoryContainer: {
-    alignSelf: 'flex-start',
-  },
-  categoryText: {
-    fontSize: 12,
-    color: '#0a84ff',
-    backgroundColor: '#e3f2fd',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    fontWeight: '500',
   },
 });

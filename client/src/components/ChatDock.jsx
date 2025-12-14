@@ -55,7 +55,7 @@ const ChatDock = ({ showSupportChat, currentUserId }) => {
             <FaComments />
           </span>
           <div>
-            <p className="font-semibold text-gray-800">Chat với nhân viên</p>
+            <p className="font-semibold text-gray-800">Chat với bác sĩ </p>
             <p className="text-xs text-gray-500">Trao đổi trực tiếp với CSKH</p>
           </div>
         </button>
@@ -136,15 +136,7 @@ const ChatDock = ({ showSupportChat, currentUserId }) => {
               </div>
               <span className="text-emerald-500 text-sm font-semibold">Mở trang</span>
             </a>
-            <button
-              onClick={() => {
-                navigator.clipboard?.writeText('booking@medpro.vn').catch(() => {});
-              }}
-              className="w-full text-left border rounded-xl px-4 py-3 hover:border-emerald-500 transition-colors"
-            >
-              <p className="font-semibold text-gray-800">Gửi yêu cầu qua email</p>
-              <p className="text-xs text-gray-500">booking@medpro.vn</p>
-            </button>
+       
           </div>
         </QuickModal>
       )}
@@ -167,7 +159,7 @@ const ChatDock = ({ showSupportChat, currentUserId }) => {
             </div>
             <button
               onClick={() => {
-                window.open('https://zalo.me/0909123456', '_blank', 'noopener');
+                window.open('https://zalo.me/0379747517', '_blank', 'noopener');
               }}
               className="w-full border border-rose-200 text-rose-600 font-semibold rounded-xl px-4 py-3 hover:bg-rose-50 transition-colors"
             >

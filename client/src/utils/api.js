@@ -14,8 +14,12 @@ export const getApiBaseURL = () => {
   // Remove trailing slash if present
   baseURL = baseURL.replace(/\/+$/, '');
   
-  // Add /api suffix
-  return `${baseURL}/api`;
+  // Add /api suffix only if it doesn't already end with /api
+  if (!baseURL.endsWith('/api')) {
+    baseURL = `${baseURL}/api`;
+  }
+  
+  return baseURL;
 };
 
 const apiBaseURL = getApiBaseURL();

@@ -85,6 +85,19 @@ export default function AccountScreen() {
       },
     },
     {
+      id: 'video_call_history',
+      title: 'Lịch sử Videocall',
+      icon: 'videocam',
+      iconColor: '#E74C3C',
+      onPress: () => {
+        if (user) {
+          navigation.navigate('VideoCallHistory' as never);
+        } else {
+          navigation.navigate('Login' as never);
+        }
+      },
+    },
+    {
       id: '3',
       title: 'Đổi mật khẩu',
       icon: 'key',

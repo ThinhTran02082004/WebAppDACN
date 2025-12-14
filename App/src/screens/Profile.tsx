@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/api';
 import { getAvatarUrl, handleAvatarError } from '../utils/avatarUtils';
-import * as ImagePicker from 'react-native-image-picker';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
@@ -177,7 +177,14 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleAvatarPress = () => {
+  const handleAvatarPress = async () => {
+    // Request permission to access media library
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Quyền truy cập', 'Cần quyền truy cập thư viện ảnh để chọn ảnh đại diện.');
+      return;
+    }
+
     Alert.alert(
       'Thay đổi ảnh đại diện',
       'Chọn ảnh từ thư viện:',
@@ -188,20 +195,17 @@ export default function ProfileScreen() {
         },
         {
           text: 'Chọn ảnh',
-          onPress: () => {
-            ImagePicker.launchImageLibrary(
-              {
-                mediaType: 'photo' as ImagePicker.MediaType,
-                quality: 0.8,
-                maxWidth: 1024,
-                maxHeight: 1024,
-              },
-              (response: ImagePicker.ImagePickerResponse) => {
-                if (response.assets && response.assets[0]) {
-                  handleImageSelected(response.assets[0]);
-                }
-              }
-            );
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+
+            if (!result.canceled && result.assets && result.assets[0]) {
+              handleImageSelected(result.assets[0]);
+            }
           },
         },
       ],
@@ -209,19 +213,23 @@ export default function ProfileScreen() {
     );
   };
 
-  const handleImageSelected = async (asset: any) => {
+  const handleImageSelected = async (asset: ImagePicker.ImagePickerAsset) => {
     if (!asset.uri) return;
 
     try {
       setAvatarLoading(true);
 
-      // Determine file type
-      const fileType = asset.type || 'image/jpeg';
-      const fileName = asset.fileName || `avatar_${Date.now()}.jpg`;
+      // Determine file type from URI or use default
+      const fileType = asset.mimeType || 'image/jpeg';
+      // Extract filename from URI or use default
+      const uriParts = asset.uri.split('/');
+      const fileName = asset.fileName || uriParts[uriParts.length - 1] || `avatar_${Date.now()}.jpg`;
 
-      // Upload avatar
+      // expo-image-picker returns URI that can be used directly
+      const imageUri = asset.uri;
+      
       const response = await apiService.uploadAvatar(
-        Platform.OS === 'ios' ? asset.uri.replace('file://', '') : asset.uri,
+        imageUri,
         fileType,
         fileName
       );

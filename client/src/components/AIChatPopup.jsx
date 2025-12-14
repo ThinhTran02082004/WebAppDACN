@@ -124,16 +124,18 @@ const AIChatPopup = ({ isOpen: controlledOpen, onClose }) => {
             {!isOpen && !isControlled && (
                 <button
                     onClick={() => setInternalOpen(true)}
-                    className="fixed bottom-6 right-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full p-4 shadow-lg hover:shadow-xl ai-chat-button z-50 group"
+                    className="fixed bottom-6 right-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full px-4 py-3 shadow-lg hover:shadow-xl ai-chat-button z-50 flex items-center gap-3"
                     aria-label="Mở trợ lý đặt lịch khám"
                 >
-                    <FaRobot className="text-2xl" />
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-                        AI
+                    <span className="relative inline-flex">
+                        <FaRobot className="text-2xl" />
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                            AI
+                        </span>
                     </span>
-                    <div className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-800 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    <span className="text-sm font-semibold text-white whitespace-nowrap">
                         Trợ lý đặt lịch khám
-                    </div>
+                    </span>
                 </button>
             )}
 

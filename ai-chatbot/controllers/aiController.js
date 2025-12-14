@@ -39,7 +39,7 @@ exports.geminiChat = async (req, res) => {
         }
 
         // -------------------------------------
-        // ⭐ LỚP 1: LỌC SPAM (Enhanced Spam Filter)
+        //  LỚP 1: LỌC SPAM (Enhanced Spam Filter)
         // -------------------------------------
         const spamCheck = await spamFilterService.checkSpam(userPrompt, newSessionId);
         if (spamCheck) {
@@ -75,7 +75,7 @@ exports.geminiChat = async (req, res) => {
         }
 
         // -------------------------------------
-        // ⭐ LỚP 2: LỌC CACHE (BỘ ĐỆM)
+        //  LỚP 2: LỌC CACHE (BỘ ĐỆM)
         // -------------------------------------
         const cachedAnswer = await qdrantService.findCachedAnswer(userPrompt);
         if (cachedAnswer) {
@@ -92,7 +92,7 @@ exports.geminiChat = async (req, res) => {
         }
 
         // -------------------------------------
-        // ⭐ LỚP 3: PHÂN LOẠI INTENT VÀ ROUTE ĐẾN ĐÚNG MODEL
+        //  LỚP 3: PHÂN LOẠI INTENT VÀ ROUTE ĐẾN ĐÚNG MODEL
         // -------------------------------------
         const intent = await intentRouter.classifyIntent(userPrompt);
         console.log(`[Intent Router] Intent: ${intent} cho prompt: "${userPrompt.substring(0, 50)}..."`);
