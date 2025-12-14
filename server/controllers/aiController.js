@@ -2,6 +2,7 @@ const aiService = require('../services/aiService'); // Appointment Agent (Gemini
 const aiServicePro = require('../services/aiServicePro'); // Information Agent (Gemini 2.5 Pro)
 const intentRouter = require('../services/intentRouter'); // Intent Router
 const qdrantService = require('../services/qdrantService'); // Lớp 1 & 2 (Gác cổng & Bộ đệm)
+const spamFilterService = require('../services/spamFilterService'); // Enhanced spam filter
 const ChatHistory = require('../models/ChatHistory');
 const { v4: uuidv4 } = require('uuid'); // Import UUID
 const cache = require('../services/cacheService'); // Import cache
@@ -38,24 +39,39 @@ exports.geminiChat = async (req, res) => {
         }
 
         // -------------------------------------
-        // ⭐ LỚP 1: LỌC LẠC ĐỀ (GÁC CỔNG)
+        // ⭐ LỚP 1: LỌC SPAM (Enhanced Spam Filter)
         // -------------------------------------
-        const isSpam = await qdrantService.isIrrelevant(userPrompt);
-        if (isSpam) {
-            console.log(`[Blocked] Câu hỏi lạc đề bị chặn (Qdrant): "${userPrompt}"`);
-            const cannedResponse = "Xin lỗi, tôi chỉ có thể hỗ trợ các câu hỏi liên quan đến việc tìm kiếm và đặt lịch y tế.";
-            
-            // (Vẫn lưu nếu user đã đăng nhập)
-            if (realUserId) {
-                await saveChat(realUserId, userPrompt, cannedResponse, false, newSessionId);
+        const spamCheck = await spamFilterService.checkSpam(userPrompt, newSessionId);
+        if (spamCheck) {
+            if (spamCheck.blocked) {
+                // Zone 3: Spam rõ ràng - Block
+                console.log(`[Blocked] Câu hỏi spam bị chặn (spamScore: ${spamCheck.spamScore.toFixed(3)}): "${userPrompt}"`);
+                
+                // (Vẫn lưu nếu user đã đăng nhập)
+                if (realUserId) {
+                    await saveChat(realUserId, userPrompt, spamCheck.message, false, newSessionId);
+                }
+                
+                return res.json({ 
+                    success: true, 
+                    data: { text: spamCheck.message },
+                    sessionId: newSessionId
+                });
+            } else {
+                // Zone 2: Nghi ngờ - Gửi câu hỏi xác nhận
+                console.log(`[Suspicious] Câu hỏi nghi ngờ (spamScore: ${spamCheck.spamScore.toFixed(3)}): "${userPrompt}"`);
+                
+                // (Vẫn lưu nếu user đã đăng nhập)
+                if (realUserId) {
+                    await saveChat(realUserId, userPrompt, spamCheck.message, false, newSessionId);
+                }
+                
+                return res.json({ 
+                    success: true, 
+                    data: { text: spamCheck.message },
+                    sessionId: newSessionId
+                });
             }
-            
-            // Trả về cả 'newSessionId' để client lưu lại
-            return res.json({ 
-                success: true, 
-                data: { text: cannedResponse },
-                sessionId: newSessionId // Gửi lại session ID
-            });
         }
 
         // -------------------------------------
@@ -133,7 +149,8 @@ exports.geminiChat = async (req, res) => {
                         formattedHistory,
                         newSessionId,
                         medicalContext, // Truyền medical context vào service
-                        userPrompt // Truyền prompt gốc để kiểm tra intent
+                        userPrompt, // Truyền prompt gốc để kiểm tra intent
+                        realUserId // Truyền userId để cập nhật conversation state
                     );
                     aiResponseText = result.text;
                     usedTool = result.usedTool;
@@ -144,7 +161,8 @@ exports.geminiChat = async (req, res) => {
                         formattedHistory,
                         newSessionId,
                         medicalContext, // Truyền medical context vào service
-                        userPrompt // Truyền prompt gốc (giống nhau trong trường hợp này)
+                        userPrompt, // Truyền prompt gốc (giống nhau trong trường hợp này)
+                        realUserId // Truyền userId để cập nhật conversation state
                     );
                     aiResponseText = result.text;
                     usedTool = result.usedTool;
@@ -156,7 +174,8 @@ exports.geminiChat = async (req, res) => {
                     formattedHistory,
                     newSessionId,
                     medicalContext, // Vẫn truyền medicalContext nếu có (có thể hữu ích cho cancel/reschedule)
-                    userPrompt // Truyền prompt gốc
+                    userPrompt, // Truyền prompt gốc
+                    realUserId // Truyền userId để cập nhật conversation state
                 );
                 aiResponseText = result.text;
                 usedTool = result.usedTool;

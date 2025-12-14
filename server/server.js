@@ -46,17 +46,20 @@ const inpatientRoomRoutes = require('./routes/inpatientRoomRoutes');
 const billingRoutes = require('./routes/billingRoutes');
 
 // Load environment variables
-console.log('Loading environment variables from .env file');
+// Note: dotenv.config() will silently fail if .env file doesn't exist (normal on Railway/production)
+// Railway uses environment variables directly, so .env file is optional
 const result = dotenv.config();
-if (result.error) {
-  console.error('Error loading .env file:', result.error);
-} else {
+if (result.error && result.error.code !== 'ENOENT') {
+  // Only log error if it's not a "file not found" error (ENOENT)
+  // ENOENT is expected on Railway/production where env vars are set directly
+  console.warn('Warning loading .env file:', result.error.message);
+} else if (!result.error) {
   console.log('.env file loaded successfully');
-  console.log('Environment variables:');
-  console.log('- MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
-  console.log('- EMAIL_USER:', process.env.EMAIL_USER);
-  console.log('- EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? 'Set' : 'Not set');
 }
+console.log('Environment variables check:');
+console.log('- MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
+console.log('- EMAIL_USER:', process.env.EMAIL_USER || 'Not set');
+console.log('- EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? 'Set' : 'Not set');
 
 // Import email service after environment variables are loaded
 // SendGrid is initialized automatically when the module is imported
@@ -216,6 +219,9 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Serve static files from client/dist (if exists) or redirect to frontend
+app.use(express.static(path.join(__dirname, '../public')));
+
 // Xử lý callback ở đường dẫn gốc (root URL)
 app.get('/', (req, res) => {
   // Kiểm tra nếu có code OAuth từ Google hoặc Facebook
@@ -244,8 +250,22 @@ app.get('/', (req, res) => {
     // Chuyển hướng đến handler thích hợp
     return res.redirect(redirectUrl);
   } else {
-    // Nếu không có code, chuyển hướng đến Facebook callback
-    res.redirect('/api/auth/facebook-root-callback');
+    // Nếu không có code, serve static files hoặc redirect về frontend
+    const publicPath = path.join(__dirname, '../public', 'index.html');
+    if (fs.existsSync(publicPath)) {
+      return res.sendFile(publicPath);
+    }
+    // Nếu không có static files, redirect về frontend URL (nếu có)
+    const frontendURL = process.env.FRONTEND_URL || process.env.CLIENT_URL;
+    if (frontendURL) {
+      return res.redirect(frontendURL);
+    }
+    // Fallback: trả về JSON response
+    res.json({ 
+      message: 'Hospital API Server', 
+      status: 'running',
+      version: '1.0.0'
+    });
   }
 });
 

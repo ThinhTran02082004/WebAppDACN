@@ -54,11 +54,16 @@ exports.geminiChat = async (req, res) => {
             parts: [{ text: msg.content || "" }] 
         }));
         
-        // ⭐ SỬA LỖI Ở ĐÂY: Truyền 'userId' thật vào
+        // ⭐ SỬA LỖI Ở ĐÂY: Truyền đầy đủ parameters
+        // Tạo sessionId tạm thời cho admin (hoặc dùng userId làm sessionId)
+        const adminSessionId = userId || `admin_${Date.now()}`;
         const { text: aiResponseText, usedTool } = await aiService.runChatWithTools(
             userPrompt, 
             formattedHistory,
-            userId // <-- Truyền ID thật (hoặc null) vào
+            adminSessionId, // sessionId
+            null, // medicalContext
+            userPrompt, // originalPrompt
+            userId // userId
         );
 
         // Lưu lịch sử (hợp lệ)

@@ -56,6 +56,47 @@ const availableTools = {
         return await searchTools.findDoctors({ specialty, name });
     },
 
+    getDoctorInfo: async ({ name, doctorId }) => {
+        if (!name && !doctorId) {
+            return { error: 'Vui lòng cung cấp tên bác sĩ để tra cứu.' };
+        }
+
+        let filter = {};
+        if (doctorId && mongoose.Types.ObjectId.isValid(doctorId)) {
+            filter._id = doctorId;
+        }
+        if (name) {
+            filter = {
+                ...filter,
+                title: { $regex: name, $options: 'i' }
+            };
+        }
+
+        const doctors = await Doctor.find(filter)
+            .populate('user', 'fullName')
+            .populate('hospitalId', 'name address')
+            .populate('specialtyId', 'name')
+            .select('title description education experience certifications languages consultationFee isAvailable ratings')
+            .limit(5)
+            .lean();
+
+        if (!doctors.length && name) {
+            const allDoctors = await Doctor.find({})
+                .populate('user', 'fullName')
+                .populate('hospitalId', 'name address')
+                .populate('specialtyId', 'name')
+                .select('title description education experience certifications languages consultationFee isAvailable ratings')
+                .lean();
+            const matched = allDoctors.filter(d => (d.user?.fullName || '').toLowerCase().includes(name.toLowerCase()));
+            if (matched.length) {
+                matched.splice(5);
+                return { doctors: matched };
+            }
+        }
+
+        return { doctors };
+    },
+
     checkInventoryAndPrescribe: async ({ symptom, sessionId }) => {
         try {
             const userId = cache.getUserId(sessionId);
@@ -371,6 +412,39 @@ const availableTools = {
  * @returns {Promise<{text: string, usedTool: boolean}>}
  */
 async function runProChatWithTools(userPrompt, history, sessionId) {
+    // 🔎 Nhận diện câu hỏi xin danh sách bệnh viện để bắt buộc dùng tool findHospitals
+    const isHospitalListQuestion = /bệnh viện (nào|gì|gồm những|có những|hiện có|danh sách)|danh sách bệnh viện|có bệnh viện nào|bệnh viện ở đâu/i.test(userPrompt);
+
+    if (isHospitalListQuestion) {
+        console.log('[Pro Model] Detected hospital list question → forcing findHospitals, no web search');
+        const hospitalResult = await availableTools.findHospitals({ specialty: null, city: null, name: null });
+
+        // Fallback an toàn khi DB không có dữ liệu
+        if (!hospitalResult || hospitalResult.error) {
+            const message = hospitalResult?.error
+                ? `Xin lỗi, không thể lấy danh sách bệnh viện lúc này: ${hospitalResult.error}`
+                : 'Xin lỗi, không thể lấy danh sách bệnh viện lúc này.';
+            return { text: message, usedTool: true };
+        }
+
+        const hospitals = hospitalResult.hospitals || [];
+        if (!hospitals.length) {
+            return {
+                text: 'Hiện chưa có dữ liệu bệnh viện trong hệ thống. Khi có dữ liệu mới mình sẽ cập nhật cho bạn.',
+                usedTool: true
+            };
+        }
+
+        const hospitalListText = hospitals
+            .map((h, idx) => `${idx + 1}. ${h.name}${h.address ? ` - ${h.address}` : ''}`)
+            .join('\n');
+
+        return {
+            text: `Hệ thống hiện có ${hospitals.length} bệnh viện:\n${hospitalListText}`,
+            usedTool: true
+        };
+    }
+
     // Bước 1: Lấy danh sách chuyên khoa có sẵn trong hệ thống
     const availableSpecialties = await Specialty.find({}).select('name description').lean();
     const specialtyList = availableSpecialties.map(s => `- ${s.name}${s.description ? `: ${s.description}` : ''}`).join('\n');

@@ -12,44 +12,46 @@ const { SYSTEM_INSTRUCTION } = require('./aiConfig');
 const prescriptionTools = require('./prescriptionTools');
 const { findSpecialtyMapping } = require('./qdrantService');
 const { tools } = require('./aiToolsDefinitions');
+const conversationStateService = require('./conversationStateService');
+const { triageSpecialty } = require('./triageTools');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ========================================================================
-// 🤖 MODEL 2: Search Agent (Dược sĩ AI) - OpenAI
+// 🤖 GPT-4o-mini: Search Drug Tool (Internal Tool, không phải agent riêng)
 // ========================================================================
 const openaiClient = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
-const callSearchAgent = async (query) => {
-    try {
-        const prompt = `Hãy tìm kiếm thông tin y khoa chính xác về: "${query}".
-Trả về danh sách ngắn các hoạt chất hoặc nhóm thuốc phổ biến để điều trị, cách nhau bởi dấu phẩy.`;
-
-        const response = await openaiClient.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                {
-                    role: "system",
-                    content: "Bạn là một dược sĩ AI chuyên tư vấn về thuốc và hoạt chất y khoa. Hãy trả lời ngắn gọn, chính xác."
-                },
-                {
-                    role: "user",
-                    content: prompt
-                }
-            ],
-            max_tokens: 200,
-            temperature: 0.7
-        });
-
-        const result = response.choices[0]?.message?.content || '';
-        console.log(`[Search Agent] Kết quả: ${result?.slice(0, 120) || ''}`);
-        return result;
-    } catch (error) {
-        console.error("Lỗi Search Agent (OpenAI):", error);
-        return "";
+/**
+ * Parse kết quả từ GPT về dạng JSON đơn giản
+ */
+const safeParseDrugInfo = (text) => {
+    if (!text) {
+        return { drugs: [], warnings: [] };
     }
+
+    try {
+        // Thử parse JSON nếu có
+        if (text.trim().startsWith('{')) {
+            return JSON.parse(text);
+        }
+    } catch (e) {
+        // Không phải JSON, parse text thông thường
+    }
+
+    // Parse text thông thường
+    const lines = text.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+    const drugs = lines.slice(0, 5); // Lấy tối đa 5 thuốc
+    const warnings = [];
+
+    // Tìm warnings
+    if (text.toLowerCase().includes('cảnh báo') || text.toLowerCase().includes('lưu ý')) {
+        warnings.push('Vui lòng tham khảo ý kiến bác sĩ trước khi sử dụng thuốc.');
+    }
+
+    return { drugs, warnings };
 };
 
 // ========================================================================
@@ -154,12 +156,107 @@ const isMedicationIntent = (text = '') => {
 };
 
 const availableTools = {
+    triageSpecialty: async ({ symptomsText, age, gender }) => {
+        return await triageSpecialty({ symptomsText, age, gender });
+    },
+
+    searchDrugs: async ({ query }) => {
+        try {
+            // 1. Lấy state nếu cần (triệu chứng, chẩn đoán sơ bộ,...)
+            // Có thể sử dụng state sau này để cải thiện context
+
+            // 2. Gọi GPT-4o-mini bằng OpenAI API
+            const prompt = `Hãy tìm kiếm thông tin y khoa chính xác về: "${query}".
+Trả về danh sách ngắn các hoạt chất hoặc nhóm thuốc phổ biến để điều trị, cách nhau bởi dấu phẩy.
+Nếu có cảnh báo quan trọng, hãy đề cập.`;
+
+            const response = await openaiClient.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                    {
+                        role: "system",
+                        content: "Bạn là một dược sĩ AI chuyên tư vấn về thuốc và hoạt chất y khoa. Hãy trả lời ngắn gọn, chính xác. Luôn nhấn mạnh cần tham khảo ý kiến bác sĩ trước khi sử dụng thuốc."
+                    },
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                max_tokens: 300,
+                temperature: 0.7
+            });
+
+            const result = response.choices[0]?.message?.content || '';
+            console.log(`[SearchDrugs Tool] Kết quả: ${result?.slice(0, 120) || ''}`);
+
+            // 3. Parse kết quả về dạng JSON đơn giản
+            const parsed = safeParseDrugInfo(result);
+
+            return {
+                drugs: parsed.drugs,
+                warnings: parsed.warnings,
+                advice: result // Giữ nguyên advice để AI có thể sử dụng
+            };
+        } catch (error) {
+            console.error("Lỗi SearchDrugs Tool (OpenAI):", error);
+            return {
+                error: "Không thể tra cứu thông tin thuốc. Vui lòng thử lại sau.",
+                drugs: [],
+                warnings: []
+            };
+        }
+    },
+
     findHospitals: async ({ specialty, city, name }) => {
         return await searchTools.findHospitals({ specialty, city, name });
     },
 
     findDoctors: async ({ specialty, name }) => {
         return await searchTools.findDoctors({ specialty, name });
+    },
+
+    getDoctorInfo: async ({ name, doctorId }) => {
+        if (!name && !doctorId) {
+            return { error: 'Vui lòng cung cấp tên bác sĩ để tra cứu.' };
+        }
+
+        let filter = {};
+        if (doctorId && mongoose.Types.ObjectId.isValid(doctorId)) {
+            filter._id = doctorId;
+        }
+        if (name) {
+            filter = {
+                ...filter,
+                // match tên bác sĩ (user.fullName) theo regex không phân biệt hoa thường
+                // vì populate sau mới có user, ta lọc tạm bằng regex trên title hoặc description để giảm kết quả
+                title: { $regex: name, $options: 'i' }
+            };
+        }
+
+        const doctors = await Doctor.find(filter)
+            .populate('user', 'fullName')
+            .populate('hospitalId', 'name address')
+            .populate('specialtyId', 'name')
+            .select('title description education experience certifications languages consultationFee isAvailable ratings')
+            .limit(5)
+            .lean();
+
+        if (!doctors.length && name) {
+            // fallback: tìm theo user.fullName
+            const allDoctors = await Doctor.find({})
+                .populate('user', 'fullName')
+                .populate('hospitalId', 'name address')
+                .populate('specialtyId', 'name')
+                .select('title description education experience certifications languages consultationFee isAvailable ratings')
+                .lean();
+            const matched = allDoctors.filter(d => (d.user?.fullName || '').toLowerCase().includes(name.toLowerCase()));
+            if (matched.length) {
+                matched.splice(5);
+                return { doctors: matched };
+            }
+        }
+
+        return { doctors };
     },
 
     findAvailableSlots: async ({ query, city, date, sessionId }) => {
@@ -219,7 +316,9 @@ const availableTools = {
                 };
             }
 
-            const medicalAdvice = await callSearchAgent(symptom);
+            // Sử dụng searchDrugs tool thay vì callSearchAgent
+            const drugSearchResult = await availableTools.searchDrugs({ query: symptom });
+            const medicalAdvice = drugSearchResult.advice || drugSearchResult.drugs?.join(', ') || '';
             const keywords = extractKeywords(medicalAdvice, symptom);
             const textSearch = keywords.slice(0, 3).join(' ');
 
@@ -515,13 +614,82 @@ const availableTools = {
     }
 };
 
-const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medicalContext = null, originalPrompt = null) => {
+const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medicalContext = null, originalPrompt = null, userId = null) => {
     // Lưu prompt gốc để kiểm tra intent (không bị ảnh hưởng bởi enhanced prompt)
     const promptForIntentCheck = originalPrompt || userPrompt;
+    
+    // ========================================================================
+    // 🧱 LẤY CONVERSATION STATE
+    // ========================================================================
+    const state = await conversationStateService.getState(sessionId);
+    if (userId && state && !state.userId) {
+        // Cập nhật userId nếu user vừa đăng nhập
+        await conversationStateService.updateState(sessionId, {}, userId);
+        state.userId = userId;
+    }
+    
+    // ========================================================================
+    // 📝 FORMAT HISTORY: summary + 5-10 messages gần nhất + structuredState
+    // ========================================================================
+    let formattedHistory = [];
+    
+    // 1. Thêm summary nếu có (như system message)
+    if (state && state.summary && state.summary.trim().length > 0) {
+        formattedHistory.push({
+            role: 'user', // Gemini yêu cầu message đầu tiên là user; dùng user để nhúng context
+            parts: [{ text: `[Tóm tắt hội thoại trước đó]: ${state.summary}` }]
+        });
+    }
+    
+    // 2. Lấy 5-10 messages gần nhất từ history
+    const recentHistory = history && history.length > 0 
+        ? history.slice(-10) // Lấy 10 messages gần nhất (5 cặp user-assistant)
+        : [];
+    
+    formattedHistory = formattedHistory.concat(recentHistory);
+    
+    // 3. Thêm structuredState như context (nếu có thông tin quan trọng)
+    if (state && state.structuredState) {
+        const stateInfo = [];
+        if (state.structuredState.provisionalDepartment) {
+            let deptInfo = `Chuyên khoa đã đề xuất: ${state.structuredState.provisionalDepartment}`;
+            if (state.structuredState.triageLocked) {
+                deptInfo += ' (ĐÃ KHÓA - không được đổi)';
+            }
+            if (state.structuredState.triageReason) {
+                deptInfo += `. Lý do: ${state.structuredState.triageReason}`;
+            }
+            stateInfo.push(deptInfo);
+        }
+        if (state.structuredState.symptoms && state.structuredState.symptoms.length > 0) {
+            stateInfo.push(`Triệu chứng: ${state.structuredState.symptoms.join(', ')}`);
+        }
+        if (state.structuredState.riskLevel && state.structuredState.riskLevel !== 'normal') {
+            stateInfo.push(`Mức độ: ${state.structuredState.riskLevel}`);
+        }
+        if (state.structuredState.bookingIntent) {
+            let bookingInfo = `Người dùng có ý định đặt lịch`;
+            if (state.structuredState.bookingLocation) {
+                bookingInfo += ` tại ${state.structuredState.bookingLocation}`;
+            }
+            if (state.structuredState.bookingDate) {
+                bookingInfo += ` vào ${state.structuredState.bookingDate}`;
+            }
+            stateInfo.push(bookingInfo);
+        }
+        
+        if (stateInfo.length > 0) {
+            formattedHistory.push({
+                role: 'user', // giữ đúng yêu cầu message đầu tiên phải là user
+                parts: [{ text: `[Thông tin từ hội thoại trước]: ${stateInfo.join('. ')}` }]
+            });
+        }
+    }
+    
     // Log history để debug
-    if (history && history.length > 0) {
-        console.log(`[Flash Model] Nhận được ${history.length} tin nhắn trong lịch sử:`);
-        history.slice(-4).forEach((msg, idx) => {
+    if (formattedHistory && formattedHistory.length > 0) {
+        console.log(`[Flash Model] Nhận được ${formattedHistory.length} tin nhắn trong lịch sử (bao gồm summary và state)`);
+        formattedHistory.slice(-4).forEach((msg, idx) => {
             const role = msg.role || 'unknown';
             const content = msg.parts?.[0]?.text || msg.content || '';
             console.log(`  [${idx}] ${role}: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
@@ -543,9 +711,86 @@ const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medic
     
     const chat = appointmentModel.startChat({
         tools: toolDeclarations,
-        history
+        history: formattedHistory
     });
 
+    // ========================================================================
+    // 🔒 KIỂM TRA: Nếu user muốn đặt lịch nhưng chưa có triage, buộc phải triage trước
+    // ========================================================================
+    const isBookingIntent = /đặt lịch|muốn khám|tìm bác sĩ|khám bệnh/i.test(userPrompt);
+    
+    // Kiểm tra auto-continue booking intent: nếu có bookingIntent = true và user cung cấp location/date
+    if (state && state.structuredState && state.structuredState.bookingIntent) {
+        const hasLocation = /hà nội|hồ chí minh|tp\.?hcm|sài gòn|đà nẵng|hải phòng|huế|nha trang|vũng tàu|hải dương|bắc ninh|thái nguyên|nam định|quảng ninh|hạ long|phú quốc|đà lạt/i.test(userPrompt);
+        const hasDate = /hôm nay|ngày mai|mai|hôm qua|thứ \d+|ngày \d+|\d+\/\d+|\d+-\d+/i.test(userPrompt);
+        
+        if (hasLocation || hasDate) {
+            // User đang auto-continue booking intent, cập nhật state
+            const statePatch = {
+                structuredState: {}
+            };
+            
+            if (hasLocation) {
+                // Extract location
+                const locationMatch = userPrompt.match(/(hà nội|hồ chí minh|tp\.?hcm|sài gòn|đà nẵng|hải phòng|huế|nha trang|vũng tàu|hải dương|bắc ninh|thái nguyên|nam định|quảng ninh|hạ long|phú quốc|đà lạt)/i);
+                if (locationMatch) {
+                    let location = locationMatch[1];
+                    // Normalize location names
+                    if (/tp\.?hcm|hồ chí minh|sài gòn/i.test(location)) location = 'TP.HCM';
+                    else if (/hà nội/i.test(location)) location = 'Hà Nội';
+                    statePatch.structuredState.bookingLocation = location;
+                    console.log(`[Auto-Continue] Đã extract location: ${location}`);
+                }
+            }
+            
+            if (hasDate) {
+                // Extract date (có thể cải thiện logic này)
+                const today = new Date();
+                let dateStr = '';
+                if (/hôm nay/i.test(userPrompt)) {
+                    dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+                } else if (/ngày mai|mai/i.test(userPrompt)) {
+                    const tomorrow = new Date(today);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    dateStr = tomorrow.toISOString().split('T')[0];
+                } else {
+                    // Có thể parse các format khác
+                    dateStr = userPrompt.match(/\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/)?.[0] || '';
+                }
+                if (dateStr) {
+                    statePatch.structuredState.bookingDate = dateStr;
+                    console.log(`[Auto-Continue] Đã extract date: ${dateStr}`);
+                }
+            }
+            
+            if (Object.keys(statePatch.structuredState).length > 0) {
+                try {
+                    await conversationStateService.updateState(sessionId, statePatch, userId);
+                } catch (error) {
+                    console.error('[Auto-Continue] Lỗi khi cập nhật state:', error);
+                }
+            }
+        }
+    }
+    
+    if (isBookingIntent && state && state.structuredState) {
+        const { triageLocked, provisionalDepartment } = state.structuredState;
+        if (!triageLocked || !provisionalDepartment) {
+            // Kiểm tra xem có triệu chứng trong lịch sử không
+            const hasSymptomsInHistory = state.structuredState.symptoms && state.structuredState.symptoms.length > 0;
+            const hasSymptomsInPrompt = /đau|sốt|ho|khó thở|buồn nôn|chóng mặt|mệt mỏi/i.test(userPrompt);
+            
+            if (!hasSymptomsInHistory && !hasSymptomsInPrompt) {
+                // Không có triệu chứng, yêu cầu user mô tả
+                console.log('[AI Service] ⚠️ User muốn đặt lịch nhưng chưa có triệu chứng, yêu cầu mô tả');
+                return {
+                    text: 'Để tôi có thể đề xuất chuyên khoa phù hợp, bạn vui lòng mô tả triệu chứng hoặc vấn đề sức khỏe bạn đang gặp phải.',
+                    usedTool: false
+                };
+            }
+        }
+    }
+    
     let result;
     let toolCalled = false;
     
@@ -560,6 +805,16 @@ const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medic
         const call = result.response.functionCalls()?.[0];
         if (!call) {
             const responseText = result.response.text() || 'Xin lỗi, tôi không thể xử lý yêu cầu này. Vui lòng thử lại.';
+            
+            // ========================================================================
+            // 📝 TÓM TẮT HỘI THOẠI NẾU SỐ MESSAGE LỚN (> 20)
+            // ========================================================================
+            const currentState = await conversationStateService.getState(sessionId);
+            if (currentState && formattedHistory.length > 20) {
+                // Có thể thêm logic tóm tắt tự động ở đây nếu cần
+                // Hiện tại để Gemini tự xử lý thông qua summary trong state
+            }
+            
             return {
                 text: responseText,
                 usedTool: toolCalled 
@@ -567,6 +822,60 @@ const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medic
         }
         
         console.log(`[AI Request] ${call.name}`);
+        
+        // ========================================================================
+        // 🧱 XỬ LÝ TOOL CALLS VÀ CẬP NHẬT STATE
+        // ========================================================================
+        
+        // Xử lý triageSpecialty: cập nhật state với department và LOCK
+        if (call.name === 'triageSpecialty') {
+            toolCalled = true;
+            const triageResult = await availableTools.triageSpecialty(call.args || {});
+            
+            // Cập nhật state với kết quả triage và LOCK
+            if (triageResult && !triageResult.error) {
+                // Tạo triageReason từ kết quả
+                const triageReason = triageResult.reason || 
+                    `Triệu chứng: ${call.args?.symptomsText?.substring(0, 100) || 'N/A'}. Đề xuất: ${triageResult.department}. Mức độ: ${triageResult.riskLevel || 'normal'}.`;
+                
+                const statePatch = {
+                    structuredState: {
+                        provisionalDepartment: triageResult.department,
+                        triageLocked: true, // 🔒 LOCK sau khi triage
+                        triageReason: triageReason,
+                        riskLevel: triageResult.riskLevel || 'normal',
+                        currentState: 'TRIAGE_DEPARTMENT'
+                    }
+                };
+                
+                // Thêm symptoms nếu có
+                if (call.args?.symptomsText) {
+                    // Extract symptoms từ text (có thể cải thiện logic này)
+                    const symptoms = call.args.symptomsText.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+                    statePatch.structuredState.symptoms = symptoms;
+                }
+                
+                // Thêm patientInfo nếu có
+                if (call.args?.age || call.args?.gender) {
+                    statePatch.structuredState.patientInfo = {};
+                    if (call.args.age) statePatch.structuredState.patientInfo.age = call.args.age;
+                    if (call.args.gender) statePatch.structuredState.patientInfo.gender = call.args.gender;
+                }
+                
+                try {
+                    await conversationStateService.updateState(sessionId, statePatch, userId);
+                    console.log(`[ConversationState] ✅ Đã LOCK triage với department: ${triageResult.department}`);
+                } catch (error) {
+                    console.error('[ConversationState] Lỗi khi cập nhật state:', error);
+                }
+            }
+            
+            // Trả kết quả cho Gemini
+            result = await chat.sendMessage(JSON.stringify({
+                functionResponse: { name: call.name, response: triageResult }
+            }));
+            continue;
+        }
         
         if (call.name === 'findAvailableSlots') {
             const ref = normalizeReferenceCode(userPrompt);
@@ -616,8 +925,75 @@ const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medic
             args.sessionId = sessionId;
         }
         
-        // Nếu gọi findAvailableSlots, xử lý medicalContext và extract specialty từ query nếu có
+        // Nếu gọi findAvailableSlots, kiểm tra triageLocked và buộc triage trước
         if (call.name === 'findAvailableSlots') {
+            // 🔒 Kiểm tra: Nếu chưa có triageLocked, buộc phải triage trước
+            const currentState = await conversationStateService.getState(sessionId);
+            if (currentState && currentState.structuredState) {
+                const { triageLocked, provisionalDepartment, bookingIntent, bookingLocation, bookingDate } = currentState.structuredState;
+                
+                // Nếu chưa triage, buộc phải triage trước
+                if (!triageLocked || !provisionalDepartment) {
+                    console.log('[AI Service] ⚠️ Chưa có triage, buộc phải triage trước khi đặt lịch');
+                    result = await chat.sendMessage(JSON.stringify({
+                        functionResponse: {
+                            name: call.name,
+                            response: {
+                                error: 'TRIAGE_REQUIRED',
+                                message: 'Bạn cần mô tả triệu chứng để tôi có thể đề xuất chuyên khoa phù hợp trước khi đặt lịch. Vui lòng mô tả triệu chứng của bạn.'
+                            }
+                        }
+                    }));
+                    continue;
+                }
+                
+                // Nếu đã có bookingIntent, auto-continue với location và date từ state
+                if (bookingIntent) {
+                    if (!args.city && bookingLocation) {
+                        args.city = bookingLocation;
+                        console.log(`[AI Service] Auto-continue: Sử dụng bookingLocation từ state: ${bookingLocation}`);
+                    }
+                    if (!args.date && bookingDate) {
+                        args.date = bookingDate;
+                        console.log(`[AI Service] Auto-continue: Sử dụng bookingDate từ state: ${bookingDate}`);
+                    }
+                    // Sử dụng department đã lock
+                    if (!args.specialty && provisionalDepartment) {
+                        args.specialty = provisionalDepartment;
+                        console.log(`[AI Service] Auto-continue: Sử dụng provisionalDepartment đã lock: ${provisionalDepartment}`);
+                    }
+                }
+                
+                // 🔒 Kiểm tra: Nếu triageLocked = true, KHÔNG cho phép đổi khoa
+                if (triageLocked && provisionalDepartment) {
+                    // Nếu user cố gắng đổi khoa, từ chối
+                    const userWantsToChangeDepartment = args.query && 
+                        (args.query.toLowerCase().includes('đổi khoa') || 
+                         args.query.toLowerCase().includes('khác khoa') ||
+                         args.query.toLowerCase().includes('khoa khác'));
+                    
+                    if (userWantsToChangeDepartment) {
+                        console.log(`[AI Service] 🔒 Triage đã LOCK, không cho phép đổi khoa từ ${provisionalDepartment}`);
+                        result = await chat.sendMessage(JSON.stringify({
+                            functionResponse: {
+                                name: call.name,
+                                response: {
+                                    error: 'TRIAGE_LOCKED',
+                                    message: `Khoa đã được xác định là ${provisionalDepartment} dựa trên triệu chứng của bạn. Nếu bạn có triệu chứng mới hoặc thay đổi đáng kể, vui lòng mô tả lại để tôi có thể đánh giá lại.`
+                                }
+                            }
+                        }));
+                        continue;
+                    }
+                    
+                    // Nếu không có specialty trong args, sử dụng department đã lock
+                    if (!args.specialty) {
+                        args.specialty = provisionalDepartment;
+                        console.log(`[AI Service] 🔒 Sử dụng department đã lock: ${provisionalDepartment}`);
+                    }
+                }
+            }
+            
             // Ưu tiên 1: Extract specialty từ query hiện tại (nếu có) - thông tin mới nhất
             if (args.query && args.query.trim().length > 0) {
                 const queryLower = args.query.toLowerCase();
@@ -655,7 +1031,13 @@ const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medic
                 }
             }
             
-            // Ưu tiên 2: Sử dụng medicalContext từ lịch sử (nếu chưa có specialty từ query)
+            // Ưu tiên 2: Sử dụng state (provisionalDepartment đã lock) - ưu tiên cao nhất
+            if (currentState && currentState.structuredState && currentState.structuredState.provisionalDepartment && !args.specialty) {
+                args.specialty = currentState.structuredState.provisionalDepartment;
+                console.log(`[State] Sử dụng provisionalDepartment từ state: ${args.specialty}`);
+            }
+            
+            // Ưu tiên 3: Sử dụng medicalContext từ lịch sử (nếu chưa có specialty từ query)
             if (medicalContext && !args.specialty) {
                 if (!args.query || args.query.trim().length === 0) {
                     if (medicalContext.primaryQuery) {
@@ -664,7 +1046,7 @@ const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medic
                     }
                 }
                 // Nếu có chuyên khoa từ context và chưa có trong args
-                if (medicalContext.specialty) {
+                if (medicalContext.specialty && !args.specialty) {
                     console.log(`[Medical Context] Inject specialty "${medicalContext.specialty}" từ lịch sử vào findAvailableSlots`);
                     args.specialty = medicalContext.specialty;
                 }
@@ -739,6 +1121,49 @@ const runAppointmentChatWithTools = async (userPrompt, history, sessionId, medic
                 console.log(`[AI Service] ✅ Đảm bảo specialty "${finalArgs.specialty}" được truyền vào tool`);
             }
             toolResult = await toolImpl(finalArgs);
+            
+            // ========================================================================
+            // 🧱 CẬP NHẬT STATE SAU KHI GỌI TOOL
+            // ========================================================================
+            if (call.name === 'bookAppointment' && toolResult.success) {
+                // Cập nhật state khi đặt lịch thành công
+                const statePatch = {
+                    structuredState: {
+                        bookingRequest: {
+                            status: 'confirmed'
+                        },
+                        currentState: 'DONE'
+                    }
+                };
+                try {
+                    await conversationStateService.updateState(sessionId, statePatch, userId);
+                } catch (error) {
+                    console.error('[ConversationState] Lỗi khi cập nhật state sau bookAppointment:', error);
+                }
+            } else if (call.name === 'findAvailableSlots') {
+                // Cập nhật state khi tìm thấy slots hoặc khi user yêu cầu đặt lịch
+                const statePatch = {
+                    structuredState: {
+                        bookingIntent: true,
+                        currentState: 'BOOKING_OPTIONS'
+                    }
+                };
+                
+                // Lưu location và date nếu có
+                if (args.city) {
+                    statePatch.structuredState.bookingLocation = args.city;
+                }
+                if (args.date) {
+                    statePatch.structuredState.bookingDate = args.date;
+                }
+                
+                try {
+                    await conversationStateService.updateState(sessionId, statePatch, userId);
+                    console.log('[ConversationState] Đã cập nhật bookingIntent và location/date');
+                } catch (error) {
+                    console.error('[ConversationState] Lỗi khi cập nhật state sau findAvailableSlots:', error);
+                }
+            }
         } catch (error) {
             console.error(`Lỗi khi thực thi tool ${call.name}:`, error);
             toolResult = { error: error.message };

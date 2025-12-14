@@ -163,8 +163,20 @@ exports.createAppointment = async (req, res) => {
       });
     }
     
+    // Tải trước các tài nguyên cần thiết, dùng projection + lean để giảm overhead
+    const [hospital, specialty, serviceDoc, doctor] = await Promise.all([
+      Hospital.findById(hospitalId).select('specialties name').lean(),
+      Specialty.findById(specialtyId).select('name').lean(),
+      serviceId && mongoose.Types.ObjectId.isValid(serviceId)
+        ? Service.findById(serviceId).select('name price specialtyId').lean()
+        : Promise.resolve(null),
+      Doctor.findById(doctorId)
+        .populate('user', 'fullName email')
+        .select('hospitalId specialtyId services consultationFee user')
+        .lean()
+    ]);
+    
     // Kiểm tra bệnh viện
-    const hospital = await Hospital.findById(hospitalId);
     if (!hospital) {
       return res.status(404).json({
         success: false,
@@ -172,9 +184,7 @@ exports.createAppointment = async (req, res) => {
       });
     }
     
-    // Kiểm tra chuyên khoa và xem bệnh viện có hỗ trợ chuyên khoa này không
-    const Specialty = require('../models/Specialty');
-    const specialty = await Specialty.findById(specialtyId);
+    // Kiểm tra chuyên khoa
     if (!specialty) {
       return res.status(404).json({
         success: false,
@@ -200,9 +210,7 @@ exports.createAppointment = async (req, res) => {
     
     // Kiểm tra dịch vụ nếu có
     if (serviceId && mongoose.Types.ObjectId.isValid(serviceId)) {
-      const Service = require('../models/Service');
-      const service = await Service.findById(serviceId);
-      if (!service) {
+      if (!serviceDoc) {
         return res.status(404).json({
           success: false,
           message: 'Không tìm thấy dịch vụ'
@@ -210,7 +218,7 @@ exports.createAppointment = async (req, res) => {
       }
       
       // Kiểm tra xem dịch vụ có thuộc chuyên khoa không
-      if (service.specialtyId.toString() !== specialtyId.toString()) {
+      if (serviceDoc.specialtyId.toString() !== specialtyId.toString()) {
         return res.status(400).json({
           success: false,
           message: 'Dịch vụ không thuộc chuyên khoa đã chọn'
@@ -219,7 +227,6 @@ exports.createAppointment = async (req, res) => {
     }
     
     // Kiểm tra bác sĩ
-    const doctor = await Doctor.findById(doctorId).populate('user');
     if (!doctor) {
       return res.status(404).json({
         success: false,
@@ -548,12 +555,8 @@ exports.createAppointment = async (req, res) => {
     let additionalFees = 0;
     
     // Tính thêm phí dịch vụ nếu có
-    if (serviceId) {
-      const Service = require('../models/Service');
-      const service = await Service.findById(serviceId);
-      if (service) {
-        additionalFees += service.price || 0;
-      }
+    if (serviceDoc) {
+      additionalFees += serviceDoc.price || 0;
     }
     
     let discount = 0;

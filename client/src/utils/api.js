@@ -1,7 +1,28 @@
 import axios from 'axios';
 import { toastWarning } from './toast';
 
-const apiBaseURL = import.meta.env.VITE_API_URL ;
+// Helper to get API base URL with fallback
+export const getApiBaseURL = () => {
+  let baseURL = '';
+  if (import.meta.env.VITE_API_URL) {
+    baseURL = import.meta.env.VITE_API_URL;
+  } else if (typeof window !== 'undefined') {
+    // Fallback to same origin (for same-domain deployment)
+    baseURL = window.location.origin;
+  }
+  
+  // Remove trailing slash if present
+  baseURL = baseURL.replace(/\/+$/, '');
+  
+  // Add /api suffix only if it doesn't already end with /api
+  if (!baseURL.endsWith('/api')) {
+    baseURL = `${baseURL}/api`;
+  }
+  
+  return baseURL;
+};
+
+const apiBaseURL = getApiBaseURL();
 
 // Create a custom axios instance
 const api = axios.create({
