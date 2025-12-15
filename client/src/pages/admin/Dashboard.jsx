@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { 
   FaUserMd, FaHospital, FaStethoscope, FaHandHoldingMedical,
   FaDoorOpen, FaCalendarCheck, FaTicketAlt, FaCreditCard,
   FaStar, FaCalendarAlt, FaUsers, FaChartLine, FaChartPie, FaChartBar,
   FaMoneyBillWave, FaCalendarDay, FaCalendarWeek, FaCalendarAlt as FaCalendarYear,
   FaInfoCircle, FaList, FaCheck, FaTimes, FaClock, FaMoneyBill, FaUserCheck,
-  FaExclamationTriangle
+  FaExclamationTriangle, FaSnowflake
 } from 'react-icons/fa';
 
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, BarElement } from 'chart.js';
@@ -29,6 +30,7 @@ ChartJS.register(
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { theme, isEnabled, toggleTheme, toggleEnabled } = useTheme();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [stats, setStats] = useState({
@@ -428,10 +430,46 @@ const Dashboard = () => {
             </p>
           </div>
           
-          <div className="mt-4 md:mt-0">
+          <div className="mt-4 md:mt-0 flex items-center gap-3">
             <div className="flex items-center bg-blue-50 text-blue-700 px-4 py-2 rounded-lg">
               <FaCalendarAlt className="mr-2" />
               <span>Hôm nay: {new Date().toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            </div>
+            
+            {/* Nút điều khiển giao diện lễ hội */}
+            <div className="flex items-center gap-2 bg-gradient-to-r from-purple-50 to-pink-50 px-4 py-2 rounded-lg border border-purple-200">
+              <span className="text-sm font-medium text-gray-700 mr-2">Giao diện:</span>
+              
+              {/* Nút Giáng sinh */}
+              <button
+                onClick={() => {
+                  toggleTheme('christmas');
+                  toggleEnabled(true);
+                }}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
+                  theme === 'christmas' && isEnabled
+                    ? 'bg-red-500 text-white shadow-md scale-105'
+                    : 'bg-white text-gray-700 hover:bg-red-50 hover:text-red-600'
+                }`}
+                title="Bật giao diện Giáng sinh"
+              >
+                <FaSnowflake className="text-xs" />
+                <span className="hidden sm:inline">Giáng sinh</span>
+              </button>
+              
+              {/* Nút tắt */}
+              <button
+                onClick={() => toggleEnabled(false)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                  !isEnabled
+                    ? 'bg-gray-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
+                title="Tắt giao diện lễ hội"
+              >
+                <span className="hidden sm:inline">Tắt</span>
+                <span className="sm:hidden">✕</span>
+              </button>
             </div>
           </div>
         </div>

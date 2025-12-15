@@ -2,8 +2,12 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { FaStar, FaHospital } from 'react-icons/fa';
+import { useTheme } from '../../context/ThemeContext';
 
 const DoctorCard = ({ doctor }) => {
+  const { theme, isEnabled } = useTheme();
+  const isChristmas = theme === 'christmas' && isEnabled;
+  
   // Helper function to safely get nested properties
   const safeGet = (obj, path, defaultValue = '') => {
     try {
@@ -84,18 +88,53 @@ const DoctorCard = ({ doctor }) => {
   };
             
             return (
-    <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 h-full flex flex-col border border-gray-100 hover:-translate-y-1 group">
+    <div className={`bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 h-full flex flex-col border hover:-translate-y-1 group relative overflow-hidden ${
+      isChristmas 
+        ? 'border-red-300 hover:border-red-400 shadow-red-100 hover:shadow-red-200' 
+        : 'border-gray-100'
+    }`}>
+      {/* Hiệu ứng giáng sinh - tuyết rơi nhỏ trên card */}
+      {isChristmas && (
+        <>
+          <div className="absolute top-2 left-2 text-red-400 text-xs animate-pulse">❄</div>
+          <div className="absolute top-4 right-4 text-green-400 text-xs animate-pulse" style={{ animationDelay: '0.5s' }}>❄</div>
+          <div className="absolute bottom-20 left-4 text-red-400 text-xs animate-pulse" style={{ animationDelay: '1s' }}>❄</div>
+          <div className="absolute top-1/2 right-2 text-green-400 text-xs animate-pulse" style={{ animationDelay: '1.5s' }}>❄</div>
+          
+          {/* Viền gradient giáng sinh */}
+          <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-red-50/30 via-transparent to-green-50/30 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          
+          {/* Sao trang trí */}
+          <div className="absolute top-1 right-1 text-yellow-400 text-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 animate-pulse">⭐</div>
+        </>
+      )}
+      
       <Link to={`/doctors/${doctor._id}`} className="relative block">
         <div className="relative">
           {renderImage()}
+          
+          {/* Hiệu ứng giáng sinh cho ảnh */}
+          {isChristmas && (
+            <div className="absolute inset-0 bg-gradient-to-t from-red-500/10 to-transparent pointer-events-none rounded-t-xl"></div>
+          )}
+          
           {safeGet(doctor, 'specialtyId.name') && (
-            <div className="absolute top-2 right-2 bg-white/90 text-primary text-xs font-medium py-1 px-2 rounded-full shadow-sm">
+            <div className={`absolute top-2 right-2 text-xs font-medium py-1 px-2 rounded-full shadow-sm ${
+              isChristmas 
+                ? 'bg-gradient-to-r from-red-500 to-green-500 text-white border-2 border-white' 
+                : 'bg-white/90 text-primary'
+            }`}>
               {safeGet(doctor, 'specialtyId.name')}
             </div>
           )}
-          {/* Rating badge */}
+          
+          {/* Rating badge với hiệu ứng giáng sinh */}
           {rating > 0 && (
-            <div className="absolute bottom-2 left-2 bg-yellow-500 text-white text-xs font-bold py-1 px-2 rounded flex items-center">
+            <div className={`absolute bottom-2 left-2 text-white text-xs font-bold py-1 px-2 rounded flex items-center ${
+              isChristmas 
+                ? 'bg-gradient-to-r from-yellow-400 to-yellow-600 shadow-lg shadow-yellow-500/50 border-2 border-white' 
+                : 'bg-yellow-500'
+            }`}>
               <FaStar className="mr-1" />
               {rating.toFixed(1)}
             </div>
@@ -103,10 +142,17 @@ const DoctorCard = ({ doctor }) => {
         </div>
       </Link>
       
-      <div className="p-4 flex-grow flex flex-col">
+      <div className="p-4 flex-grow flex flex-col relative">
         <Link to={`/doctors/${doctor._id}`}>
-          <h3 className="font-semibold text-lg text-gray-800 group-hover:text-primary transition-colors">
+          <h3 className={`font-semibold text-lg transition-colors ${
+            isChristmas 
+              ? 'text-gray-800 group-hover:text-red-600' 
+              : 'text-gray-800 group-hover:text-primary'
+          }`}>
             {safeGet(doctor, 'user.fullName', 'Bác sĩ')}
+            {isChristmas && (
+              <span className="ml-2 text-red-500 text-sm animate-pulse">🎄</span>
+            )}
           </h3>
         </Link>
         
@@ -133,12 +179,21 @@ const DoctorCard = ({ doctor }) => {
         
         <div className="mt-auto pt-3">
           <div className="flex justify-between items-center">
-            <span className="text-primary font-medium text-sm">
+            <span className={`font-medium text-sm ${
+              isChristmas ? 'text-red-600' : 'text-primary'
+            }`}>
               {doctor.experience || ''} {doctor.experience ? 'năm kinh nghiệm' : ''}
             </span>
-            <Link to={`/doctors/${doctor._id}`} className="bg-primary/10 text-primary text-xs py-1 px-3 rounded-full hover:bg-primary/20 hover:text-primary transition-colors">
-          Xem chi tiết
-        </Link>
+            <Link 
+              to={`/doctors/${doctor._id}`} 
+              className={`text-xs py-1 px-3 rounded-full transition-all duration-300 ${
+                isChristmas 
+                  ? 'bg-gradient-to-r from-red-500 to-green-500 text-white hover:from-red-600 hover:to-green-600 shadow-md hover:shadow-lg transform hover:scale-105' 
+                  : 'bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary'
+              }`}
+            >
+              Xem chi tiết {isChristmas && '🎁'}
+            </Link>
           </div>
         </div>
       </div>

@@ -142,12 +142,30 @@ const TourButton = () => {
   return (
     <button
       onClick={handleStartTour}
-      className="fixed bottom-24 left-6 z-[1100] bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full p-3 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center gap-2 group"
+      className="fixed bottom-24 left-6 z-[1100] bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center gap-2 group overflow-hidden"
+      style={{
+        padding: '0.75rem',
+        maxWidth: '3rem',
+        transition: 'max-width 0.3s ease-in-out, padding-right 0.3s ease-in-out'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.maxWidth = '12rem';
+        e.currentTarget.style.paddingRight = '1rem';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.maxWidth = '3rem';
+        e.currentTarget.style.paddingRight = '0.75rem';
+      }}
       aria-label="Bắt đầu tour hướng dẫn"
       title="Hướng dẫn sử dụng AI"
     >
-      <FaQuestionCircle className="text-xl" />
-      <span className="hidden md:inline-block text-sm font-medium pr-2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+      <FaQuestionCircle className="text-xl flex-shrink-0" />
+      <span 
+        className="hidden md:inline-block text-sm font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+        style={{
+          transitionDelay: '0.1s'
+        }}
+      >
         Hướng dẫn AI
       </span>
     </button>
