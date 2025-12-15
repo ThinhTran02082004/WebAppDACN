@@ -26,6 +26,8 @@ import PrescriptionDetail from './pages/PrescriptionDetail.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { SocketProvider } from './context/SocketContext.jsx';
 import { NotificationProvider } from './context/NotificationContext.jsx';
+import { ThemeProvider, useTheme } from './context/ThemeContext.jsx';
+import ChristmasTheme from './components/festive/ChristmasTheme.jsx';
 import VideoCallNotification from './components/VideoCallNotification';
 import ForgotPassword from './pages/user/ForgotPassword';
 import OtpVerification from './pages/user/OtpVerification';
@@ -120,6 +122,14 @@ import AITour from './components/AITour';
 // Doctor Prescription Drafts
 import DoctorPrescriptionDrafts from './pages/doctor/PrescriptionDrafts';
 import DoctorPrescriptionDraftDetail from './pages/doctor/PrescriptionDraftDetail';
+
+function FestiveThemeWrapper() {
+  const { theme, isEnabled } = useTheme();
+  
+  if (!isEnabled || theme !== 'christmas') return null;
+  
+  return <ChristmasTheme />;
+}
 
 function AppContent() {
   const { isAuthenticated, loading, user } = useAuth();
@@ -286,6 +296,9 @@ function AppContent() {
       
       {/* Unified chat dock (AI + CSKH) */}
       <ChatDock showSupportChat={showChatWidget} currentUserId={user?._id || user?.id} />
+      
+      {/* Festive Theme */}
+      <FestiveThemeWrapper />
     </div>
   );
 }
@@ -293,12 +306,13 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <SocketProvider>
-        <NotificationProvider>
-          <AITour>
-            <Router>
-              <AppContent />
-              <ToastContainer
+      <ThemeProvider>
+        <SocketProvider>
+          <NotificationProvider>
+            <AITour>
+              <Router>
+                <AppContent />
+                <ToastContainer
               position="top-right"
               autoClose={5000}
               hideProgressBar={false}
@@ -316,10 +330,11 @@ function App() {
                 marginTop: '4.5rem'
               }}
             />
-            </Router>
-          </AITour>
-        </NotificationProvider>
-      </SocketProvider>
+              </Router>
+            </AITour>
+          </NotificationProvider>
+        </SocketProvider>
+      </ThemeProvider>
     </AuthProvider>
   );
 }
