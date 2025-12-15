@@ -86,11 +86,61 @@ const searchTools = {
         try {
             let filter = {};
             
-            // Xử lý filter theo tên bác sĩ (nếu có)
+            // ƯU TIÊN: Nếu có tên bác sĩ, tìm trực tiếp bằng Qdrant doctor_mapper trước
             if (name) {
                 console.log(`[Tool] Đang tìm bác sĩ với tên: "${name}"`);
-                // Tìm bác sĩ theo tên - cần populate user trước để filter
-                // Tạm thời để filter rỗng, sẽ filter sau khi populate
+                
+                // Thử tìm bằng Qdrant doctor_mapper trước (chính xác hơn)
+                const qdrantDoctors = await findDoctorMapping(name);
+                
+                if (qdrantDoctors && qdrantDoctors.length > 0) {
+                    console.log(`[Tool] ✅ Tìm thấy ${qdrantDoctors.length} bác sĩ bằng Qdrant doctor_mapper`);
+                    
+                    // Lấy danh sách doctor IDs
+                    const doctorIds = qdrantDoctors.map(d => d.doctorId);
+                    
+                    // Nếu có specialty, filter thêm theo specialty
+                    if (specialty) {
+                        const specialtyMapping = await findSpecialtyMapping(specialty);
+                        if (specialtyMapping) {
+                            const specialtyDoc = await Specialty.findById(specialtyMapping.specialtyId);
+                            if (specialtyDoc) {
+                                // Filter doctors có chuyên khoa này
+                                const filteredDoctors = qdrantDoctors.filter(d => 
+                                    d.specialtyId === specialtyDoc._id.toString()
+                                );
+                                
+                                if (filteredDoctors.length > 0) {
+                                    const filteredIds = filteredDoctors.map(d => d.doctorId);
+                                    filter._id = { $in: filteredIds };
+                                    console.log(`[Tool] ✅ Sau khi filter theo specialty "${specialtyDoc.name}": còn ${filteredDoctors.length} bác sĩ`);
+                                } else {
+                                    console.log(`[Tool] ⚠️ Không có bác sĩ "${name}" thuộc chuyên khoa "${specialtyDoc.name}"`);
+                                    return { doctors: [] };
+                                }
+                            } else {
+                                filter._id = { $in: doctorIds };
+                            }
+                        } else {
+                            filter._id = { $in: doctorIds };
+                        }
+                    } else {
+                        filter._id = { $in: doctorIds };
+                    }
+                    
+                    // Lấy thông tin bác sĩ từ database
+                    const limit = 20;
+                    let doctors = await Doctor.find(filter)
+                        .populate('user', 'fullName')
+                        .limit(limit)
+                        .select('user consultationFee specialtyId')
+                        .exec();
+                    
+                    console.log(`[Tool] Tìm thấy ${doctors.length} bác sĩ cho name: "${name}"${specialty ? `, specialty: "${specialty}"` : ''} (limit: ${limit})`);
+                    return { doctors };
+                } else {
+                    console.log(`[Tool] ⚠️ Qdrant doctor_mapper không tìm thấy, sẽ tìm bằng database thông thường`);
+                }
             }
             
             // Xử lý filter theo chuyên khoa (nếu có)
