@@ -1,4 +1,5 @@
-import { registerGlobals } from '@livekit/react-native';
+// Lazy import to avoid loading native module at module level
+// import { registerGlobals } from '@livekit/react-native';
 // @ts-ignore - event-target-shim has type resolution issues with package.json exports
 import { EventTarget as ShimEventTarget } from 'event-target-shim';
 import { TextDecoder as PolyfillTextDecoder, TextEncoder as PolyfillTextEncoder } from 'text-encoding';
@@ -220,6 +221,10 @@ export const ensureLivekitGlobals = () => {
   }
 
   try {
+    // Lazy import to avoid loading native module at module level
+    // This prevents crash on app startup with New Architecture
+    const { registerGlobals } = require('@livekit/react-native');
+    
     // Use registerGlobals from @livekit/react-native which handles all polyfills
     // including WebSocket, Event, EventTarget, streams, etc.
     // DO NOT patch WebSocket manually - let @livekit/react-native handle it

@@ -21,6 +21,7 @@ interface Conversation {
   };
   updatedAt: string;
   unreadCount?: number | { get?: (userId: string) => number } | Record<string, number>;
+  appointmentId?: string | { _id?: string };
 }
 
 export default function MessagesScreen() {
@@ -30,13 +31,95 @@ export default function MessagesScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Store doctor avatars fetched from appointments
+  const [doctorAvatars, setDoctorAvatars] = useState<Record<string, string>>({});
 
   const fetchConversations = useCallback(async () => {
     try {
       setLoading(true);
       const response = await apiService.getConversations();
       if (response?.success && response?.data) {
-        setConversations(Array.isArray(response.data) ? response.data : []);
+        const conversationsList = Array.isArray(response.data) ? response.data : [];
+        setConversations(conversationsList);
+        
+        // Fetch doctor avatars from appointments or doctor info if participant doesn't have avatarUrl
+        const avatarPromises: Promise<void>[] = [];
+        
+        // Helper function to fetch avatar from doctor list
+        const fetchDoctorAvatarFromList = async (userId: string) => {
+          try {
+            // Try to get doctors list and find matching doctor
+            const doctorsResponse = await apiService.getDoctors({ limit: 100 });
+            if (doctorsResponse?.success && doctorsResponse?.data) {
+              let doctorsData: any[] = [];
+              if ('doctors' in doctorsResponse.data) {
+                doctorsData = doctorsResponse.data.doctors || [];
+              } else if (Array.isArray(doctorsResponse.data)) {
+                doctorsData = doctorsResponse.data;
+              }
+              
+              // Find doctor by user ID
+              const doctor = doctorsData.find((d: any) => {
+                const doctorUserId = typeof d.user === 'object' ? d.user?._id : d.user;
+                return doctorUserId === userId;
+              });
+              
+              if (doctor?.user?.avatarUrl && userId) {
+                setDoctorAvatars(prev => ({
+                  ...prev,
+                  [userId]: doctor.user.avatarUrl
+                }));
+              }
+            }
+          } catch (err) {
+            // Silently fail
+          }
+        };
+        
+        conversationsList.forEach((conv: Conversation) => {
+          const participant = conv.participants?.[0];
+          
+          // Skip if participant already has avatarUrl
+          if (participant?.avatarUrl) return;
+          
+          // Skip if not a doctor
+          if (participant?.roleType !== 'doctor' || !participant._id) return;
+          
+          const appointmentId = typeof conv.appointmentId === 'object' 
+            ? conv.appointmentId?._id 
+            : conv.appointmentId;
+          
+          // Try to fetch from appointment first if available
+          if (appointmentId) {
+            const promise = apiService.getAppointmentById(appointmentId)
+              .then((apptResponse) => {
+                if (apptResponse?.success && apptResponse?.data) {
+                  const appointment = apptResponse.data;
+                  const doctorAvatarUrl = appointment.doctorId?.user?.avatarUrl || 
+                                       (appointment.doctorId as any)?.user?.avatarUrl;
+                  if (doctorAvatarUrl && participant._id) {
+                    setDoctorAvatars(prev => ({
+                      ...prev,
+                      [participant._id]: doctorAvatarUrl
+                    }));
+                  }
+                }
+              })
+              .catch(() => {
+                // If appointment fetch fails, try fetching from doctor list
+                fetchDoctorAvatarFromList(participant._id);
+              });
+            avatarPromises.push(promise);
+          } else {
+            // If no appointmentId, try to fetch from doctor list
+            fetchDoctorAvatarFromList(participant._id);
+          }
+        });
+        
+        // Wait for all avatar fetches to complete (but don't block UI)
+        Promise.all(avatarPromises).catch(() => {
+          // Silently fail
+        });
       } else {
         setConversations([]);
       }
@@ -183,6 +266,10 @@ export default function MessagesScreen() {
     const unreadCount = getUnreadCount(item);
     const lastMessage = item.lastMessage?.content || 'Chưa có tin nhắn';
     const time = formatTime(item.lastMessage?.timestamp || item.updatedAt);
+    
+    // Get avatar from participant or from fetched doctor avatars
+    const avatarUrl = otherParticipant?.avatarUrl || 
+                     (otherParticipant?._id ? doctorAvatars[otherParticipant._id] : undefined);
 
     return (
       <TouchableOpacity
@@ -192,10 +279,13 @@ export default function MessagesScreen() {
       >
         <View style={styles.avatarContainer}>
           <View style={styles.avatarWrapper}>
-            {otherParticipant?.avatarUrl ? (
+            {avatarUrl ? (
               <Image
-                source={{ uri: otherParticipant.avatarUrl }}
+                source={{ uri: avatarUrl }}
                 style={styles.avatar}
+                onError={() => {
+                  // Avatar failed to load, will show placeholder
+                }}
               />
             ) : (
               <View style={styles.avatarPlaceholder}>

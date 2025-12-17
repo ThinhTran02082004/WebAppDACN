@@ -8,6 +8,7 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
+    "start:reset": "react-native start --reset-cache",
     "test": "jest",
     "update-facebook-config": "node scripts/update-facebook-config.js"
   },

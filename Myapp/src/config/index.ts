@@ -1,20 +1,36 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// Import environment variables from react-native-dotenv
-// Note: Myapp only needs public IDs (not secrets) for SDK initialization
-// Secrets (CLIENT_SECRET, APP_SECRET) are only needed on the server
-// Using VITE_ prefix to match client naming convention
-import { 
-  VITE_GOOGLE_CLIENT_ID as ENV_GOOGLE_CLIENT_ID,
-  VITE_FACEBOOK_APP_ID as ENV_FACEBOOK_APP_ID,
-} from '@env';
+
+// Safely import environment variables with fallback to undefined
+let ENV_GOOGLE_CLIENT_ID: string | undefined;
+let ENV_FACEBOOK_APP_ID: string | undefined;
+
+try {
+  // Use require that works with babel plugin react-native-dotenv
+  // The babel plugin will transform this at build time
+  const envModule = require('@env');
+  ENV_GOOGLE_CLIENT_ID = envModule.VITE_GOOGLE_CLIENT_ID;
+  ENV_FACEBOOK_APP_ID = envModule.VITE_FACEBOOK_APP_ID;
+} catch (error: any) {
+  // If module can't be resolved (e.g., .env file missing or babel plugin not working),
+  // set to undefined - app will still work but auth features may not function
+  console.warn('[config] Environment variables not available. App will continue but social auth may not work.');
+  console.warn('[config] Error details:', error?.message || String(error));
+  ENV_GOOGLE_CLIENT_ID = undefined;
+  ENV_FACEBOOK_APP_ID = undefined;
+}
+
+console.log('[config] Environment variables loaded:', {
+  hasGoogleClientId: !!ENV_GOOGLE_CLIENT_ID,
+  hasFacebookAppId: !!ENV_FACEBOOK_APP_ID,
+  facebookAppId: ENV_FACEBOOK_APP_ID ? `${ENV_FACEBOOK_APP_ID.substring(0, 10)}...` : 'not set',
+  googleClientId: ENV_GOOGLE_CLIENT_ID ? `${ENV_GOOGLE_CLIENT_ID.substring(0, 10)}...` : 'not set'
+});
+
 
 const DEFAULT_HOST = Platform.OS === 'android' ? 'localhost' : 'localhost';
 const DEFAULT_PORT = 5000;
-
-// If you need to override these for production or device testing,
-// replace the values below or create a small config setup to inject them.
-let API_HOST = 'localhost'; // Use localhost when connected via USB with adb reverse
+let API_HOST = 'localhost'; 
 let API_PORT = '5000';
 
 const STORAGE_KEY = 'api_host_config_v1';

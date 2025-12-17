@@ -53,23 +53,18 @@ const microphonePermission = (Platform.select({
 // Hardcoded LiveKit signaling URL (override when backend returns wrong URL)
 const HARDCODED_LIVEKIT_URL = 'wss://hospitals-reoykrz5.livekit.cloud';
 
-// Ensure LiveKit globals are registered once at module level
-// This must be called before any LiveKit operations
-ensureLivekitGlobals();
-
-// Also ensure globals are registered in component if needed
-// (in case module-level call didn't work)
-
 const VideoCallScreen = () => {
   // Ensure globals are registered when component mounts
   useEffect(() => {
-    ensureLivekitGlobals();
-    // Verify WebSocket is available
-    const globalObj = globalThis as any;
-    if (typeof globalObj.WebSocket === 'undefined') {
-      console.error('[VideoCall] WebSocket is not available in global scope');
-    } else {
-      console.log('[VideoCall] WebSocket is available:', typeof globalObj.WebSocket);
+    try {
+      ensureLivekitGlobals();
+      // Verify WebSocket is available
+      const globalObj = globalThis as any;
+      if (typeof globalObj.WebSocket === 'undefined') {
+        // WebSocket is not available
+      }
+    } catch (error) {
+      // Failed to initialize LiveKit globals
     }
   }, []);
 
@@ -89,16 +84,24 @@ const VideoCallScreen = () => {
   const [activeSpeakerSid, setActiveSpeakerSid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
 
+  // Main video: ưu tiên bác sĩ (remote participant), nếu chưa có thì hiển thị bản thân
   const mainVideo = useMemo(() => {
     if (!videoTiles.length) return null;
+    // Tìm remote participant (bác sĩ) trước
     const remoteTrack = videoTiles.find(tile => !tile.isLocal);
-    return remoteTrack ?? videoTiles[0];
+    // Nếu có bác sĩ thì hiển thị bác sĩ, nếu không thì hiển thị bản thân
+    return remoteTrack ?? videoTiles.find(tile => tile.isLocal) ?? videoTiles[0];
   }, [videoTiles]);
 
-  const thumbnails = useMemo(() => {
-    if (!mainVideo) return [];
-    return videoTiles.filter(tile => tile.id !== mainVideo.id);
+  // Thumbnail: chỉ hiển thị bản thân (local participant) ở góc phải trên
+  const localVideoThumbnail = useMemo(() => {
+    if (!mainVideo) return null;
+    // Chỉ hiển thị thumbnail nếu main video là remote (bác sĩ)
+    if (mainVideo.isLocal) return null;
+    // Tìm local participant (bản thân)
+    return videoTiles.find(tile => tile.isLocal);
   }, [videoTiles, mainVideo]);
 
   const removeRoomListeners = useCallback(() => {
@@ -115,33 +118,40 @@ const VideoCallScreen = () => {
   const updateVideoTiles = useCallback(() => {
     const room = roomRef.current;
     if (!room) {
-      console.log('[VideoCall] updateVideoTiles: No room');
       return;
     }
 
     const tiles: VideoTile[] = [];
+    const addedTrackIds = new Set<string>(); // Track IDs to prevent duplicates
 
     const pushTrack = (track: VideoTrack | null, participant: any, publication: any, trackSid?: string) => {
       if (!track) {
-        console.log('[VideoCall] pushTrack: No track for participant', participant.identity);
+        return;
+      }
+
+      // Generate unique ID for this track
+      const tileId = trackSid ?? `${participant.sid}-${track.sid ?? 'video'}`;
+      
+      // Check if this track has already been added by tileId
+      if (addedTrackIds.has(tileId)) {
         return;
       }
       
-      if (track.isMuted) {
-        console.log('[VideoCall] pushTrack: Track is muted', trackSid);
-        return;
+      // Also check by track.sid and participant.sid to avoid duplicates with different IDs
+      const trackSidKey = track.sid || '';
+      const participantSidKey = participant.sid || '';
+      if (trackSidKey && participantSidKey) {
+        const existingTrack = tiles.find(t => 
+          t.videoTrack?.sid === trackSidKey && t.participantSid === participantSidKey
+        );
+        if (existingTrack) {
+          return;
+        }
       }
 
-      console.log('[VideoCall] pushTrack: Adding track', {
-        publicationTrackSid: trackSid,
-        participant: participant.identity,
-        isLocal: participant.isLocal,
-        trackSid: track.sid,
-        kind: track.kind
-      });
-
+      addedTrackIds.add(tileId);
       tiles.push({
-        id: trackSid ?? `${participant.sid}-${track.sid ?? 'video'}`,
+        id: tileId,
         videoTrack: track,
         participantName:
           participant.name ||
@@ -155,54 +165,122 @@ const VideoCallScreen = () => {
     };
 
     // Local participant video tracks
-    console.log('[VideoCall] Checking local participant videoTracks:', room.localParticipant.videoTracks?.size ?? 0);
-    if (room.localParticipant.videoTracks) {
-      room.localParticipant.videoTracks.forEach((publication: any, trackSid: string) => {
-        console.log('[VideoCall] Local publication:', {
-          trackSid,
-          track: publication.track ? 'exists' : 'null',
-          isMuted: publication.isMuted,
-          isSubscribed: publication.isSubscribed
-        });
-        
+    // Try multiple ways to get local video tracks
+    let localVideoTracks: any = room.localParticipant.videoTracks;
+    if (!localVideoTracks) {
+      const trackPublications = (room.localParticipant as any).trackPublications;
+      if (Array.isArray(trackPublications)) {
+        localVideoTracks = trackPublications.filter((p: any) => p.kind === 'video');
+      } else if (trackPublications && typeof trackPublications.forEach === 'function') {
+        // If it's a Map or similar iterable
+        localVideoTracks = trackPublications;
+      } else {
+        localVideoTracks = [];
+      }
+    }
+    
+    if (localVideoTracks && localVideoTracks.size !== undefined) {
+      // If it's a Map
+      localVideoTracks.forEach((publication: any, trackSid: string) => {
         // For local participant, track should be available directly
-        const track = publication.track as VideoTrack | null;
+        // Try both track and videoTrack properties
+        let track = (publication.track || publication.videoTrack) as VideoTrack | null;
         if (track && track.kind === 'video') {
-          pushTrack(track, room.localParticipant, trackSid);
+          pushTrack(track, room.localParticipant, publication, trackSid);
+        } else if (publication.track && typeof publication.track.kind === 'undefined') {
+          // Sometimes track might not have kind property set, but it's still a video track
+          track = publication.track as VideoTrack;
+          pushTrack(track, room.localParticipant, publication, trackSid);
+        }
+      });
+    } else if (Array.isArray(localVideoTracks)) {
+      // If it's an array
+      localVideoTracks.forEach((publication: any) => {
+        const trackSid = publication.trackSid || publication.sid;
+        let track = (publication.track || publication.videoTrack) as VideoTrack | null;
+        if (track && track.kind === 'video') {
+          pushTrack(track, room.localParticipant, publication, trackSid);
+        } else if (publication.track && typeof publication.track.kind === 'undefined') {
+          track = publication.track as VideoTrack;
+          pushTrack(track, room.localParticipant, publication, trackSid);
         }
       });
     }
+    
+    // Note: Removed duplicate trackPublications check to avoid adding same tracks twice
+    // The tracks should already be handled by videoTracks above
 
     // Remote participants video tracks
-    console.log('[VideoCall] Checking remote participants:', room.remoteParticipants.size);
     room.remoteParticipants.forEach((participant: any) => {
-      console.log('[VideoCall] Remote participant:', {
-        identity: participant.identity,
-        videoTracks: participant.videoTracks?.size ?? 0
-      });
-      
+      // Try to subscribe to video tracks if not already subscribed
       if (participant.videoTracks) {
         participant.videoTracks.forEach((publication: any, trackSid: string) => {
-          console.log('[VideoCall] Remote publication:', {
-            trackSid,
-            track: publication.track ? 'exists' : 'null',
-            isMuted: publication.isMuted,
-            isSubscribed: publication.isSubscribed,
-            kind: publication.kind
-          });
-          
-          // For remote participants, track must be subscribed
-          if (publication.isSubscribed && publication.track) {
-            const track = publication.track as VideoTrack | null;
-            if (track && track.kind === 'video') {
-              pushTrack(track, participant, trackSid);
+          // Try to subscribe if not already subscribed
+          if (!publication.isSubscribed) {
+            try {
+              // Try different methods to subscribe
+              if (typeof publication.setSubscribed === 'function') {
+                publication.setSubscribed(true);
+              } else if (typeof publication.subscribe === 'function') {
+                publication.subscribe();
+              } else if (typeof participant.setTrackSubscribed === 'function') {
+                participant.setTrackSubscribed(trackSid, true);
+              }
+            } catch (err) {
+              // Failed to subscribe to track
             }
+          }
+          
+          // For remote participants, try to get track
+          // Track should be available if subscribed, but sometimes it's available before subscription completes
+          let track = (publication.track || publication.videoTrack) as VideoTrack | null;
+          
+          if (track && track.kind === 'video') {
+            pushTrack(track, participant, publication, trackSid);
+          } else if (publication.track && typeof publication.track.kind === 'undefined') {
+            // Sometimes track might not have kind property set, but it's still a video track
+            track = publication.track as VideoTrack;
+            pushTrack(track, participant, publication, trackSid);
           }
         });
       }
+      
+      // Also try getting tracks from trackPublications
+      try {
+        const trackPublications = (participant as any).trackPublications;
+        if (trackPublications && typeof trackPublications.forEach === 'function') {
+          trackPublications.forEach((publication: any) => {
+            if (publication.kind === 'video') {
+              // Try to subscribe if not already subscribed
+              if (!publication.isSubscribed) {
+                try {
+                  // Try different methods to subscribe
+                  if (typeof publication.setSubscribed === 'function') {
+                    publication.setSubscribed(true);
+                  } else if (typeof publication.subscribe === 'function') {
+                    publication.subscribe();
+                  } else if (typeof participant.setTrackSubscribed === 'function') {
+                    const trackSid = publication.trackSid || publication.sid;
+                    participant.setTrackSubscribed(trackSid, true);
+                  }
+                } catch (err) {
+                  // Failed to subscribe to track from trackPublications
+                }
+              }
+              
+              const track = publication.track || publication.videoTrack;
+              if (track) {
+                const trackSid = publication.trackSid || publication.sid || track.sid;
+                pushTrack(track, participant, publication, trackSid);
+              }
+            }
+          });
+        }
+      } catch (err) {
+        // Could not get trackPublications from remote participant
+      }
     });
 
-    console.log('[VideoCall] Total video tiles found:', tiles.length);
     setVideoTiles(tiles);
   }, []);
 
@@ -235,7 +313,6 @@ const VideoCallScreen = () => {
 
       return false;
     } catch (err) {
-      console.warn('[VideoCall] Failed to request permissions', err);
       setPermissionError('Không thể kiểm tra quyền truy cập camera/micro.');
       return false;
     }
@@ -255,7 +332,15 @@ const VideoCallScreen = () => {
       },
       {
         event: 'trackPublished',
-        handler: () => updateVideoTiles()
+        handler: () => {
+          setTimeout(() => updateVideoTiles(), 100);
+        }
+      },
+      {
+        event: 'localTrackPublished',
+        handler: () => {
+          setTimeout(() => updateVideoTiles(), 100);
+        }
       },
       {
         event: 'trackUnpublished',
@@ -271,7 +356,29 @@ const VideoCallScreen = () => {
       },
       {
         event: 'participantConnected',
-        handler: () => updateVideoTiles()
+        handler: (participant: any) => {
+          // Subscribe to all video tracks from the new participant
+          if (participant && participant.videoTracks) {
+            participant.videoTracks.forEach((publication: any, trackSid: string) => {
+              if (!publication.isSubscribed) {
+                try {
+                  // Try different methods to subscribe
+                  if (typeof publication.setSubscribed === 'function') {
+                    publication.setSubscribed(true);
+                  } else if (typeof publication.subscribe === 'function') {
+                    publication.subscribe();
+                  } else if (typeof participant.setTrackSubscribed === 'function') {
+                    participant.setTrackSubscribed(trackSid, true);
+                  }
+                } catch (err) {
+                  // Failed to subscribe to track
+                }
+              }
+            });
+          }
+          // Update tiles after a short delay to allow subscription to complete
+          setTimeout(() => updateVideoTiles(), 300);
+        }
       },
       {
         event: 'participantDisconnected',
@@ -323,7 +430,7 @@ const VideoCallScreen = () => {
     try {
       await room.disconnect();
     } catch (err) {
-      console.warn('[VideoCall] Error disconnecting room', err);
+      // Error disconnecting room
     } finally {
       roomRef.current = null;
     }
@@ -397,7 +504,6 @@ const VideoCallScreen = () => {
     // Check if Room is available - but DON'T check typeof Room !== 'function'
     // Room might be an object with a constructor, not a direct function
     if (!Room) {
-      console.error('[VideoCall] LiveKit Room module is not available');
       setError('Không thể khởi tạo LiveKit. Vui lòng khởi động lại ứng dụng.');
       setConnectionState('disconnected');
       return;
@@ -423,7 +529,6 @@ const VideoCallScreen = () => {
       roomRef.current = room;
       attachRoomListeners(room);
     } catch (err: any) {
-      console.error('[VideoCall] Failed to create Room instance', err);
       setError('Không thể khởi tạo phòng video. Vui lòng thử lại.');
       setConnectionState('disconnected');
       return;
@@ -434,7 +539,6 @@ const VideoCallScreen = () => {
     
     // Validate URL format
     if (!effectiveWebSocketUrl || (!effectiveWebSocketUrl.startsWith('ws://') && !effectiveWebSocketUrl.startsWith('wss://'))) {
-      console.warn('[VideoCall] Invalid wsUrl from server:', wsUrl, '- using fallback');
       effectiveWebSocketUrl = HARDCODED_LIVEKIT_URL;
     }
 
@@ -454,11 +558,6 @@ const VideoCallScreen = () => {
     }
 
     try {
-      console.log('[VideoCall] Original wsUrl:', wsUrl);
-      console.log('[VideoCall] Effective WebSocket URL:', effectiveWebSocketUrl);
-      console.log('[VideoCall] Token present:', !!token);
-      console.log('[VideoCall] Token length:', token?.length);
-      
       // For LiveKit, use the base URL - SDK will handle path
       // Ensure URL is clean base URL (protocol + host, no path)
       let connectUrl = effectiveWebSocketUrl;
@@ -472,48 +571,33 @@ const VideoCallScreen = () => {
       // Remove trailing slash
       connectUrl = connectUrl.replace(/\/+$/, '');
       
-      console.log('[VideoCall] Final connect URL (base only):', connectUrl);
-      
       // Connect using base URL - LiveKit SDK will automatically add /rtc path
       await room.connect(connectUrl, token, { 
         autoSubscribe: true
       });
       
-      console.log('[VideoCall] Room connected, enabling media...');
-      
       // Enable microphone first
       await room.localParticipant.setMicrophoneEnabled(true);
       setMicEnabled(true);
-      console.log('[VideoCall] Microphone enabled');
       
       // Enable camera and wait for track to be ready
       await room.localParticipant.setCameraEnabled(true);
       setCameraEnabled(true);
-      console.log('[VideoCall] Camera enabled');
       
       // Wait a bit for tracks to be published
       await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
       
       setConnectionState('connected');
       
-      // Update video tiles after a short delay to ensure tracks are ready
+      // Update video tiles immediately and then again after a delay
+      updateVideoTiles();
       setTimeout(() => {
         updateVideoTiles();
       }, 1000);
-      
-      console.log('[VideoCall] Successfully connected to room');
+      setTimeout(() => {
+        updateVideoTiles();
+      }, 2000);
     } catch (err: any) {
-      console.error('[VideoCall] Failed to connect', err);
-      console.error('[VideoCall] Error details:', {
-        message: err?.message,
-        code: err?.code,
-        reason: err?.reason,
-        wsUrl: wsUrl,
-        effectiveUrl: effectiveWebSocketUrl,
-        tokenLength: token?.length,
-        tokenPreview: token ? token.substring(0, 50) + '...' : 'null'
-      });
-      
       // Provide more specific error messages
       let errorMessage = 'Không thể kết nối tới phòng video.';
       if (err?.message?.includes('101')) {
@@ -544,7 +628,7 @@ const VideoCallScreen = () => {
       await room.localParticipant.setMicrophoneEnabled(nextState);
       setMicEnabled(nextState);
     } catch (err) {
-      console.warn('[VideoCall] Failed to toggle microphone', err);
+      // Failed to toggle microphone
     }
   }, [micEnabled]);
 
@@ -555,9 +639,13 @@ const VideoCallScreen = () => {
       const nextState = !cameraEnabled;
       await room.localParticipant.setCameraEnabled(nextState);
       setCameraEnabled(nextState);
+      // Update tiles immediately and after a delay to ensure track is ready
       updateVideoTiles();
+      setTimeout(() => {
+        updateVideoTiles();
+      }, 300);
     } catch (err) {
-      console.warn('[VideoCall] Failed to toggle camera', err);
+      // Failed to toggle camera
     }
   }, [cameraEnabled, updateVideoTiles]);
 
@@ -578,19 +666,20 @@ const VideoCallScreen = () => {
 
   const handleLeaveRoom = useCallback(
     async (endForAll = false) => {
-      if (leavingRef.current) return;
+      if (leavingRef.current || isLeaving) return;
       leavingRef.current = true;
+      setIsLeaving(true);
 
       try {
         await disconnectRoom();
       } finally {
         if (endForAll && role === 'doctor') {
-          await apiService.endVideoRoom(roomId).catch(err => {
-            console.warn('[VideoCall] Failed to end room for all', err);
+          await apiService.endVideoRoom(roomId).catch(() => {
+            // Failed to end room for all
           });
         } else {
-          await apiService.leaveVideoRoom(roomId).catch(err => {
-            console.warn('[VideoCall] Failed to notify leave', err);
+          await apiService.leaveVideoRoom(roomId).catch(() => {
+            // Failed to notify leave
           });
         }
         navigation.goBack();
@@ -641,46 +730,35 @@ const VideoCallScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.roomName}>{roomName}</Text>
-          <Text style={styles.statusText}>{renderConnectionStatus()}</Text>
-        </View>
-        <TouchableOpacity style={styles.leaveButton} onPress={confirmLeave}>
-          <Ionicons name="call" size={20} color="#fff" style={styles.leaveIcon} />
-          <Text style={styles.leaveText}>Kết thúc</Text>
-        </TouchableOpacity>
-      </View>
-
-      {appointmentInfo && (
-        <View style={styles.metaContainer}>
-          {appointmentInfo.doctorName && (
-            <Text style={styles.metaText}>Bác sĩ: {appointmentInfo.doctorName}</Text>
-          )}
-          {appointmentInfo.patientName && (
-            <Text style={styles.metaText}>Bệnh nhân: {appointmentInfo.patientName}</Text>
-          )}
-          {appointmentInfo.date && <Text style={styles.metaText}>Thời gian: {appointmentInfo.date}</Text>}
-        </View>
-      )}
-
+      
       <View style={styles.videoSection}>
+        {/* Header overlay trên video */}
+        <View style={styles.headerOverlay}>
+          <View>
+            {appointmentInfo?.doctorName && (
+              <Text style={styles.roomName}>{appointmentInfo.doctorName}</Text>
+            )}
+            <Text style={styles.statusText}>{renderConnectionStatus()}</Text>
+          </View>
+        </View>
+        
         {mainVideo && mainVideo.videoTrack ? (
           <View style={styles.mainVideoWrapper}>
-            {/* eslint-disable-next-line deprecation/deprecation */}
-            <VideoView
-              videoTrack={mainVideo.videoTrack}
-              style={styles.mainVideo}
-              objectFit="cover"
-              zOrder={0}
-              mirror={mainVideo.isLocal}
-            />
-            <View style={styles.participantLabel}>
-              <Text style={styles.participantText}>
-                {mainVideo.participantName}
-                {activeSpeakerSid && mainVideo.participantSid === activeSpeakerSid ? ' • Đang nói' : ''}
-              </Text>
-            </View>
+            {/* Kiểm tra nếu camera bị tắt (local) hoặc track bị muted (remote) */}
+            {(mainVideo.isLocal && !cameraEnabled) || (!mainVideo.isLocal && mainVideo.isMuted) ? (
+              <View style={styles.blackScreen} />
+            ) : (
+              <>
+                {/* eslint-disable-next-line deprecation/deprecation */}
+                <VideoView
+                  videoTrack={mainVideo.videoTrack}
+                  style={styles.mainVideo}
+                  objectFit="cover"
+                  zOrder={0}
+                  mirror={mainVideo.isLocal}
+                />
+              </>
+            )}
           </View>
         ) : (
           <View style={styles.placeholder}>
@@ -691,65 +769,67 @@ const VideoCallScreen = () => {
           </View>
         )}
 
-        {!!thumbnails.length && (
-          <View style={styles.thumbnailRow}>
-            {thumbnails.map(tile => (
-              <View key={tile.id} style={styles.thumbnail}>
-                {tile.videoTrack ? (
-                  // @ts-ignore - VideoView deprecated but still works
-                  <VideoView
-                    videoTrack={tile.videoTrack}
-                    style={styles.thumbnailVideo}
-                    objectFit="cover"
-                    zOrder={1}
-                    mirror={tile.isLocal}
-                  />
-                ) : null}
-                <View style={styles.thumbnailLabel}>
-                  <Text style={styles.thumbnailText}>{tile.participantName}</Text>
-                </View>
-              </View>
-            ))}
+        {/* Local video thumbnail ở góc phải trên */}
+        {localVideoThumbnail && localVideoThumbnail.videoTrack && (
+          <View style={styles.localVideoThumbnail}>
+            {!cameraEnabled ? (
+              <View style={styles.blackScreenThumbnail} />
+            ) : (
+              <VideoView
+                videoTrack={localVideoThumbnail.videoTrack}
+                style={styles.localVideoThumbnailVideo}
+                objectFit="cover"
+                zOrder={1}
+                mirror={localVideoThumbnail.isLocal}
+              />
+            )}
           </View>
         )}
-      </View>
 
-      {!!permissionError && (
-        <View style={styles.alertBox}>
-          <Ionicons name="warning" size={20} color="#b45309" />
-          <Text style={styles.alertText}>{permissionError}</Text>
-        </View>
-      )}
-
-      {!!error && (
-        <View style={styles.alertBox}>
-          <Ionicons name="information-circle" size={20} color="#b91c1c" />
-          <Text style={styles.alertText}>{error}</Text>
-        </View>
-      )}
-
-      <View style={styles.controls}>
+        {/* Controls overlay trên video */}
+        <View style={styles.controlsOverlay}>
         <TouchableOpacity
           style={[styles.controlButton, !micEnabled && styles.controlButtonDisabled]}
           onPress={handleToggleMicrophone}
+          disabled={isLeaving}
         >
-          <Ionicons name={micEnabled ? 'mic' : 'mic-off'} size={24} color="#fff" />
-          <Text style={styles.controlLabel}>{micEnabled ? 'Tắt mic' : 'Bật mic'}</Text>
+          <Ionicons name={micEnabled ? 'mic' : 'mic-off'} size={28} color="#fff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.controlButton, styles.leaveControlButton, isLeaving && styles.controlButtonDisabled]}
+          onPress={confirmLeave}
+          disabled={isLeaving}
+        >
+          {isLeaving ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="call" size={28} color="#fff" style={styles.leaveIcon} />
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.controlButton, !cameraEnabled && styles.controlButtonDisabled]}
           onPress={handleToggleCamera}
+          disabled={isLeaving}
         >
-          <Ionicons name={cameraEnabled ? 'videocam' : 'videocam-off'} size={24} color="#fff" />
-          <Text style={styles.controlLabel}>{cameraEnabled ? 'Tắt video' : 'Bật video'}</Text>
+          <Ionicons name={cameraEnabled ? 'videocam' : 'videocam-off'} size={28} color="#fff" />
         </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity style={styles.controlButton} onPress={handleSwitchCamera}>
-          <Ionicons name="camera-reverse" size={24} color="#fff" />
-          <Text style={styles.controlLabel}>Đổi cam</Text>
-        </TouchableOpacity>
+        {!!permissionError && (
+          <View style={styles.alertBoxOverlay}>
+            <Ionicons name="warning" size={20} color="#b45309" />
+            <Text style={styles.alertText}>{permissionError}</Text>
+          </View>
+        )}
 
+        {!!error && (
+          <View style={styles.alertBoxOverlay}>
+            <Ionicons name="information-circle" size={20} color="#b91c1c" />
+            <Text style={styles.alertText}>{error}</Text>
+          </View>
+        )}
       </View>
 
       {(connectionState === 'connecting' || connectionState === 'reconnecting') && (
@@ -769,9 +849,17 @@ export default VideoCallScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#000000'
+  },
+  headerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 12,
     paddingHorizontal: 16,
-    paddingTop: 12
+    paddingBottom: 8,
+    zIndex: 10
   },
   header: {
     flexDirection: 'row',
@@ -798,8 +886,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   leaveIcon: {
-    transform: [{ rotate: '135deg' }],
-    marginRight: 6
+    transform: [{ rotate: '135deg' }]
   },
   leaveText: {
     color: '#fff',
@@ -817,18 +904,24 @@ const styles = StyleSheet.create({
   },
   videoSection: {
     flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden'
+    position: 'relative',
+    backgroundColor: '#000000'
   },
   mainVideoWrapper: {
     flex: 1,
-    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#111827'
+    backgroundColor: '#000000'
   },
   mainVideo: {
     flex: 1,
-    borderRadius: 16
+    width: '100%',
+    height: '100%'
+  },
+  blackScreen: {
+    flex: 1,
+    backgroundColor: '#000000',
+    width: '100%',
+    height: '100%'
   },
   participantLabel: {
     position: 'absolute',
@@ -847,40 +940,33 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#111827',
-    borderRadius: 16
+    backgroundColor: '#000000'
   },
   placeholderText: {
     color: '#94a3b8',
     marginTop: 12
   },
-  thumbnailRow: {
-    flexDirection: 'row',
-    marginTop: 12,
-    gap: 12
-  },
-  thumbnail: {
-    flex: 1,
-    height: 120,
+  localVideoThumbnail: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 120,
+    height: 160,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#0f172a'
+    backgroundColor: '#0f172a',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    zIndex: 5
   },
-  thumbnailVideo: {
-    flex: 1
+  localVideoThumbnailVideo: {
+    width: '100%',
+    height: '100%'
   },
-  thumbnailLabel: {
-    position: 'absolute',
-    left: 8,
-    bottom: 8,
-    backgroundColor: 'rgba(15,23,42,0.75)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999
-  },
-  thumbnailText: {
-    color: '#f8fafc',
-    fontSize: 12
+  blackScreenThumbnail: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000000'
   },
   alertBox: {
     flexDirection: 'row',
@@ -891,6 +977,19 @@ const styles = StyleSheet.create({
     marginTop: 12,
     gap: 8
   },
+  alertBoxOverlay: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+    zIndex: 10
+  },
   alertText: {
     color: '#92400e',
     flex: 1,
@@ -898,20 +997,38 @@ const styles = StyleSheet.create({
   },
   controls: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 32,
+    gap: 24
+  },
+  controlsOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 32,
+    paddingHorizontal: 16,
+    gap: 24,
+    zIndex: 10
   },
   controlButton: {
-    flex: 1,
-    backgroundColor: '#1d4ed8',
-    borderRadius: 16,
-    paddingVertical: 12,
-    marginHorizontal: 4,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
-    gap: 6
+    justifyContent: 'center'
   },
   controlButtonDisabled: {
-    backgroundColor: '#334155'
+    backgroundColor: 'rgba(255, 255, 255, 0.1)'
+  },
+  leaveControlButton: {
+    backgroundColor: 'rgba(185, 28, 28, 0.7)'
   },
   controlLabel: {
     color: '#f8fafc',

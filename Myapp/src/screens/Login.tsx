@@ -19,6 +19,11 @@ import { GOOGLE_CLIENT_ID } from '../config';
 import { LoginManager, AccessToken, Settings } from 'react-native-fbsdk-next';
 import { FACEBOOK_APP_ID } from '../config';
 
+// Debug: Log imported values
+console.log('[Login] Imported config values:');
+console.log('[Login]   GOOGLE_CLIENT_ID:', GOOGLE_CLIENT_ID ? `${GOOGLE_CLIENT_ID.substring(0, 20)}...` : 'EMPTY', 'length:', GOOGLE_CLIENT_ID?.length || 0);
+console.log('[Login]   FACEBOOK_APP_ID:', FACEBOOK_APP_ID ? `${FACEBOOK_APP_ID.substring(0, 20)}...` : 'EMPTY', 'length:', FACEBOOK_APP_ID?.length || 0);
+
 // Configure once at module load using the shared config value from environment
 if (GOOGLE_CLIENT_ID) {
   GoogleSignin.configure({

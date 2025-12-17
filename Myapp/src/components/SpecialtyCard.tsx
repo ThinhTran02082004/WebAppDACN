@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { Specialty } from '../types/specialty';
+import { Specialty } from '../services/api';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { AppIcons, IconColors, IconSizes } from '../config/icons';
 

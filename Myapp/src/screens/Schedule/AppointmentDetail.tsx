@@ -319,16 +319,6 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
           return merged;
         });
         
-        // Log payment status for debugging
-        if (updatedAppointment.bill) {
-          console.log('[Payment] Appointment bill status:', {
-            consultationStatus: updatedAppointment.bill.consultationStatus,
-            medicationStatus: updatedAppointment.bill.medicationStatus,
-            hospitalizationStatus: updatedAppointment.bill.hospitalizationStatus,
-            overallStatus: updatedAppointment.bill.overallStatus,
-            remainingAmount: updatedAppointment.bill.remainingAmount,
-          });
-        }
         
         // Update local bill if available from appointment response
         if ((updatedAppointment as any).bill) {
@@ -341,7 +331,6 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
         // Check if bill status is still not fully paid after payment
         // If so, retry after a delay to allow server to process
         if (forceRetry && retryCount < 5 && !isFullyPaid) {
-          console.log(`[Payment] Retrying refresh (${retryCount + 1}/5) - payment not fully processed yet`);
           // Retry after 2 seconds
           setTimeout(() => {
             refreshAppointment(0, retryCount + 1, forceRetry);
@@ -351,7 +340,6 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
         
         // If payment is now fully paid, clear retry flag
         if (isFullyPaid) {
-          console.log('Payment is now fully paid!');
           setShouldRetryRefresh(false);
         }
         
@@ -366,11 +354,9 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
         }
       }
     } catch (error: any) {
-      console.error('Failed to refresh appointment:', error);
       // Don't retry on network errors - they're usually temporary connection issues
       const errorMessage = error?.message || '';
       if (errorMessage.includes('Network Error') || errorMessage.includes('Cannot reach backend')) {
-        console.log('Network error detected, skipping retry');
         if (retryCount === 0) {
           setRefreshing(false);
         }
@@ -408,7 +394,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
           setAppointmentBill(res.data);
         }
       } catch (e) {
-        console.error('[AppointmentDetail] Failed to fetch appointment bill:', e);
+        // Failed to fetch appointment bill
       }
     };
 
@@ -422,7 +408,6 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   // Handle coming from payment - force refresh with retry (only once)
   useEffect(() => {
     if (fromPayment && !hasRefreshedRef.current && refreshAppointmentRef.current) {
-      console.log('Coming from payment, forcing refresh with retry');
       hasRefreshedRef.current = true;
       const refreshFn = refreshAppointmentRef.current;
       // Refresh with longer delay and more retries to ensure server has processed payment
@@ -437,7 +422,6 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   // Initial load: fetch appointment if only appointmentId is provided
   useEffect(() => {
     if (!appointment && appointmentId && refreshAppointmentRef.current) {
-      console.log('Fetching appointment by ID:', appointmentId);
       const refreshFn = refreshAppointmentRef.current;
       refreshFn(0, 0, false);
     }
@@ -726,9 +710,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
           orderInfo: `Thanh toán đơn thuốc đợt ${prescriptionOrder} - Lịch hẹn #${appointment.bookingCode || appointment._id.substring(0, 8)}`,
           redirectUrl,
         };
-        console.log('[Payment] Creating MoMo payment for prescription:', paymentParams);
         const created = await apiService.createMomoPayment(paymentParams);
-        console.log('[Payment] MoMo payment created for prescription, response:', created);
         const payUrl = (created?.data as any)?.payUrl;
         if (payUrl) {
           setAppointment(prev =>
@@ -748,7 +730,6 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
         return;
       }
     } catch (e: any) {
-      console.error('[Payment] Error paying prescription:', e);
       Alert.alert('Lỗi', e?.message || 'Không thể khởi tạo thanh toán.');
     }
   };
@@ -917,9 +898,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
       if (billType === 'medication' && targetPrescription?._id) {
         paymentParams.prescriptionId = targetPrescription._id;
       }
-      console.log('[Payment] Creating MoMo payment with params:', paymentParams);
       const created = await apiService.createMomoPayment(paymentParams);
-      console.log('[Payment] MoMo payment created, response:', created);
       const payUrl = (created?.data as any)?.payUrl;
       if (payUrl) {
         // Reflect the user's chosen payment method immediately in the UI
@@ -1068,16 +1047,34 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
       });
 
       if (response?.success && response?.data?._id) {
-        // Navigate to ChatDetail screen
+        // Get doctor's full name from appointment
+        const doctorFullName = appointment.doctorId?.user?.fullName || 
+                              (appointment.doctorId as any)?.user?.fullName ||
+                              'Bác sĩ';
+        const doctorTitle = appointment.doctorId?.title || '';
+        const doctorDisplayName = doctorTitle ? `${doctorTitle} ${doctorFullName}` : doctorFullName;
+        const doctorAvatarUrl = appointment.doctorId?.user?.avatarUrl || 
+                               (appointment.doctorId as any)?.user?.avatarUrl;
+        
+        // Get doctor's user ID for online status check
+        // Use the same ID that was used to create conversation
+        const doctorUserForOnlineCheck = doctorUserId;
+        
+        // Navigate to ChatDetail screen with doctor info
         navigation.navigate('ChatDetail', {
           conversationId: response.data._id,
-          conversation: response.data
+          conversation: response.data,
+          doctorInfo: {
+            fullName: doctorDisplayName,
+            avatarUrl: doctorAvatarUrl,
+            roleType: 'doctor',
+            _id: doctorUserForOnlineCheck // Pass doctor's user ID for online status check
+          }
         });
       } else {
         Alert.alert('Lỗi', response?.message || 'Không thể bắt đầu trò chuyện. Vui lòng thử lại sau.');
       }
     } catch (error: any) {
-      console.error('Error starting chat:', error);
       Alert.alert('Lỗi', error?.response?.data?.message || 'Không thể bắt đầu trò chuyện. Vui lòng thử lại sau.');
     }
   };
@@ -1106,7 +1103,7 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
           activeRoom = existingRoomResponse.data;
         }
       } catch (roomLookupError) {
-        console.warn('[AppointmentDetail] Không thể kiểm tra phòng video hiện có', roomLookupError);
+        // Failed to check existing video room
       }
 
       if (!activeRoom) {
@@ -1202,7 +1199,6 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
         Alert.alert('Lỗi', response?.message || 'Không thể tạo cuộc trò chuyện');
       }
     } catch (error: any) {
-      console.error('Error sharing appointment:', error);
       Alert.alert('Lỗi', 'Không thể chia sẻ lịch hẹn');
     }
   };
@@ -1293,15 +1289,6 @@ export default function AppointmentDetailScreen({ route, navigation }: Appointme
   // Allow reschedule and cancel only for pending appointments (Chờ xác nhận)
   // Show buttons for pending status regardless of whether it's past or not
   const canModifyAppointment = appointment.status === 'pending';
-  
-  // Debug log to check status
-  console.log('[AppointmentDetail] Status check:', {
-    status: appointment.status,
-    canModifyAppointment,
-    isPast,
-    rescheduleCount,
-    hasReachedRescheduleLimit
-  });
   const hospitalization = appointment.hospitalization;
   const roomInfoText = getRoomInfo(appointment);
   const prescriptionMap = new Map<string, Prescription>();

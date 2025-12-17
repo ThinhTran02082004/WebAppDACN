@@ -26,8 +26,17 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    
+    // Note: Facebook SDK is auto-initialized via AndroidManifest.xml (AutoInitEnabled=true)
+    // No manual initialization needed
+    
     // Initialize LiveKit React Native BEFORE loading React Native
-    LiveKitReactNative.setup(this, AudioType.CommunicationAudioType())
+    try {
+      LiveKitReactNative.setup(this, AudioType.CommunicationAudioType())
+    } catch (e: Exception) {
+      android.util.Log.e("MainApplication", "Failed to setup LiveKit", e)
+    }
+    // Load React Native - this initializes the React Native runtime
     loadReactNative(this)
   }
 }

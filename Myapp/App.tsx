@@ -6,7 +6,6 @@
  */
 
 import React from 'react';
-import 'react-native-gesture-handler';
 import { StatusBar, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -15,12 +14,14 @@ import { apiService } from './src/services/api';
 import Toast from 'react-native-toast-message';
 import { configureGoogleSignIn } from './src/config/googleConfig';
 import { configureFacebookSDK } from './src/config/facebookConfig';
-import { ensureLivekitGlobals } from './src/utils/livekit';
-
-ensureLivekitGlobals();
+// LiveKit initialization moved to VideoCall screen to avoid crash on app startup
+// import { ensureLivekitGlobals } from './src/utils/livekit';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
+
+  // LiveKit initialization moved to VideoCall screen
+  // This prevents crash on app startup with New Architecture
 
   // Load persisted API host (if present) and otherwise set a default recommended host.
   React.useEffect(() => {

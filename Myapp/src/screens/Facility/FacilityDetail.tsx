@@ -13,12 +13,11 @@ import {
   Linking,
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { apiService, Hospital, ServiceItem } from '../../services/api';
+import { apiService, Hospital, ServiceItem, Specialty } from '../../services/api';
 import { AppIcons, IconColors, IconSizes } from '../../config/icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { SpecialtyCard } from '../../components/SpecialtyCard';
 import ServiceCard from '../../components/ServiceCard';
-import { Specialty } from '../../types/specialty';
 
 const { width } = Dimensions.get('window');
 

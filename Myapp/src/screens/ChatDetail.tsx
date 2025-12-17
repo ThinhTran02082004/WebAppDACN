@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -119,12 +119,20 @@ export default function ChatDetailScreen() {
   const { socket, isConnected, emit, on, off, isUserOnline } = useSocket();
   
   // Extract params with better error handling
-  const params = route.params as { conversationId?: string; conversation?: any } | undefined;
+  const params = route.params as { 
+    conversationId?: string; 
+    conversation?: any;
+    doctorInfo?: {
+      fullName?: string;
+      avatarUrl?: string;
+      roleType?: string;
+      _id?: string;
+    };
+  } | undefined;
   const conversationId = params?.conversationId;
   const initialConversation = params?.conversation;
+  const doctorInfo = params?.doctorInfo;
 
-  // Debug log
-  console.log('ChatDetail params:', { conversationId, hasConversation: !!initialConversation });
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -134,8 +142,31 @@ export default function ChatDetailScreen() {
   const flatListRef = useRef<FlatList>(null);
   const markedMessagesRef = useRef(new Set<string>()); // Track already marked messages
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [fetchedDoctorAvatar, setFetchedDoctorAvatar] = useState<string | undefined>(undefined);
 
-  const otherParticipant = conversation?.participants?.[0];
+  const otherParticipant = useMemo(() => {
+    const baseParticipant = conversation?.participants?.[0] || {};
+    const participantId = baseParticipant._id || baseParticipant.id;
+    
+    if (doctorInfo) {
+      // Use doctorInfo._id if provided (real doctor user ID for online status),
+      // otherwise fallback to participant ID
+      const userIdForOnlineCheck = doctorInfo._id || participantId;
+      
+      return {
+        ...baseParticipant,
+        _id: userIdForOnlineCheck, // Use doctor's real user ID for online status check
+        fullName: doctorInfo.fullName || baseParticipant.fullName,
+        avatarUrl: doctorInfo.avatarUrl || baseParticipant.avatarUrl || fetchedDoctorAvatar || undefined,
+        roleType: doctorInfo.roleType || baseParticipant.roleType || 'doctor'
+      };
+    }
+    return {
+      ...baseParticipant,
+      _id: participantId,
+      avatarUrl: baseParticipant.avatarUrl || fetchedDoctorAvatar || undefined
+    };
+  }, [conversation?.participants, doctorInfo, fetchedDoctorAvatar]);
   const currentUserId = user?._id || user?.id;
 
   // Listen to keyboard events
@@ -164,6 +195,79 @@ export default function ChatDetailScreen() {
     };
   }, []);
 
+  // Fetch doctor avatar from appointment or doctor list if not provided in doctorInfo
+  useEffect(() => {
+    if (!doctorInfo?.avatarUrl && conversation) {
+      const participant = conversation.participants?.[0];
+      
+      // Skip if participant already has avatarUrl
+      if (participant?.avatarUrl) return;
+      
+      // Skip if not a doctor
+      if (participant?.roleType !== 'doctor' || !participant._id) return;
+      
+      const appointmentId = typeof conversation.appointmentId === 'object' 
+        ? conversation.appointmentId?._id 
+        : conversation.appointmentId;
+      
+      // Helper function to fetch avatar from doctor list
+      const fetchDoctorAvatarFromList = async (userId: string) => {
+        try {
+          // Try to get doctors list and find matching doctor
+          const doctorsResponse = await apiService.getDoctors({ limit: 100 });
+          if (doctorsResponse?.success && doctorsResponse?.data) {
+            let doctorsData: any[] = [];
+            if ('doctors' in doctorsResponse.data) {
+              doctorsData = doctorsResponse.data.doctors || [];
+            } else if (Array.isArray(doctorsResponse.data)) {
+              doctorsData = doctorsResponse.data;
+            }
+            
+            // Find doctor by user ID
+            const doctor = doctorsData.find((d: any) => {
+              const doctorUserId = typeof d.user === 'object' ? d.user?._id : d.user;
+              return doctorUserId === userId;
+            });
+            
+            if (doctor?.user?.avatarUrl) {
+              setFetchedDoctorAvatar(doctor.user.avatarUrl);
+            }
+          }
+        } catch (err) {
+          // Silently fail
+        }
+      };
+      
+      // Try to fetch from appointment first if available
+      if (appointmentId) {
+        apiService.getAppointmentById(appointmentId)
+          .then((apptResponse) => {
+            if (apptResponse?.success && apptResponse?.data) {
+              const appointment = apptResponse.data;
+              const doctorAvatarUrl = appointment.doctorId?.user?.avatarUrl || 
+                                   (appointment.doctorId as any)?.user?.avatarUrl;
+              if (doctorAvatarUrl) {
+                setFetchedDoctorAvatar(doctorAvatarUrl);
+              } else {
+                // If appointment doesn't have avatar, try fetching from doctor list
+                fetchDoctorAvatarFromList(participant._id);
+              }
+            } else {
+              // If appointment fetch fails, try fetching from doctor list
+              fetchDoctorAvatarFromList(participant._id);
+            }
+          })
+          .catch(() => {
+            // If appointment fetch fails, try fetching from doctor list
+            fetchDoctorAvatarFromList(participant._id);
+          });
+      } else {
+        // If no appointmentId, try to fetch from doctor list
+        fetchDoctorAvatarFromList(participant._id);
+      }
+    }
+  }, [conversation, doctorInfo]);
+
   // Fetch messages and join conversation room
   useEffect(() => {
     if (conversationId) {
@@ -172,18 +276,15 @@ export default function ChatDetailScreen() {
       // Join conversation room for real-time updates
       if (isConnected) {
         emit('join_conversation', { conversationId });
-        console.log('[ChatDetail] Joined conversation room:', conversationId);
       }
 
       return () => {
         // Leave conversation room on unmount
         if (isConnected) {
           emit('leave_conversation', { conversationId });
-          console.log('[ChatDetail] Left conversation room:', conversationId);
         }
       };
     } else {
-      console.error('ChatDetail: conversationId is undefined');
       setLoading(false);
     }
   }, [conversationId, isConnected]);
@@ -228,7 +329,6 @@ export default function ChatDetailScreen() {
 
   const fetchMessages = async () => {
     if (!conversationId) {
-      console.error('Cannot fetch messages: conversationId is undefined');
       setLoading(false);
       return;
     }
@@ -263,7 +363,7 @@ export default function ChatDetailScreen() {
         }, 100);
       }
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      // Error fetching messages
     } finally {
       setLoading(false);
     }
@@ -275,7 +375,7 @@ export default function ChatDetailScreen() {
         emit('mark_as_read', { conversationId, messageIds });
       }
     } catch (error) {
-      console.error('Error marking messages as read:', error);
+      // Error marking messages as read
     }
   };
 
@@ -305,7 +405,6 @@ export default function ChatDetailScreen() {
         Alert.alert('Lỗi', 'Không thể gửi tin nhắn. Vui lòng thử lại.');
       }
     } catch (error: any) {
-      console.error('Error sending message:', error);
       setNewMessage(messageContent);
       Alert.alert('Lỗi', error?.response?.data?.message || 'Không thể gửi tin nhắn. Vui lòng thử lại.');
     } finally {
@@ -334,19 +433,16 @@ export default function ChatDetailScreen() {
         // Handle Unix timestamp (in milliseconds)
         date = new Date(timestamp);
       } else {
-        console.warn('Unsupported timestamp format:', timestamp);
         return '';
       }
       
       // Check if date is valid
       if (isNaN(date.getTime())) {
-        console.warn('Invalid timestamp:', timestamp);
         return '';
       }
       
       return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     } catch (error) {
-      console.error('Error formatting time:', error, timestamp);
       return '';
     }
   };
@@ -401,8 +497,14 @@ export default function ChatDetailScreen() {
         >
           {!isMine && (
             <View style={styles.avatarContainer}>
-              {typeof item.senderId === 'object' && item.senderId?.avatarUrl ? (
-                <Image source={{ uri: item.senderId.avatarUrl }} style={styles.messageAvatar} />
+              {(typeof item.senderId === 'object' && item.senderId?.avatarUrl) || otherParticipant?.avatarUrl ? (
+                <Image 
+                  source={{ uri: (typeof item.senderId === 'object' && item.senderId?.avatarUrl) || otherParticipant?.avatarUrl || '' }} 
+                  style={styles.messageAvatar}
+                  onError={() => {
+                    // Avatar failed to load
+                  }}
+                />
               ) : (
                 <View style={styles.messageAvatarPlaceholder}>
                   <Text style={styles.messageAvatarText}>{senderName.charAt(0).toUpperCase()}</Text>
@@ -492,10 +594,13 @@ export default function ChatDetailScreen() {
       >
         {!isMine && (
           <View style={styles.avatarContainer}>
-            {typeof item.senderId === 'object' && item.senderId?.avatarUrl ? (
+            {(typeof item.senderId === 'object' && item.senderId?.avatarUrl) || otherParticipant?.avatarUrl ? (
               <Image
-                source={{ uri: item.senderId.avatarUrl }}
+                source={{ uri: (typeof item.senderId === 'object' && item.senderId?.avatarUrl) || otherParticipant?.avatarUrl || '' }}
                 style={styles.messageAvatar}
+                onError={() => {
+                  // Avatar failed to load
+                }}
               />
             ) : (
               <View style={styles.messageAvatarPlaceholder}>
@@ -588,6 +693,9 @@ export default function ChatDetailScreen() {
                 <Image
                   source={{ uri: otherParticipant.avatarUrl }}
                   style={styles.headerAvatar}
+                  onError={() => {
+                    // If image fails to load, it will fallback to placeholder
+                  }}
                 />
               ) : (
                 <View style={styles.headerAvatarPlaceholder}>
@@ -597,12 +705,17 @@ export default function ChatDetailScreen() {
                 </View>
               )}
               {/* Online/Offline indicator */}
-              {otherParticipant?._id && (
-                <View style={[
-                  styles.onlineIndicator,
-                  isUserOnline(otherParticipant._id) && styles.onlineIndicatorActive
-                ]} />
-              )}
+              {otherParticipant?._id ? (
+                (() => {
+                  const isOnline = isUserOnline(otherParticipant._id);
+                  return (
+                    <View style={[
+                      styles.onlineIndicator,
+                      isOnline && styles.onlineIndicatorActive
+                    ]} />
+                  );
+                })()
+              ) : null}
             </View>
             <View style={styles.headerTextContainer}>
               <Text style={styles.headerTitle} numberOfLines={1}>
@@ -614,13 +727,20 @@ export default function ChatDetailScreen() {
                     {otherParticipant.roleType === 'doctor' ? 'Bác sĩ' : 'Bệnh nhân'}
                   </Text>
                 )}
-                {otherParticipant?._id && (
-                  <Text style={[
-                    styles.statusText,
-                    isUserOnline(otherParticipant._id) && styles.statusTextOnline
-                  ]}>
-                    {isUserOnline(otherParticipant._id) ? '• Đang hoạt động' : '• Offline'}
-                  </Text>
+                {otherParticipant?._id ? (
+                  (() => {
+                    const isOnline = isUserOnline(otherParticipant._id);
+                    return (
+                      <Text style={[
+                        styles.statusText,
+                        isOnline && styles.statusTextOnline
+                      ]}>
+                        {isOnline ? '• Đang hoạt động' : '• Offline'}
+                      </Text>
+                    );
+                  })()
+                ) : (
+                  <Text style={styles.statusText}>• Offline</Text>
                 )}
               </View>
             </View>
