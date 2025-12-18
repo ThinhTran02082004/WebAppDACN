@@ -126,7 +126,6 @@ export default function AppointmentScheduleScreen({ navigation, route }: any) {
         params.status = 'cancelled';
       }
       
-      console.log('Loading appointments with params:', params);
       const response = await apiService.getUserAppointments(params);
       if (response && !response.success) {
         // Check if it's an authentication error
@@ -134,24 +133,20 @@ export default function AppointmentScheduleScreen({ navigation, route }: any) {
         if (errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
           // Token may be expired, but don't show error if user exists (let AuthContext handle it)
           if (!user) {
-            console.warn('Authentication required');
-          }
+            }
           setAppointments([]);
           return;
         }
       }
       const data = (response as any)?.data?.appointments || (response as any)?.data || [];
       setAppointments(Array.isArray(data) ? data : []);
-      console.log(`Loaded ${data.length} appointments with status filter: ${params.status || 'all'}`);
-    } catch (error: any) {
-      console.error('Failed to load appointments:', error);
+      } catch (error: any) {
       // Check if it's a 401 or authentication error
       const errorMessage = error?.message || error?.response?.data?.message || '';
       if (error?.response?.status === 401 || errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
         // Authentication error - token expired or invalid
         // AuthContext will handle logout when it detects user is null
-        console.warn('Authentication required, token may be expired');
-      }
+        }
       setAppointments([]);
     } finally {
       setLoading(false);

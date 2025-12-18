@@ -25,7 +25,6 @@ export default function FavoriteDoctorsScreen() {
         const errorMessage = (res as any)?.message || '';
         if (errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
           // Token may be expired, redirect to login
-          console.warn('Authentication required for favorites');
           setDoctors([]);
           return;
         }
@@ -34,12 +33,10 @@ export default function FavoriteDoctorsScreen() {
       const list: Doctor[] = Array.isArray(data) ? data : (data?.doctors || []);
       setDoctors(list);
     } catch (error: any) {
-      console.error('Error loading favorite doctors:', error);
       // Check if it's a 401 or authentication error
       const errorMessage = error?.message || error?.response?.data?.message || '';
       if (error?.response?.status === 401 || errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
         // Authentication error - token expired or invalid
-        console.warn('Authentication required, token may be expired');
         setDoctors([]);
       }
     } finally {

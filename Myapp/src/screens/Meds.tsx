@@ -172,7 +172,6 @@ const MedsScreen = () => {
         setRecords((prev) => (append ? [...prev, ...newRecords] : newRecords));
         setError('');
       } catch (err: any) {
-        console.error('Failed to load prescription history:', err);
         const message = err?.message || 'Không thể tải lịch sử đơn thuốc.';
         setError(message);
         if (!append) {

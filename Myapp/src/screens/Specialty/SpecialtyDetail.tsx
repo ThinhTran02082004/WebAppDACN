@@ -114,7 +114,6 @@ export default function SpecialtyDetailScreen() {
         setServices(servicesData);
       }
     } catch (error) {
-      console.error('Error loading specialty detail:', error);
       setError('Có lỗi xảy ra khi tải chuyên khoa');
     } finally {
       setLoading(false);

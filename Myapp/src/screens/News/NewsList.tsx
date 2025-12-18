@@ -37,10 +37,7 @@ export default function NewsListScreen({ navigation }: Props) {
   const loadNews = async () => {
     try {
       setLoading(true);
-      console.log('Loading news...');
       const response = await apiService.getNews({ limit: 100, isPublished: true as any });
-      console.log('News response:', response);
-      
       if (response.success && (response as any).data) {
         // Handle different response structures (API có thể trả về nhiều dạng)
         let newsData: NewsItem[] = [];
@@ -54,14 +51,11 @@ export default function NewsListScreen({ navigation }: Props) {
           newsData = respData as NewsItem[];
         }
         
-        console.log('News data:', newsData);
         setNews(newsData);
       } else {
-        console.log('No news data found');
         setNews([]);
       }
     } catch (error) {
-      console.error('Error loading news:', error);
       setNews([]);
     } finally {
       setLoading(false);
@@ -89,7 +83,6 @@ export default function NewsListScreen({ navigation }: Props) {
   };
 
   const handleNewsPress = (newsItem: NewsItem) => {
-    console.log('News pressed:', newsItem.title);
     navigation.navigate('NewsDetail', { newsId: newsItem._id });
   };
 

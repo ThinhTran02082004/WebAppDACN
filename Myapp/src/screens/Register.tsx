@@ -103,9 +103,6 @@ export default function RegisterScreen({ navigation }: Props) {
   const { signUp } = useAuth();
 
   const handleRegister = async () => {
-    console.log('Register button pressed');
-    console.log('User data:', userData);
-    
     if (!userData.email || !userData.phoneNumber || !userData.password || !userData.confirmPassword) {
       Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
       return;
@@ -130,8 +127,6 @@ export default function RegisterScreen({ navigation }: Props) {
 
     try {
       setLoading(true);
-      console.log('Sending registration data...');
-      
       await signUp({
         fullName: userData.fullName,
         email: userData.email,
@@ -142,12 +137,10 @@ export default function RegisterScreen({ navigation }: Props) {
         address: userData.address,
       });
       
-      console.log('Registration successful');
       Alert.alert('Thành công', 'Đăng ký thành công!', [
         { text: 'OK', onPress: () => navigation.navigate('Login') }
       ]);
     } catch (error: any) {
-      console.error('Registration error:', error);
       Alert.alert('Lỗi', error.message || 'Đăng ký thất bại');
     } finally {
       setLoading(false);
@@ -340,9 +333,6 @@ export default function RegisterScreen({ navigation }: Props) {
             !userData.agreeToTerms && styles.registerButtonDisabled
           ]}
           onPress={() => {
-            console.log('Register button onPress triggered');
-            console.log('Loading state:', loading);
-            console.log('Agree to terms:', userData.agreeToTerms);
             handleRegister();
           }}
           disabled={loading || !userData.agreeToTerms}

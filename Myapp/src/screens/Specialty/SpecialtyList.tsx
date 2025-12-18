@@ -104,7 +104,7 @@ export default function SpecialtyListScreen({ navigation }: Props) {
         setSpecialties(enrichedSpecialties);
       }
     } catch (error) {
-      console.error('Error loading specialties:', error);
+      // Error loading specialties
     } finally {
       setLoading(false);
     }

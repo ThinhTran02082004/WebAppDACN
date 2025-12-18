@@ -13,14 +13,12 @@ const getSocketUrl = (): string => {
     const apiBase = typeof API_BASE === 'function' ? API_BASE() : API_BASE as string;
     // Remove /api suffix and return base URL for socket
     const socketUrl = apiBase.replace(/\/api\/?$/, '');
-    console.log('[SocketContext] Socket URL from config:', socketUrl);
     return socketUrl;
   } catch (error) {
     // Fallback to default
     const baseUrl = Platform.OS === 'android' 
       ? "http://10.0.2.2:5000" 
       : "http://localhost:5000";
-    console.log('[SocketContext] Using fallback socket URL:', baseUrl);
     return baseUrl;
   }
 };
@@ -64,8 +62,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const socketUrl = getSocketUrl();
-    console.log('[SocketContext] Connecting to:', socketUrl);
-
     // Cleanup existing socket first
     if (socketRef.current) {
       socketRef.current.disconnect();
@@ -93,7 +89,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         }
         
         if (!token) {
-          console.error('[SocketContext] No token found');
           return;
         }
 
@@ -117,28 +112,18 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
         // Connection events
         socketInstance.on('connect', () => {
-          console.log('[SocketContext] Connected:', socketInstance.id);
           setIsConnected(true);
         });
 
         socketInstance.on('disconnect', (reason) => {
-          console.log('[SocketContext] Disconnected:', reason);
           setIsConnected(false);
         });
 
         socketInstance.on('connect_error', (error: any) => {
-          console.error('[SocketContext] Connection error:', error.message);
-          console.error('[SocketContext] Error details:', {
-            type: error?.type,
-            description: error?.description,
-            context: error?.context,
-            socketUrl
-          });
           setIsConnected(false);
         });
 
         socketInstance.on('reconnect', (attemptNumber) => {
-          console.log('[SocketContext] Reconnected after', attemptNumber, 'attempts');
           setIsConnected(true);
         });
 
@@ -162,8 +147,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         socketRef.current = socketInstance;
         setSocket(socketInstance);
       } catch (error) {
-        console.error('[SocketContext] Error initializing socket:', error);
-      }
+        }
     };
 
     initializeSocket();
@@ -182,8 +166,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     if (socket && isConnected) {
       socket.emit(event, data);
     } else {
-      console.warn('[SocketContext] Cannot emit - socket not connected');
-    }
+      }
   }, [socket, isConnected]);
 
   const on = useCallback((event: string, callback: (...args: any[]) => void) => {

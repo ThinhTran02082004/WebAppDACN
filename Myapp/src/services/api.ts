@@ -144,7 +144,6 @@ class ApiService {
   private _reachabilityTtl = 30 * 1000; // 30 seconds
 
   constructor() {
-    console.log('[api] ApiService initialized with baseURL:', this.client.defaults.baseURL);
     this.client.interceptors.request.use(async (config) => {
         // attach token - prioritize in-memory token first, then fallback to AsyncStorage
       try {
@@ -175,7 +174,6 @@ class ApiService {
       }
       // add start time for logging
       (config as any).__startTime = Date.now();
-      console.log(`[api] -> ${config.method?.toUpperCase() || 'GET'} ${config.baseURL || ''}${config.url}`);
       return config;
     });
 
@@ -188,7 +186,6 @@ class ApiService {
           try {
             await AsyncStorage.removeItem('token');
             (this.client.defaults.headers as any).Authorization = undefined;
-            console.log('[api] Token expired, cleared from storage');
           } catch {
             // ignore
           }
@@ -206,9 +203,8 @@ class ApiService {
       } else {
         if ((this.client.defaults.headers as any).Authorization) delete (this.client.defaults.headers as any).Authorization;
       }
-      console.log('[api] auth token updated (in-memory)');
     } catch {
-      console.error('[api] failed to set token');
+      // Failed to set token
     }
   }
 
@@ -216,9 +212,8 @@ class ApiService {
   setBaseUrl(url: string) {
     try {
       this.client.defaults.baseURL = url;
-      console.log('[api] baseURL updated to', url);
     } catch {
-      console.error('[api] failed to update baseURL');
+      // Failed to update baseURL
     }
   }
 
@@ -231,7 +226,6 @@ class ApiService {
       // If we recently probed successfully, skip
       if (this._lastReachableAt && Date.now() - this._lastReachableAt < this._reachabilityTtl) return;
       const url = `${serverRoot}/health`;
-      console.log('[api] probing backend health endpoint:', url);
       const res = await axios.get(url, { timeout: 3000 });
       if (res && res.status === 200) {
         this._lastReachableAt = Date.now();
@@ -246,24 +240,10 @@ class ApiService {
   }
 
   private handleResponse<T>(resp: any): ApiResponse<T> {
-    try {
-      // const start = (resp.config as any).__startTime;
-      // const dt = start ? Date.now() - start : undefined;
-      console.log(`[api] <- ${resp.config.method?.toUpperCase() || 'GET'} ${resp.config.url}`);
-    } catch {
-      // ignore
-    }
     return { success: resp.data?.success ?? true, data: resp.data?.data ?? resp.data, message: resp.data?.message } as ApiResponse<T>;
   }
 
   private handleError(e: any): never {
-    try {
-    const conf = e?.config;
-    // const start = conf?.__startTime;
-    // const dt = start ? `${Date.now() - start}ms` : '';
-    } catch {
-      console.error('Error logging failed');
-    }
     const conf = e?.config;
     // const start = conf?.__startTime;
     // const dt = start ? `${Date.now() - start}ms` : '';
@@ -295,7 +275,6 @@ class ApiService {
     try {
       // Probe backend reachability first to fail fast with a helpful message
       await this.probeBackend();
-      console.log('[api] GET hospitals using baseURL:', this.client.defaults.baseURL);
       const res = await this.client.get('/hospitals', { params });
       return this.handleResponse(res);
     } catch (e) {
@@ -345,7 +324,6 @@ class ApiService {
   }): Promise<ApiResponse<{ doctors: Doctor[]; total: number; totalPages: number; currentPage: number }>> {
     try {
       await this.probeBackend();
-      console.log('[api] GET doctors using baseURL:', this.client.defaults.baseURL);
       const res = await this.client.get('/doctors', { params });
       return this.handleResponse(res);
     } catch (e) {
@@ -633,13 +611,6 @@ class ApiService {
       });
       return this.handleResponse(res);
     } catch (e) {
-      console.error('[api] Upload avatar error details:', {
-        message: (e as any)?.message,
-        code: (e as any)?.code,
-        response: (e as any)?.response?.data,
-        status: (e as any)?.response?.status,
-        stack: (e as any)?.stack,
-      });
       this.handleError(e);
     }
   }

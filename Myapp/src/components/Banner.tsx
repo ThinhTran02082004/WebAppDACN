@@ -151,33 +151,7 @@ export default function Banner() {
                 }
                 style={styles.bannerImage}
                 resizeMode="cover"
-                onError={() => console.log('Failed to load image:', banner.imageUrl)}
-                defaultSource={{ uri: 'https://placehold.co/400x200/cccccc/666666?text=Image+Not+Found' }}
-              />
-              <View style={styles.bannerOverlay}>
-                <Text style={styles.bannerTitle}>{banner.title}</Text>
-                <Text style={styles.bannerSubtitle}>{banner.subtitle}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-      {/* Dots indicator */}
-      <View style={styles.dotsContainer}>
-        {bannerData.map((_, index) => (
-          <TouchableOpacity
-            key={index}
-            style={[
-              styles.dot,
-              currentIndex === index && styles.activeDot
-            ]}
-            onPress={() => handleDotPress(index)}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
+                onError={() => }
 
 const styles = StyleSheet.create({
   wrapper: {

@@ -33,10 +33,9 @@ function App() {
       // ensure apiService uses the current API_BASE after load/default
       try {
         const baseUrl = typeof API_BASE === 'function' ? API_BASE() : API_BASE as any;
-        console.log('[App] Setting API base URL to:', baseUrl);
         apiService.setBaseUrl(baseUrl);
       } catch (error) {
-        console.error('[App] Failed to set API base URL:', error);
+        // Failed to set API base URL
       }
     })();
   }, []);
@@ -46,7 +45,7 @@ function App() {
     try {
       configureGoogleSignIn();
     } catch (e) {
-      console.warn('Google Sign-In configuration failed', e);
+      // Google Sign-In configuration failed
     }
   }, []);
 
@@ -55,7 +54,7 @@ function App() {
     try {
       configureFacebookSDK();
     } catch (e) {
-      console.warn('Facebook SDK configuration failed', e);
+      // Facebook SDK configuration failed
     }
   }, []);
 

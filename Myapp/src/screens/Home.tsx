@@ -180,9 +180,8 @@ export default function Home({ navigation }: Props) {
         try {
           await clearApiHost();
           resetApiHost();
-          console.log('[Home] API cache cleared, current API_BASE:', typeof API_BASE === 'function' ? API_BASE() : API_BASE);
         } catch (cacheError) {
-          console.error('[Home] Failed to clear API cache:', cacheError);
+          // Failed to clear API cache
         }
       }
       
@@ -219,8 +218,6 @@ export default function Home({ navigation }: Props) {
   };
 
   const handleQuickAccessPress = (item: any) => {
-    console.log('Quick access pressed:', item.title);
-
     // Bỏ yêu cầu đăng nhập - cho phép truy cập trực tiếp
     switch (item.id) {
       case '1':
@@ -262,7 +259,7 @@ export default function Home({ navigation }: Props) {
         });
         break;
       default:
-        console.log('Unknown function');
+        // Unknown function
     }
   };
 

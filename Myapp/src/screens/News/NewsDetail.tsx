@@ -57,7 +57,6 @@ export default function NewsDetailScreen() {
         setError('Không thể tải tin tức');
       }
     } catch (error) {
-      console.error('Error loading news detail:', error);
       setError('Có lỗi xảy ra khi tải tin tức');
     } finally {
       setLoading(false);

@@ -58,8 +58,7 @@ export default function FacilityListScreen({ navigation }: Props) {
         setProvinces(['all', ...uniqueProvinces]);
       }
     } catch (error) {
-      console.error('Error loading hospitals:', error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
@@ -88,7 +87,6 @@ export default function FacilityListScreen({ navigation }: Props) {
   };
 
   const handleHospitalPress = (hospital: Hospital) => {
-    console.log('Hospital pressed:', hospital.name);
     navigation.navigate('FacilityDetail', { id: hospital._id });
   };
 

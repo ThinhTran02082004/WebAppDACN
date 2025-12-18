@@ -129,7 +129,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error('Access token hoặc User ID không hợp lệ');
       }
       
-      console.log('[AuthContext] Starting Facebook login with userID:', userID);
       const res = await apiService.facebookLogin(accessToken, userID);
       
       if (!res) {
@@ -137,42 +136,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       if (res.success && res.data?.token) {
-        console.log('[AuthContext] Facebook login successful, setting token');
         try {
           if (rememberMe) {
             await AsyncStorage.setItem('token', res.data.token);
           }
           apiService.setToken(res.data.token);
         } catch (tokenError: any) {
-          console.error('[AuthContext] Error setting token:', tokenError);
           // Continue even if token setting fails
         }
         
-        console.log('[AuthContext] Fetching current user info');
         try {
           const me = await apiService.getCurrentUser();
           if (me.success && me.data) {
-            console.log('[AuthContext] User info fetched, setting user:', me.data._id);
             setUser(me.data);
-          } else {
-            console.warn('[AuthContext] Failed to fetch user info, but login was successful');
-            // Still consider login successful even if we can't fetch user info
           }
         } catch (userError: any) {
-          console.error('[AuthContext] Error fetching user info:', userError);
           // Continue even if user fetch fails - token is set
         }
       } else {
         const errorMessage = res.message || 'Facebook login failed';
-        console.error('[AuthContext] Facebook login failed:', errorMessage);
         throw new Error(errorMessage);
       }
     } catch (e: any) {
-      console.error('[AuthContext] Facebook login error:', {
-        message: e?.message,
-        stack: e?.stack,
-        response: e?.response?.data
-      });
       // Re-throw with more context if needed
       if (e?.response?.data?.message) {
         throw new Error(e.response.data.message);

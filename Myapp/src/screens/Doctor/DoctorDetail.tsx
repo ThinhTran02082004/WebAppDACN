@@ -93,8 +93,7 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
         const res = await apiService.getDoctorById(id);
         if (res.success) setDoctor(res.data);
       } catch (error) {
-        console.error('Error loading doctor:', error);
-      } finally {
+        } finally {
         setLoading(false);
       }
     };
@@ -120,7 +119,6 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
           setIsFavorite(false);
         }
       } catch (error: any) {
-        console.error('Error checking favorite:', error);
         // If there's an auth error, assume not favorite
         const errorMessage = error?.message || error?.response?.data?.message || '';
         if (error?.response?.status === 401 || errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
@@ -136,7 +134,6 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
       setLoadingReviews(true);
       try {
         const res = await apiService.getDoctorReviews(id, { page: 1, limit: 5 });
-        console.log('Reviews response:', res);
         if (res.success && res.data) {
           // API trả về: { data: [...reviews], count/total, averageRating }
           const dataObj = res.data as any;
@@ -152,8 +149,7 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
           setHasMoreReviews(reviewsArray.length < total);
         }
       } catch (error) {
-        console.error('Error loading reviews:', error);
-      } finally {
+        } finally {
         setLoadingReviews(false);
       }
     };
@@ -177,8 +173,7 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
         setReviewStats((prev) => ({ ...prev, total }));
       }
     } catch (error) {
-      console.error('Error loading more reviews:', error);
-    } finally {
+      } finally {
       setLoadingReviews(false);
     }
   };
@@ -214,8 +209,7 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
       return;
     }
     // TODO: Navigate to video call
-    console.log('Video call with doctor:', doctor?._id);
-  };
+    };
 
   const handleToggleFavorite = async () => {
     if (!user) {
@@ -254,7 +248,6 @@ export default function DoctorDetail({ route, navigation }: DoctorDetailProps) {
         }
       }
     } catch (error: any) {
-      console.error('Error toggling favorite:', error);
       const errorMessage = error?.response?.data?.message || error?.message || 'Không thể cập nhật yêu thích';
       if (error?.response?.status === 401 || errorMessage.includes('đăng nhập') || errorMessage.includes('quyền')) {
         Alert.alert('Lỗi', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');

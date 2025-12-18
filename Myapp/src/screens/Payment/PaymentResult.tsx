@@ -47,8 +47,6 @@ export default function PaymentResultScreen({ route, navigation }: PaymentResult
       try {
         // Check for MoMo payment result
         if (mode === 'momo' && orderId && resultCode !== undefined) {
-          console.log('Processing MoMo payment with params:', { orderId, resultCode });
-          
           // Map MoMo resultCode to user-friendly messages
           const getMomoErrorMessage = (code: string | number): string => {
             const codeStr = String(code);
@@ -71,8 +69,6 @@ export default function PaymentResultScreen({ route, navigation }: PaymentResult
           try {
             // Call API to verify payment status
             const response = await apiService.verifyMomoPaymentResult(orderId, resultCode);
-            
-            console.log('MoMo payment verification response:', response);
             
             if (response?.success) {
               const isCompleted = response.data?.paymentStatus === 'completed';
@@ -129,8 +125,6 @@ export default function PaymentResultScreen({ route, navigation }: PaymentResult
               }
             }
           } catch (apiError: any) {
-            console.error('API error during payment verification:', apiError);
-            
             // Graceful error handling - instead of showing an error, assume pending
             setResult({
               success: true, // Assume success to avoid scaring the user
@@ -202,7 +196,6 @@ export default function PaymentResultScreen({ route, navigation }: PaymentResult
                 }
               }
             } catch (e: any) {
-              console.error('Error executing PayPal payment:', e);
               setResult({
                 success: false,
                 message: 'Đã xảy ra lỗi khi xử lý thanh toán. Vui lòng liên hệ bộ phận hỗ trợ.',
@@ -238,8 +231,6 @@ export default function PaymentResultScreen({ route, navigation }: PaymentResult
           }
         }
       } catch (error) {
-        console.error('Error processing payment result:', error);
-        
         // Graceful error handling
         setResult({
           success: true, // Assume success to avoid scaring the user

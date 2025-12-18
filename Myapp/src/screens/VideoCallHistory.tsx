@@ -94,7 +94,6 @@ export default function VideoCallHistoryScreen() {
                 appointment: appointmentData,
               };
             } catch (e) {
-              console.log('Error fetching appointment:', e);
               return item;
             }
           }
@@ -117,7 +116,7 @@ export default function VideoCallHistoryScreen() {
               duration = Math.floor((end - start) / 1000); // Convert to seconds
             }
           } catch (e) {
-            console.log('Error calculating duration:', e);
+            // Error calculating duration
           }
         }
         
@@ -228,7 +227,6 @@ export default function VideoCallHistoryScreen() {
       
       setPage(pageNum);
     } catch (e: any) {
-      console.error('Error loading video call history:', e);
       if (!append) {
         setCalls([]);
       }

@@ -251,10 +251,8 @@ export default function MessagesScreen() {
     // Support both _id and id fields
     const conversationId = conv._id || conv.id;
     if (!conversationId) {
-      console.error('Cannot navigate: conversation id is missing', conv);
       return;
     }
-    console.log('Navigating to ChatDetail with conversationId:', conversationId);
     (navigation as any).navigate('ChatDetail', { 
       conversationId: conversationId, 
       conversation: conv 

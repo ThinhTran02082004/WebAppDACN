@@ -85,7 +85,6 @@ export default function ReviewFormScreen({ route, navigation }: ReviewFormScreen
         setError('Không thể tải thông tin lịch hẹn. Vui lòng thử lại sau.');
       }
     } catch (err: any) {
-      console.error('[ReviewForm] Failed to fetch appointment:', err);
       setError(err?.response?.data?.message || 'Không thể tải thông tin lịch hẹn. Vui lòng thử lại sau.');
     } finally {
       setLoading(false);
@@ -190,7 +189,6 @@ export default function ReviewFormScreen({ route, navigation }: ReviewFormScreen
         Alert.alert('Lỗi', response?.message || 'Không thể gửi đánh giá. Vui lòng thử lại sau.');
       }
     } catch (err: any) {
-      console.error('[ReviewForm] Failed to submit review:', err);
       const message = err?.response?.data?.message || err?.message || 'Không thể gửi đánh giá. Vui lòng thử lại sau.';
       Alert.alert('Lỗi', message);
     } finally {

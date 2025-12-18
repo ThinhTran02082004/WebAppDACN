@@ -87,7 +87,6 @@ export default function ServiceDetailScreen() {
         setDoctors(doctorsData);
       }
     } catch (error) {
-      console.error('Error loading service detail:', error);
       setError('Có lỗi xảy ra khi tải dịch vụ');
     } finally {
       setLoading(false);

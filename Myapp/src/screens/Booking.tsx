@@ -38,7 +38,6 @@ export default function BookingAllInOne() {
     // Try current route params first
     const currentParams = route.params as any;
     if (currentParams && Object.keys(currentParams).length > 0) {
-      console.log('Using current route params:', currentParams);
       return currentParams;
     }
     
@@ -49,12 +48,11 @@ export default function BookingAllInOne() {
         const parentState = parent.getState();
         const parentRoute = parentState?.routes?.find((r: any) => r.name === 'Booking');
         if (parentRoute?.params) {
-          console.log('Using parent route params:', parentRoute.params);
           return parentRoute.params as any;
         }
       }
     } catch (e) {
-      console.log('Error getting parent params:', e);
+      // Error getting parent params
     }
     
     // Try navigation state
@@ -64,16 +62,14 @@ export default function BookingAllInOne() {
         // Check all routes in the navigation state
         for (const r of navState.routes) {
           if (r.name === 'Booking' && r.params) {
-            console.log('Using navigation state params:', r.params);
             return r.params as any;
           }
         }
       }
     } catch (e) {
-      console.log('Error getting navigation state params:', e);
+      // Error getting navigation state params
     }
     
-    console.log('No params found, returning empty object');
     return {};
   }, [route.params, navigation]);
 
@@ -88,7 +84,6 @@ export default function BookingAllInOne() {
         // Try current route params first
         const currentParams = route.params as any;
         if (currentParams && Object.keys(currentParams).length > 0) {
-          console.log('useFocusEffect: Using current route params:', currentParams);
           return currentParams;
         }
         
@@ -99,12 +94,11 @@ export default function BookingAllInOne() {
             const parentState = parent.getState();
             const parentRoute = parentState?.routes?.find((r: any) => r.name === 'Booking');
             if (parentRoute?.params) {
-              console.log('useFocusEffect: Using parent route params:', parentRoute.params);
               return parentRoute.params as any;
             }
           }
         } catch (e) {
-          console.log('useFocusEffect: Error getting parent params:', e);
+          // Error getting parent params
         }
         
         return {};
@@ -112,7 +106,6 @@ export default function BookingAllInOne() {
       
       const params = getParams();
       if (Object.keys(params).length > 0) {
-        console.log('useFocusEffect: Setting route params state:', params);
         setRouteParamsState(params);
       }
     }, [route.params, navigation])
@@ -184,12 +177,8 @@ export default function BookingAllInOne() {
         ]);
         setBranches((h as any)?.data?.hospitals || []);
         setSpecialties((s as any)?.data?.specialties || []);
-        console.log('Initial data loaded:', { 
-          branches: (h as any)?.data?.hospitals?.length || 0, 
-          specialties: (s as any)?.data?.specialties?.length || 0 
-        });
       } catch (e) {
-        console.error('Load step1 failed', e);
+        // Load step1 failed
       }
     };
     load();
@@ -215,15 +204,12 @@ export default function BookingAllInOne() {
         : doctor.hospitalId;
       
       // Set form data
-      console.log('Setting form data:', { doctorIdParam, specialtyId, hospitalId });
       setDoctorId(doctorIdParam);
       if (specialtyId) {
         setSelectedSpecialty(specialtyId);
-        console.log('Set specialty:', specialtyId);
       }
       if (hospitalId) {
         setSelectedBranch(hospitalId);
-        console.log('Set hospital:', hospitalId);
       }
       
       // Fetch related data
@@ -233,7 +219,7 @@ export default function BookingAllInOne() {
           const specialtiesData = (specialtiesRes as any)?.data?.specialties || [];
           setSpecialties(specialtiesData);
         } catch (err) {
-          console.error('Error fetching specialties:', err);
+          // Error fetching specialties
         }
       }
       
@@ -251,14 +237,13 @@ export default function BookingAllInOne() {
                               (Array.isArray((servicesRes as any)?.data) ? (servicesRes as any).data : []);
           setServices(servicesData);
         } catch (err) {
-          console.error('Error fetching services:', err);
+          // Error fetching services
         }
       }
       
       // Auto-advance to Step 2
       setStep(2);
     } catch (error) {
-      console.error('Error pre-filling from doctor:', error);
       ToastService.show('error', 'Lỗi khi tải thông tin bác sĩ');
     } finally {
       setIsPreFilling(false);
@@ -316,14 +301,13 @@ export default function BookingAllInOne() {
             }
           }
         } catch (err) {
-          console.error('Error fetching doctors:', err);
+          // Error fetching doctors
         }
       }
       
       // Auto-advance to Step 3
       setStep(3);
     } catch (error) {
-      console.error('Error pre-filling from service:', error);
       ToastService.show('error', 'Lỗi khi tải thông tin dịch vụ');
     } finally {
       setIsPreFilling(false);
@@ -353,7 +337,7 @@ export default function BookingAllInOne() {
           }
         }
       } catch (err) {
-        console.error('Error fetching doctors:', err);
+        // Error fetching doctors
       }
       
       // Fetch services for this specialty
@@ -363,13 +347,12 @@ export default function BookingAllInOne() {
                             (Array.isArray((servicesRes as any)?.data) ? (servicesRes as any).data : []);
         setServices(servicesData);
       } catch (err) {
-        console.error('Error fetching services:', err);
+        // Error fetching services
       }
       
       // Auto-advance to Step 2
       setStep(2);
     } catch (error) {
-      console.error('Error pre-filling from specialty:', error);
       ToastService.show('error', 'Lỗi khi tải thông tin chuyên khoa');
     } finally {
       setIsPreFilling(false);
@@ -387,12 +370,11 @@ export default function BookingAllInOne() {
         const specialtiesData = (specialtiesRes as any)?.data?.specialties || [];
         setSpecialties(specialtiesData);
       } catch (err) {
-        console.error('Error fetching specialties:', err);
+        // Error fetching specialties
       }
       
       // Stay on Step 1
     } catch (error) {
-      console.error('Error pre-filling from hospital:', error);
       ToastService.show('error', 'Lỗi khi tải thông tin bệnh viện');
     } finally {
       setIsPreFilling(false);
@@ -407,9 +389,7 @@ export default function BookingAllInOne() {
   useEffect(() => {
     const { doctorId, specialtyId, hospitalId, serviceId } = finalRouteParams;
     const newKey = `${doctorId || ''}_${specialtyId || ''}_${hospitalId || ''}_${serviceId || ''}`;
-    console.log('Route params changed:', { newKey, preFillKey, routeParams });
     if (newKey !== preFillKey && newKey !== '___') {
-      console.log('Resetting hasPreFilled for new params');
       setHasPreFilled(false);
       setPreFillKey(newKey);
     }
@@ -418,7 +398,6 @@ export default function BookingAllInOne() {
   useEffect(() => {
     const handlePreFill = async () => {
       if (isPreFilling || hasPreFilled) {
-        console.log('Pre-fill skipped:', { isPreFilling, hasPreFilled });
         return;
       }
       
@@ -427,37 +406,28 @@ export default function BookingAllInOne() {
       
       
       if (!doctorIdParam && !serviceIdParam && !specialtyIdParam && !hospitalIdParam) {
-        console.log('No pre-fill params found');
         return; // No pre-fill params
       }
       
       // Wait for initial data to load before pre-filling (at least one should be loaded)
       if (branches.length === 0 && specialties.length === 0) {
-        console.log('Waiting for initial data to load...');
         return;
       }
       
-      console.log('Starting pre-fill...');
       setHasPreFilled(true);
       
       // Priority order: doctor > service > specialty > hospital
       try {
         if (doctorIdParam) {
-          console.log('Pre-filling from doctor:', doctorIdParam);
           await preFillFromDoctor(doctorIdParam);
         } else if (serviceIdParam) {
-          console.log('Pre-filling from service:', serviceIdParam);
           await preFillFromService(serviceIdParam);
         } else if (specialtyIdParam) {
-          console.log('Pre-filling from specialty:', specialtyIdParam);
           await preFillFromSpecialty(specialtyIdParam);
         } else if (hospitalIdParam) {
-          console.log('Pre-filling from hospital:', hospitalIdParam);
           await preFillFromHospital(hospitalIdParam);
         }
-        console.log('Pre-fill completed successfully');
       } catch (error) {
-        console.error('Error in pre-fill:', error);
         setHasPreFilled(false); // Reset on error so it can retry
         ToastService.show('error', 'Lỗi khi tự động điền thông tin');
       }
@@ -484,7 +454,7 @@ export default function BookingAllInOne() {
         const sd = (s as any)?.data;
         setServices(Array.isArray(sd?.services) ? sd.services : Array.isArray(sd) ? sd : (sd?.data || []));
       } catch (e) {
-        console.error('Load step2 failed', e);
+        // Load step2 failed
       }
     };
     load();
@@ -624,7 +594,7 @@ export default function BookingAllInOne() {
         const finalTotal = totalBeforeDiscount - discountAmount;
         setPriceDetails({ consultationFee, serviceFee, totalBeforeDiscount, discountAmount, finalTotal });
       } catch (e) {
-        console.error('Calc prices failed', e);
+        // Calc prices failed
       }
     };
     calcPrices();
@@ -698,7 +668,6 @@ export default function BookingAllInOne() {
     if (!socket || !isConnected || !doctorId || !date) return;
 
     const formattedDate = date.split('T')[0]; // Ensure YYYY-MM-DD format
-    console.log('[Booking] Joining appointment room:', { doctorId, date: formattedDate });
     
     emit('join_appointment_room', {
       doctorId,
@@ -707,7 +676,6 @@ export default function BookingAllInOne() {
 
     return () => {
       // Leave room when component unmounts or dependencies change
-      console.log('[Booking] Leaving appointment room');
     };
   }, [socket, isConnected, doctorId, date, emit]);
 
@@ -766,7 +734,6 @@ export default function BookingAllInOne() {
 
     const handleTimeSlotUpdate = (data: { scheduleId: string; timeSlotInfo: any }) => {
       const { scheduleId, timeSlotInfo } = data;
-      console.log('[Booking] Time slot updated:', { scheduleId, timeSlotInfo });
 
       // Update dayTimeSlots with new booking information
       setDayTimeSlots(prev => {
@@ -806,7 +773,6 @@ export default function BookingAllInOne() {
 
     const handleTimeSlotLocked = (data: { scheduleId: string; timeSlotId: string; userId: string }) => {
       const { scheduleId, timeSlotId, userId } = data;
-      console.log('[Booking] Time slot locked:', { scheduleId, timeSlotId, userId });
       
       const slotKey = `${scheduleId}_${timeSlotId}`;
       setLockedSlots(prev => {
@@ -819,7 +785,6 @@ export default function BookingAllInOne() {
 
     const handleTimeSlotUnlocked = (data: { scheduleId: string; timeSlotId: string }) => {
       const { scheduleId, timeSlotId } = data;
-      console.log('[Booking] Time slot unlocked:', { scheduleId, timeSlotId });
       
       const slotKey = `${scheduleId}_${timeSlotId}`;
       setLockedSlots(prev => {
@@ -831,7 +796,6 @@ export default function BookingAllInOne() {
     };
 
     const handleCurrentLockedSlots = (data: { lockedSlots: Array<{ scheduleId: string; timeSlotId: string; userId: string }> }) => {
-      console.log('[Booking] Current locked slots:', data.lockedSlots);
       const locksMap = new Map<string, string>();
       data.lockedSlots.forEach(({ scheduleId, timeSlotId, userId }) => {
         locksMap.set(`${scheduleId}_${timeSlotId}`, userId);
@@ -841,7 +805,6 @@ export default function BookingAllInOne() {
     };
 
     const handleTimeSlotLockRejected = (data: { message?: string; scheduleId?: string; timeSlotId?: string }) => {
-      console.warn('[Booking] Lock rejected:', data);
       ToastService.show(
         'error',
         'Khung giờ không khả dụng',
@@ -858,7 +821,7 @@ export default function BookingAllInOne() {
     };
 
     const handleTimeSlotLockConfirmed = (data: { scheduleId: string; timeSlotId: string }) => {
-      console.log('[Booking] Lock confirmed:', data);
+      // Lock confirmed
     };
 
     // Register event listeners
@@ -945,7 +908,6 @@ export default function BookingAllInOne() {
       });
       return { blocked: isBlocked, limit: limitValue, count };
     } catch (error) {
-      console.error('Error checking daily appointment limit:', error);
       setDailyLimitInfo((prev) => ({
         ...prev,
         status: 'error',
@@ -1033,7 +995,6 @@ export default function BookingAllInOne() {
           (navigation as any)?.navigate('AppointmentSchedule');
         }, 1500);
       } catch (e: any) {
-        console.log('createAppointment failed:', e);
         // Check if it's an API error response with success: false
         if (e && typeof e === 'object' && e.success === false) {
           // API returned error response

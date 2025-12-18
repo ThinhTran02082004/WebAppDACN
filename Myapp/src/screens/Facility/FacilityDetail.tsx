@@ -47,15 +47,10 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
       try {
         const res = await apiService.getHospitalById(id);
         if (res.success) {
-          console.log('Hospital data loaded:', res.data);
-          console.log('Contact info:', res.data.contactInfo);
-          console.log('Working hours:', res.data.workingHours);
-          console.log('Specialties:', res.data.specialties);
-          console.log('Services:', res.data.services);
           setHospital(res.data);
         }
       } catch (error) {
-        console.error('Error loading hospital:', error);
+        // Error loading hospital
       } finally {
         setLoading(false);
       }
@@ -77,7 +72,7 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
         setSpecialties(spList);
         setServices(svList);
       } catch (e) {
-        console.error('Error loading hospital tabs:', e);
+        // Error loading hospital tabs
       } finally {
         setLoadingTabs(false);
       }
@@ -86,19 +81,11 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
   }, [id]);
 
   const handleCall = () => {
-    console.log('handleCall pressed');
-    console.log('Hospital:', hospital);
-    console.log('ContactInfo:', hospital?.contactInfo);
-    console.log('Phone:', hospital?.contactInfo?.phone);
-    
     if (hospital?.contactInfo?.phone) {
       const phoneUrl = `tel:${hospital.contactInfo.phone}`;
-      console.log('Opening phone URL:', phoneUrl);
       Linking.openURL(phoneUrl).catch(err => {
-        console.error('Error opening phone URL:', err);
+        // Error opening phone URL
       });
-    } else {
-      console.log('No phone number available');
     }
   };
 
@@ -117,7 +104,6 @@ export default function FacilityDetail({ route, navigation }: FacilityDetailProp
   };
 
   const handleBookAppointment = () => {
-    console.log('Book appointment at hospital:', hospital?._id);
     if (!user) {
       navigation.navigate('Login');
     } else {

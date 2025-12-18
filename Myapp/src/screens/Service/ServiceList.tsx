@@ -43,10 +43,7 @@ export default function ServiceListScreen({ navigation }: Props) {
   const loadServices = async () => {
     try {
       setLoading(true);
-      console.log('Loading services...');
       const response = await apiService.getServices({ limit: 100 });
-      console.log('Services response:', response);
-      
       if (response.success && response.data) {
         // Handle different response structures
         let servicesData: ServiceItem[] = [];
@@ -58,14 +55,11 @@ export default function ServiceListScreen({ navigation }: Props) {
           servicesData = response.data;
         }
         
-        console.log('Services data:', servicesData);
         setServices(servicesData);
       } else {
-        console.log('No services data found');
         setServices([]);
       }
     } catch (error) {
-      console.error('Error loading services:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách dịch vụ. Vui lòng thử lại.');
       setServices([]);
     } finally {
@@ -109,7 +103,6 @@ export default function ServiceListScreen({ navigation }: Props) {
   };
 
   const handleServicePress = (service: ServiceItem) => {
-    console.log('Service pressed:', service.name);
     navigation.navigate('ServiceDetail', { serviceId: service._id });
   };
 

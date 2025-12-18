@@ -86,7 +86,6 @@ const PrescriptionDetailScreen = () => {
       const data = (response?.data as any) || {};
       setPrescription(data?.data || data?.prescription || data);
     } catch (err: any) {
-      console.error('Failed to load prescription detail:', err);
       setError(err?.message || 'Không thể tải chi tiết đơn thuốc.');
     } finally {
       setLoading(false);
@@ -161,9 +160,7 @@ const PrescriptionDetailScreen = () => {
         redirectUrl,
       };
       
-      console.log('[Payment] Creating MoMo payment for prescription:', paymentParams);
       const created = await apiService.createMomoPayment(paymentParams);
-      console.log('[Payment] MoMo payment created for prescription, response:', created);
       
       const payUrl = (created?.data as any)?.payUrl;
       if (payUrl) {
@@ -177,7 +174,6 @@ const PrescriptionDetailScreen = () => {
         Alert.alert('Lỗi', 'Không thể khởi tạo thanh toán MoMo.');
       }
     } catch (e: any) {
-      console.error('[Payment] Error paying prescription:', e);
       Alert.alert('Lỗi', e?.message || 'Không thể khởi tạo thanh toán.');
     } finally {
       setIsProcessingPayment(false);
@@ -223,7 +219,6 @@ const PrescriptionDetailScreen = () => {
         Alert.alert('Lỗi', 'Không thể khởi tạo thanh toán PayPal.');
       }
     } catch (e: any) {
-      console.error('[Payment] Error paying prescription with PayPal:', e);
       Alert.alert('Lỗi', e?.message || 'Không thể khởi tạo thanh toán PayPal.');
     } finally {
       setIsProcessingPayment(false);

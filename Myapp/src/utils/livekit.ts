@@ -177,7 +177,7 @@ const patchWebSocketOriginHeader = (globalObj: any) => {
       }
       return new NativeWebSocket(url, normalizedProtocols);
     } catch (error) {
-      console.warn('[livekit] Patched WebSocket failed to construct, falling back', error);
+      // Patched WebSocket failed, falling back
       if (typeof normalizedProtocols === 'undefined') {
         return new NativeWebSocket(url);
       }
@@ -191,7 +191,6 @@ const patchWebSocketOriginHeader = (globalObj: any) => {
 
   globalObj.WebSocket = PatchedWebSocket;
   websocketPatched = true;
-  console.log('[livekit] WebSocket origin header patched');
 };
 
 const ensureWebSocketPolyfill = () => {
@@ -201,12 +200,9 @@ const ensureWebSocketPolyfill = () => {
     try {
       if (typeof WebSocket !== 'undefined') {
         globalObj.WebSocket = WebSocket;
-        console.log('[livekit] WebSocket polyfill set successfully');
-      } else {
-        console.warn('[livekit] WebSocket is not available in this environment');
       }
     } catch (e) {
-      console.warn('[livekit] WebSocket not available', e);
+      // WebSocket not available
     }
   }
 
@@ -232,14 +228,11 @@ export const ensureLivekitGlobals = () => {
       autoConfigureAudioSession: true
     });
     globalsRegistered = true;
-    console.log('[livekit] LiveKit globals registered successfully');
   } catch (error: any) {
     // If error is about duplicate registration, it's OK
     if (error?.message?.includes('already') || error?.message?.includes('registered')) {
-      console.log('[livekit] Globals already registered, skipping');
       globalsRegistered = true;
     } else {
-      console.error('[livekit] Failed to register globals', error);
       // Only apply minimal polyfills if registerGlobals fails
       // DO NOT patch WebSocket as it interferes with livekit-client
   try {
@@ -247,9 +240,8 @@ export const ensureLivekitGlobals = () => {
     ensureEncodingPolyfills();
     ensureStreamsPolyfill();
         // DO NOT call ensureWebSocketPolyfill() - let livekit-client handle WebSocket
-        console.log('[livekit] Minimal fallback polyfills applied (WebSocket not patched)');
       } catch (fallbackError) {
-        console.error('[livekit] Fallback polyfills also failed', fallbackError);
+        // Fallback polyfills failed
       }
     }
   }

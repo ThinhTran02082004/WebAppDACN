@@ -23,7 +23,6 @@ export const signOutGoogle = async () => {
   try {
     await GoogleSignin.signOut();
   } catch (error) {
-    console.error('Google Sign-Out Error:', error);
     throw error;
   }
 };

@@ -164,12 +164,6 @@ export default function ProfileScreen() {
         throw new Error(response.message || 'Không thể cập nhật thông tin');
       }
     } catch (error: any) {
-      console.error('Error updating profile:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        stack: error.stack
-      });
       const errorMessage = error.response?.data?.message || error.message || 'Không thể cập nhật thông tin. Vui lòng thử lại.';
       Alert.alert('Lỗi', errorMessage);
     } finally {
@@ -240,7 +234,6 @@ export default function ProfileScreen() {
         throw new Error(response.message || 'Không thể cập nhật ảnh đại diện');
       }
     } catch (error: any) {
-      console.error('Error uploading avatar:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Không thể cập nhật ảnh đại diện. Vui lòng thử lại.';
       Alert.alert('Lỗi', errorMessage);
     } finally {

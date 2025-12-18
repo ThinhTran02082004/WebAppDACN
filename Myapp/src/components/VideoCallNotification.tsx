@@ -37,21 +37,17 @@ const VideoCallNotification = () => {
     try {
       // TODO: Implement ringtone playback if needed
       // You can use react-native-sound or expo-av for this
-      console.log('[VideoCallNotification] Ringtone should play here');
       // For now, we'll just log - implement audio playback as needed
     } catch (error) {
-      console.warn('[VideoCallNotification] Could not play ringtone:', error);
-    }
+      }
   };
 
   // Stop ringtone
   const stopRingtone = async () => {
     try {
       // TODO: Stop ringtone if implemented
-      console.log('[VideoCallNotification] Ringtone should stop here');
-    } catch (error) {
-      console.warn('[VideoCallNotification] Error stopping ringtone:', error);
-    }
+      } catch (error) {
+      }
   };
 
   // Animation
@@ -111,7 +107,6 @@ const VideoCallNotification = () => {
     if (!socket || !isConnected) return;
 
     const handleIncomingCall = (data: IncomingCall) => {
-      console.log('[VideoCallNotification] Incoming video call:', data);
       setIncomingCall({
         roomId: data.roomId,
         roomName: data.roomName,
@@ -198,7 +193,6 @@ const VideoCallNotification = () => {
         appointmentInfo
       });
     } catch (error: any) {
-      console.error('[VideoCallNotification] Error accepting call:', error);
       const message = error?.response?.data?.message || error?.message || 'Không thể tham gia cuộc gọi';
       Alert.alert('Lỗi', message);
       setIncomingCall(null);

@@ -14,18 +14,9 @@ try {
 } catch (error: any) {
   // If module can't be resolved (e.g., .env file missing or babel plugin not working),
   // set to undefined - app will still work but auth features may not function
-  console.warn('[config] Environment variables not available. App will continue but social auth may not work.');
-  console.warn('[config] Error details:', error?.message || String(error));
   ENV_GOOGLE_CLIENT_ID = undefined;
   ENV_FACEBOOK_APP_ID = undefined;
 }
-
-console.log('[config] Environment variables loaded:', {
-  hasGoogleClientId: !!ENV_GOOGLE_CLIENT_ID,
-  hasFacebookAppId: !!ENV_FACEBOOK_APP_ID,
-  facebookAppId: ENV_FACEBOOK_APP_ID ? `${ENV_FACEBOOK_APP_ID.substring(0, 10)}...` : 'not set',
-  googleClientId: ENV_GOOGLE_CLIENT_ID ? `${ENV_GOOGLE_CLIENT_ID.substring(0, 10)}...` : 'not set'
-});
 
 
 const DEFAULT_HOST = Platform.OS === 'android' ? 'localhost' : 'localhost';
@@ -40,7 +31,6 @@ export const initApiHostFromStorage = async (): Promise<boolean> => {
     // Use localhost for USB connection with adb reverse
     API_HOST = 'localhost';
     API_PORT = '5000';
-    console.log('[config] Forced API host to:', API_HOST, 'port:', API_PORT);
     return true;
   } catch {
     // ignore
@@ -64,7 +54,6 @@ export const clearApiHost = async () => {
     // Force reset to localhost for USB connection
     API_HOST = 'localhost';
     API_PORT = '5000';
-    console.log('[config] Cleared API host cache, reset to:', API_HOST, 'port:', API_PORT);
   } catch {
     // ignore
   }
@@ -74,7 +63,6 @@ export const clearApiHost = async () => {
 export const resetApiHost = () => {
   API_HOST = 'localhost';
   API_PORT = '5000';
-  console.log('[config] Reset API host to default:', API_HOST, 'port:', API_PORT);
 };
 
 export const API_BASE = () => `http://${API_HOST}:${API_PORT}/api`;
